@@ -2575,13 +2575,36 @@ def main():
             with st.expander("⚡ Performance Stats"):
                 perf = st.session_state.performance_metrics
                 
-                total_time = sum(perf.values())
-                st.metric("Total Load Time", f"{total_time:.2f}s")
-                
-                # Show slowest operations
-                slowest = sorted(perf.items(), key=lambda x: x[1], reverse=True)[:3]
-                for func_name, elapsed in slowest:
-                    st.caption(f"{func_name}: {elapsed:.2f}s")
+                # Extract time values from the new metric structure
+                try:
+                    time_values = []
+                    operation_details = []
+                    
+                    for func_name, metric_data in perf.items():
+                        if isinstance(metric_data, dict) and 'time' in metric_data:
+                            elapsed = metric_data['time']
+                            time_values.append(elapsed)
+                            operation_details.append((func_name, elapsed))
+                        elif isinstance(metric_data, (int, float)):
+                            # Fallback for old format
+                            time_values.append(metric_data)
+                            operation_details.append((func_name, metric_data))
+                    
+                    if time_values:
+                        total_time = sum(time_values)
+                        st.metric("Total Processing Time", f"{total_time:.2f}s")
+                        
+                        # Show slowest operations
+                        slowest = sorted(operation_details, key=lambda x: x[1], reverse=True)[:3]
+                        for func_name, elapsed in slowest:
+                            clean_name = func_name.replace('Performance-tracked ', '').replace('_bulletproof', '')
+                            st.caption(f"🔧 {clean_name}: {elapsed:.2f}s")
+                    else:
+                        st.info("No performance data available yet")
+                        
+                except Exception as e:
+                    st.error(f"Performance metrics error: {str(e)}")
+                    logger.error(f"Performance stats display error: {str(e)}")
         
         # Debug checkbox at the bottom of sidebar
         st.markdown("---")
