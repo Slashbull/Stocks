@@ -2679,7 +2679,7 @@ def main():
         st.markdown("---")
         
         # Category filter with smart updates
-                        categories = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'category', filters=filters)
+        categories = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'category', filters=filters)
         category_counts = ranked_df_display['category'].value_counts()
         category_options = [
             f"{cat} ({category_counts.get(cat, 0)})" 
@@ -2701,7 +2701,7 @@ def main():
         ] if selected_categories else []
         
         # Sector filter with smart updates based on selected categories
-                        sectors = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'sector', filters=filters)
+        sectors = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'sector', filters=filters)
         
         selected_sectors = st.multiselect(
             "Sector",
@@ -2759,7 +2759,7 @@ def main():
         # Advanced filters in expander
         with st.expander("🔧 Advanced Filters"):
             # EPS tier filter with smart updates
-                            eps_tiers = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'eps_tier', filters=filters)
+            eps_tiers = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'eps_tier', filters=filters)
             
             selected_eps_tiers = st.multiselect(
                 "EPS Tier",
@@ -2771,7 +2771,7 @@ def main():
             filters['eps_tiers'] = selected_eps_tiers if selected_eps_tiers else []
             
             # PE tier filter with smart updates
-                            pe_tiers = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'pe_tier', filters=filters)
+            pe_tiers = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'pe_tier', filters=filters)
             
             selected_pe_tiers = st.multiselect(
                 "PE Tier",
@@ -2783,7 +2783,7 @@ def main():
             filters['pe_tiers'] = selected_pe_tiers if selected_pe_tiers else []
             
             # Price tier filter with smart updates
-                            price_tiers = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'price_tier', filters=filters)
+            price_tiers = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'price_tier', filters=filters)
             
             selected_price_tiers = st.multiselect(
                 "Price Range",
