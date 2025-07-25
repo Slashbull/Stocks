@@ -2530,7 +2530,7 @@ def main():
             else:
                 st.error(f"🐌 {perf_summary['avg_time']:.1f}s")
         
-        # Data quality indicator
+        # Data quality and load metrics
         if 'processing_metrics' in st.session_state:
             last_processing = st.session_state.processing_metrics.get('last_processing', {})
             removal_rate = last_processing.get('removal_rate', 0)
@@ -2541,6 +2541,19 @@ def main():
                 st.warning(f"📊 Data Quality: {100-removal_rate:.1f}%")
             else:
                 st.error(f"📊 Data Quality: {100-removal_rate:.1f}%")
+        
+        # Load efficiency indicator
+        if 'load_metrics' in st.session_state:
+            load_metrics = st.session_state.load_metrics
+            efficiency = load_metrics.get('processing_efficiency', 0) * 100
+            load_time = load_metrics.get('load_time', 0)
+            
+            if efficiency > 95 and load_time < 5:
+                st.success(f"⚡ Load: {efficiency:.1f}% in {load_time:.1f}s")
+            elif efficiency > 90 and load_time < 10:
+                st.info(f"⚡ Load: {efficiency:.1f}% in {load_time:.1f}s")
+            else:
+                st.warning(f"⚡ Load: {efficiency:.1f}% in {load_time:.1f}s")
         
         st.markdown("---")
         st.markdown("### 🔍 Smart Filters")
@@ -2584,10 +2597,11 @@ def main():
         else:
             # Load and process data with caching
             with st.spinner("📥 Loading and processing data..."):
-                ranked_df, data_timestamp = load_and_process_data_bulletproof(CONFIG.DEFAULT_SHEET_URL, CONFIG.DEFAULT_GID)
+                ranked_df, data_timestamp, load_metrics = load_and_process_data_bulletproof(CONFIG.DEFAULT_SHEET_URL, CONFIG.DEFAULT_GID)
                 st.session_state.ranked_df = ranked_df
                 st.session_state.data_timestamp = data_timestamp
                 st.session_state.last_refresh = datetime.now()
+                st.session_state.load_metrics = load_metrics  # Store load metrics
                 
                 # Calculate data quality
                 st.session_state.data_quality = calculate_data_quality(ranked_df)
