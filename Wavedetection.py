@@ -381,13 +381,34 @@ class DataProcessor:
         # Add tier classifications
         df = DataProcessor._add_tier_classifications(df)
         
-        # FIX: Cap RVOL at reasonable maximum to prevent extreme values
-        if 'rvol' not in df.columns:
-            df['rvol'] = 1.0
+        # --- SMART RVOL CALCULATION (BEST PRACTICE) ---
+        # If 'rvol' is missing or all values are NaN, and both 'volume_1d' and 'volume_90d' are present, calculate it
+        rvol_needs_calc = (
+            'rvol' not in df.columns or df['rvol'].isna().all() or (df['rvol'] == '').all()
+        )
+        if rvol_needs_calc and ('volume_1d' in df.columns and 'volume_90d' in df.columns):
+            # Calculate rvol as volume_1d / volume_90d, handle zero/NaN
+            v1 = pd.to_numeric(df['volume_1d'], errors='coerce')
+            v90 = pd.to_numeric(df['volume_90d'], errors='coerce')
+            with np.errstate(divide='ignore', invalid='ignore'):
+                rvol_calc = v1 / v90
+                rvol_calc = rvol_calc.replace([np.inf, -np.inf], np.nan)
+                rvol_calc = rvol_calc.fillna(1.0)
+                rvol_calc = rvol_calc.where(v90 > 0, 1.0)  # If v90 is zero or negative, set to 1.0
+                rvol_calc = rvol_calc.clip(lower=0.01, upper=CONFIG.RVOL_MAX_THRESHOLD)
+            df['rvol'] = rvol_calc
+            logger.info("Calculated RVOL as volume_1d / volume_90d for all stocks.")
         else:
-            df['rvol'] = pd.to_numeric(df['rvol'], errors='coerce')
-            df['rvol'] = df['rvol'].fillna(1.0).clip(lower=0.01, upper=CONFIG.RVOL_MAX_THRESHOLD)
-            
+            # Clean and clip existing rvol
+            if 'rvol' not in df.columns:
+                df['rvol'] = 1.0
+            else:
+                df['rvol'] = pd.to_numeric(df['rvol'], errors='coerce')
+                nan_count = df['rvol'].isna().sum()
+                if nan_count > 0:
+                    logger.warning(f"{nan_count} RVOL values were NaN and set to 1.0.")
+                df['rvol'] = df['rvol'].fillna(1.0).clip(lower=0.01, upper=CONFIG.RVOL_MAX_THRESHOLD)
+
             # Log if we capped any extreme values
             extreme_rvol_count = (df['rvol'] == CONFIG.RVOL_MAX_THRESHOLD).sum()
             if extreme_rvol_count > 0:
