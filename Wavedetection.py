@@ -2020,31 +2020,131 @@ def main():
         st.markdown("---")
         st.markdown("### 🔍 Smart Filters")
         
-        # FIXED: Clear Filters button - properly clear ALL filter state
-        if st.button("🗑️ Clear All Filters", use_container_width=True):
-            # Get all keys to remove
-            keys_to_remove = []
+        # Check if any filters are active and count them
+        active_filter_count = 0
+        filters_active = False
+        
+        # Count quick filter if active
+        if st.session_state.get('quick_filter_applied', False):
+            active_filter_count += 1
+            filters_active = True
+        
+        if st.session_state.get('category_filter', []):
+            active_filter_count += 1
+            filters_active = True
+        if st.session_state.get('sector_filter', []):
+            active_filter_count += 1
+            filters_active = True
+        if st.session_state.get('min_score', 0) > 0:
+            active_filter_count += 1
+            filters_active = True
+        if st.session_state.get('patterns', []):
+            active_filter_count += 1
+            filters_active = True
+        if st.session_state.get('trend_filter', 'All Trends') != 'All Trends':
+            active_filter_count += 1
+            filters_active = True
+        if st.session_state.get('eps_tier_filter', []):
+            active_filter_count += 1
+            filters_active = True
+        if st.session_state.get('pe_tier_filter', []):
+            active_filter_count += 1
+            filters_active = True
+        if st.session_state.get('price_tier_filter', []):
+            active_filter_count += 1
+            filters_active = True
+        if st.session_state.get('min_eps_change', '').strip():
+            active_filter_count += 1
+            filters_active = True
+        if st.session_state.get('min_pe', '').strip():
+            active_filter_count += 1
+            filters_active = True
+        if st.session_state.get('max_pe', '').strip():
+            active_filter_count += 1
+            filters_active = True
+        if st.session_state.get('require_fundamental_data', False):
+            active_filter_count += 1
+            filters_active = True
+        
+        # Show active filter count if any
+        if filters_active:
+            quick_note = " (incl. quick filter)" if st.session_state.get('quick_filter_applied', False) else ""
+            st.info(f"🔍 **{active_filter_count} filter{'s' if active_filter_count > 1 else ''} active{quick_note}**")
+        
+        # Store filter count for use in main area
+        st.session_state['active_filter_count'] = active_filter_count
+        
+        # FIXED: Clear Filters button - properly reset ALL filter values for frontend sync
+        button_type = "primary" if filters_active else "secondary"
+        
+        # Check if clear was triggered from main content area
+        if st.session_state.get('trigger_clear', False):
+            st.session_state['trigger_clear'] = False
+            clear_button_clicked = True
+        else:
+            clear_button_clicked = st.button("🗑️ Clear All Filters", use_container_width=True, type=button_type)
+        
+        if clear_button_clicked:
+            # Reset multiselect widgets to empty lists
+            multiselect_keys = [
+                'category_filter', 'sector_filter', 'eps_tier_filter', 
+                'pe_tier_filter', 'price_tier_filter', 'patterns'
+            ]
+            for key in multiselect_keys:
+                if key in st.session_state:
+                    st.session_state[key] = []
             
-            # Find all filter-related keys
-            for key in st.session_state.keys():
+            # Reset slider to default value (0)
+            if 'min_score' in st.session_state:
+                st.session_state['min_score'] = 0
+            
+            # Reset selectbox to first option (index 0)
+            if 'trend_filter' in st.session_state:
+                st.session_state['trend_filter'] = 'All Trends'
+            
+            # Reset text inputs to empty strings
+            text_input_keys = ['min_eps_change', 'min_pe', 'max_pe']
+            for key in text_input_keys:
+                if key in st.session_state:
+                    st.session_state[key] = ""
+            
+            # Reset checkboxes to False
+            checkbox_keys = ['require_fundamental_data', 'show_debug']
+            for key in checkbox_keys:
+                if key in st.session_state:
+                    st.session_state[key] = False
+            
+            # Reset radio buttons to default
+            if 'display_mode_toggle' in st.session_state:
+                st.session_state['display_mode_toggle'] = "Technical"
+            
+            # Clear any other filter-related keys that might exist
+            for key in list(st.session_state.keys()):
                 if any(filter_keyword in key.lower() for filter_keyword in 
-                      ['filter', 'select', 'slider', 'min_', 'max_', 'patterns', 
-                       'trend', 'display_mode', 'require']):
-                    keys_to_remove.append(key)
-            
-            # Remove all filter keys
-            for key in keys_to_remove:
-                del st.session_state[key]
+                      ['filter', 'select', 'slider', 'min_', 'max_', 'trend', 'require']):
+                    # If we haven't already handled it, remove it
+                    if key not in multiselect_keys and key not in text_input_keys and key not in checkbox_keys:
+                        if 'multiselect' in str(type(st.session_state[key])):
+                            st.session_state[key] = []
+                        elif isinstance(st.session_state[key], bool):
+                            st.session_state[key] = False
+                        elif isinstance(st.session_state[key], str):
+                            st.session_state[key] = ""
+                        elif isinstance(st.session_state[key], (int, float)):
+                            st.session_state[key] = 0
             
             # Reset quick filter state
             if 'quick_filter' in st.session_state:
-                del st.session_state['quick_filter']
+                st.session_state['quick_filter'] = None
+            if 'quick_filter_applied' in st.session_state:
+                st.session_state['quick_filter_applied'] = False
             
             # Clear filter dictionary
             if 'filters' in st.session_state:
                 st.session_state.filters = {}
             
-            st.success("All filters cleared!")
+            # Show success message at the top
+            st.success("✅ All filters cleared!")
             st.rerun()
         
         # Performance metrics (if available)
@@ -2062,7 +2162,7 @@ def main():
         
         # Debug checkbox at the bottom of sidebar
         st.markdown("---")
-        show_debug = st.checkbox("🐛 Show Debug Info", value=False)
+        show_debug = st.checkbox("🐛 Show Debug Info", value=st.session_state.get('show_debug', False), key="show_debug")
     
     # Data loading and processing with smart caching
     try:
@@ -2102,33 +2202,44 @@ def main():
     st.markdown("### ⚡ Quick Actions")
     qa_col1, qa_col2, qa_col3, qa_col4, qa_col5 = st.columns(5)
     
-    quick_filter_applied = False
-    quick_filter = None
+    # Check for quick filter state from session
+    quick_filter_applied = st.session_state.get('quick_filter_applied', False)
+    quick_filter = st.session_state.get('quick_filter', None)
     
     with qa_col1:
         if st.button("📈 Top Gainers", use_container_width=True):
             quick_filter = 'top_gainers'
             quick_filter_applied = True
+            st.session_state['quick_filter'] = quick_filter
+            st.session_state['quick_filter_applied'] = True
     
     with qa_col2:
         if st.button("🔥 Volume Surges", use_container_width=True):
             quick_filter = 'volume_surges'
             quick_filter_applied = True
+            st.session_state['quick_filter'] = quick_filter
+            st.session_state['quick_filter_applied'] = True
     
     with qa_col3:
         if st.button("🎯 Breakout Ready", use_container_width=True):
             quick_filter = 'breakout_ready'
             quick_filter_applied = True
+            st.session_state['quick_filter'] = quick_filter
+            st.session_state['quick_filter_applied'] = True
     
     with qa_col4:
         if st.button("💎 Hidden Gems", use_container_width=True):
             quick_filter = 'hidden_gems'
             quick_filter_applied = True
+            st.session_state['quick_filter'] = quick_filter
+            st.session_state['quick_filter_applied'] = True
     
     with qa_col5:
         if st.button("🌊 Show All", use_container_width=True):
             quick_filter = None
             quick_filter_applied = False
+            st.session_state['quick_filter'] = None
+            st.session_state['quick_filter_applied'] = False
     
     # Apply quick filters if clicked
     if quick_filter:
@@ -2213,9 +2324,10 @@ def main():
             "Minimum Master Score",
             min_value=0,
             max_value=100,
-            value=0,
+            value=st.session_state.get('min_score', 0),
             step=5,
-            help="Filter stocks by minimum score"
+            help="Filter stocks by minimum score",
+            key="min_score"
         )
         
         # Pattern filter
@@ -2228,9 +2340,10 @@ def main():
             filters['patterns'] = st.multiselect(
                 "Patterns",
                 options=sorted(all_patterns),
-                default=[],
+                default=st.session_state.get('patterns', []),
                 placeholder="Select patterns (empty = All)",
-                help="Filter by specific patterns"
+                help="Filter by specific patterns",
+                key="patterns"
             )
         
         # Trend filter
@@ -2293,9 +2406,10 @@ def main():
             if 'eps_change_pct' in ranked_df_display.columns:
                 eps_change_input = st.text_input(
                     "Min EPS Change %",
-                    value="",
+                    value=st.session_state.get('min_eps_change', ""),
                     placeholder="e.g. -50 or leave empty",
-                    help="Enter minimum EPS growth percentage (e.g., -50 for -50% or higher), or leave empty to include all stocks"
+                    help="Enter minimum EPS growth percentage (e.g., -50 for -50% or higher), or leave empty to include all stocks",
+                    key="min_eps_change"
                 )
                 
                 if eps_change_input.strip():
@@ -2315,9 +2429,10 @@ def main():
                 with col1:
                     min_pe_input = st.text_input(
                         "Min PE Ratio",
-                        value="",
+                        value=st.session_state.get('min_pe', ""),
                         placeholder="e.g. 10",
-                        help="Minimum PE ratio (leave empty for no minimum)"
+                        help="Minimum PE ratio (leave empty for no minimum)",
+                        key="min_pe"
                     )
                     
                     if min_pe_input.strip():
@@ -2332,9 +2447,10 @@ def main():
                 with col2:
                     max_pe_input = st.text_input(
                         "Max PE Ratio",
-                        value="",
+                        value=st.session_state.get('max_pe', ""),
                         placeholder="e.g. 30",
-                        help="Maximum PE ratio (leave empty for no maximum)"
+                        help="Maximum PE ratio (leave empty for no maximum)",
+                        key="max_pe"
                     )
                     
                     if max_pe_input.strip():
@@ -2370,25 +2486,82 @@ def main():
     if show_debug:
         with st.sidebar.expander("Filter Debug Info", expanded=True):
             st.write("**Active Filters:**")
-            st.write(f"Categories: {filters.get('categories', [])}")
-            st.write(f"Sectors: {filters.get('sectors', [])}")
-            st.write(f"Min Score: {filters.get('min_score', 0)}")
-            st.write(f"Patterns: {filters.get('patterns', [])}")
-            st.write(f"Trend Range: {filters.get('trend_range', 'All')}")
-            st.write(f"EPS Tiers: {filters.get('eps_tiers', [])}")
-            st.write(f"PE Tiers: {filters.get('pe_tiers', [])}")
-            st.write(f"Price Tiers: {filters.get('price_tiers', [])}")
-            st.write(f"Min EPS Change: {filters.get('min_eps_change', None)}")
+            
+            # Show active filters with actual values
+            active_filters = []
+            
+            # Quick filter
+            if st.session_state.get('quick_filter_applied', False) and st.session_state.get('quick_filter'):
+                quick_filter_names = {
+                    'top_gainers': '📈 Top Gainers',
+                    'volume_surges': '🔥 Volume Surges',
+                    'breakout_ready': '🎯 Breakout Ready',
+                    'hidden_gems': '💎 Hidden Gems'
+                }
+                active_filters.append(f"Quick Filter: {quick_filter_names.get(st.session_state['quick_filter'], st.session_state['quick_filter'])}")
+            
+            if filters.get('categories', []):
+                active_filters.append(f"Categories: {', '.join(filters['categories'])}")
+            if filters.get('sectors', []):
+                active_filters.append(f"Sectors: {', '.join(filters['sectors'])}")
+            if filters.get('min_score', 0) > 0:
+                active_filters.append(f"Min Score: ≥{filters['min_score']}")
+            if filters.get('patterns', []):
+                active_filters.append(f"Patterns: {', '.join(filters['patterns'][:3])}{'...' if len(filters['patterns']) > 3 else ''}")
+            if filters.get('trend_range', 'All') != 'All' and filters.get('trend_filter') != 'All Trends':
+                active_filters.append(f"Trend: {filters['trend_filter']}")
+            if filters.get('eps_tiers', []):
+                active_filters.append(f"EPS Tiers: {', '.join(filters['eps_tiers'])}")
+            if filters.get('pe_tiers', []):
+                active_filters.append(f"PE Tiers: {', '.join(filters['pe_tiers'])}")
+            if filters.get('price_tiers', []):
+                active_filters.append(f"Price Tiers: {', '.join(filters['price_tiers'])}")
+            if filters.get('min_eps_change') is not None:
+                active_filters.append(f"Min EPS Change: ≥{filters['min_eps_change']}%")
             if show_fundamentals:
-                st.write(f"Min PE: {filters.get('min_pe', None)}")
-                st.write(f"Max PE: {filters.get('max_pe', None)}")
-                st.write(f"Require Fundamental Data: {filters.get('require_fundamental_data', False)}")
-            st.write(f"**Filter Result:**")
+                if filters.get('min_pe') is not None:
+                    active_filters.append(f"Min PE: ≥{filters['min_pe']}")
+                if filters.get('max_pe') is not None:
+                    active_filters.append(f"Max PE: ≤{filters['max_pe']}")
+                if filters.get('require_fundamental_data', False):
+                    active_filters.append("✓ Require Fundamental Data")
+            
+            if active_filters:
+                for filter_desc in active_filters:
+                    st.write(f"• {filter_desc}")
+            else:
+                st.write("No filters active")
+            
+            st.write(f"\n**Filter Result:**")
             st.write(f"Before: {len(ranked_df)} stocks")
             st.write(f"After: {len(filtered_df)} stocks")
-            st.write(f"Filtered: {len(ranked_df) - len(filtered_df)} stocks")
+            st.write(f"Filtered: {len(ranked_df) - len(filtered_df)} stocks ({(len(ranked_df) - len(filtered_df))/len(ranked_df)*100:.1f}%)")
     
     # Main content area
+    # Show filter status if any filters are active
+    total_active_filters = st.session_state.get('active_filter_count', 0)
+    if filters_active or quick_filter_applied:
+        filter_status_col1, filter_status_col2 = st.columns([5, 1])
+        with filter_status_col1:
+            if quick_filter:
+                quick_filter_display = {
+                    'top_gainers': '📈 Top Gainers',
+                    'volume_surges': '🔥 Volume Surges',
+                    'breakout_ready': '🎯 Breakout Ready',
+                    'hidden_gems': '💎 Hidden Gems'
+                }
+                if total_active_filters > 1:
+                    st.info(f"**Viewing:** {quick_filter_display.get(quick_filter, 'Filtered')} + {total_active_filters - 1} other filter{'s' if total_active_filters > 2 else ''} | **{len(filtered_df):,} stocks** shown")
+                else:
+                    st.info(f"**Viewing:** {quick_filter_display.get(quick_filter, 'Filtered')} | **{len(filtered_df):,} stocks** shown")
+            else:
+                st.info(f"**Filtered View:** {len(filtered_df):,} stocks match your {total_active_filters} active filter{'s' if total_active_filters > 1 else ''}")
+        with filter_status_col2:
+            if st.button("Clear Filters", type="secondary"):
+                # Trigger the main clear filters button logic
+                st.session_state['trigger_clear'] = True
+                st.rerun()
+    
     # Summary metrics
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     
