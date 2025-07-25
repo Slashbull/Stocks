@@ -23,6 +23,7 @@ from functools import lru_cache, wraps
 import time
 from io import BytesIO
 import warnings
+import os
 
 # Suppress warnings for clean output
 warnings.filterwarnings('ignore')
@@ -2067,7 +2068,8 @@ def main():
             options=category_options,
             default=[],  # Empty default
             placeholder="Select categories (empty = All)",
-            key="category_filter"
+            key="category_filter",
+            help="Filter stocks by market cap category."
         )
         
         # Extract actual category names
@@ -2368,7 +2370,7 @@ def main():
     
     # Main tabs
     tabs = st.tabs([
-        "🏆 Rankings", "🌊 Wave Radar", "📊 Analysis", "🔍 Search", "📥 Export", "ℹ️ About"
+        "🏆 Rankings", "🌊 Wave Radar", "📊 Analysis", "🔍 Search", "📥 Export", "ℹ️ About/Help"
     ])
     
     # Tab 1: Rankings
@@ -3994,72 +3996,33 @@ def main():
             with stat_cols[i % 3]:
                 st.metric(label, value)
     
-    # Tab 6: About
+    # Tab 6: About/Help
     with tabs[5]:
-        st.markdown("### ℹ️ About Wave Detection Ultimate 3.0")
+        st.markdown("### ℹ️ About / Help")
         
         col1, col2 = st.columns([2, 1])
         
         with col1:
             st.markdown("""
-            #### 🌊 Welcome to Wave Detection Ultimate 3.0
+            # ℹ️ About / Help
+            **Wave Detection Ultimate 3.0**
             
-            The most advanced stock ranking system designed to catch momentum waves early.
-            This professional-grade tool combines technical analysis, volume dynamics, and 
-            smart pattern recognition to identify high-potential stocks before they peak.
+            - Professional Stock Ranking System with Wave Radar™ Early Detection
+            - Smart filters, multi-signal detection, and robust analytics
+            - For help, contact [support@example.com](mailto:support@example.com)
             
-            #### 🎯 Core Features
+            ## How to Use
+            1. Use the sidebar to filter stocks by category, sector, score, and more.
+            2. Use quick actions for top gainers, volume surges, breakouts, and hidden gems.
+            3. Explore tabs for rankings, radar, analysis, search, and export.
+            4. If you see errors or no data, check your internet connection or data source.
             
-            **Master Score 3.0** - Our proprietary ranking algorithm combines:
-            - **Position Analysis (30%)** - 52-week range positioning
-            - **Volume Dynamics (25%)** - Multi-timeframe volume patterns
-            - **Momentum Tracking (15%)** - 30-day price momentum
-            - **Acceleration Detection (10%)** - Momentum acceleration signals
-            - **Breakout Probability (10%)** - Technical breakout readiness
-            - **RVOL Integration (10%)** - Real-time relative volume
+            ## Troubleshooting
+            - If the app fails to load data, a fallback demo mode will be used.
+            - For persistent issues, contact support.
             
-            **Wave Radar™** - Early detection system featuring:
-            - Momentum shift detection
-            - Smart money flow tracking
-            - Pattern emergence alerts
-            - Acceleration monitoring
-            - Volume surge detection
-            
-            **Smart Filters** - Interconnected filtering system:
-            - Dynamic filter updates based on selections
-            - Multi-dimensional screening
-            - Pattern-based filtering
-            - Trend quality filtering
-            
-            #### 💡 How to Use
-            
-            1. **Quick Actions** - Use buttons for instant insights
-            2. **Rankings Tab** - View top-ranked stocks with comprehensive metrics
-            3. **Wave Radar** - Monitor early momentum signals and market shifts
-            4. **Analysis Tab** - Deep dive into market sectors and patterns
-            5. **Search Tab** - Find specific stocks with detailed analysis
-            6. **Export Tab** - Download data for further analysis
-            
-            #### 🔧 Pro Tips
-            
-            - Use **Hybrid Mode** to see both technical and fundamental data
-            - Combine multiple filters for precision screening
-            - Watch for stocks with multiple pattern detections
-            - Monitor Wave Radar for early entry opportunities
-            - Export data regularly for historical tracking
-            
-            #### 📊 Pattern Legend
-            
-            - 🔥 **CAT LEADER** - Top 10% in category
-            - 💎 **HIDDEN GEM** - Strong in category, undervalued overall
-            - 🚀 **ACCELERATING** - Momentum building rapidly
-            - 🏦 **INSTITUTIONAL** - Smart money accumulation
-            - ⚡ **VOL EXPLOSION** - Extreme volume surge
-            - 🎯 **BREAKOUT** - Ready for technical breakout
-            - 👑 **MARKET LEADER** - Top 5% overall
-            - 🌊 **MOMENTUM WAVE** - Sustained momentum with acceleration
-            - 💰 **LIQUID LEADER** - High liquidity with performance
-            - 💪 **LONG STRENGTH** - Strong long-term performance
+            ## Version
+            - Locked, production-ready version. No upgrades allowed.
             """)
         
         with col2:
