@@ -1,12 +1,13 @@
 """
-Wave Detection Ultimate 3.0 - BULLETPROOF PRODUCTION VERSION
-============================================================
+Wave Detection Ultimate 3.0 - FINAL PERFECTED VERSION
+=====================================================
 Professional Stock Ranking System with Advanced Analytics
-ROBUST • RESILIENT • PRODUCTION-READY • ERROR-HANDLED • FAILSAFE
+All bugs fixed, optimized for Streamlit Community Cloud
+Enhanced with smart filters, improved search, and clean UI
 
-Version: 3.1.0-BULLETPROOF
+Version: 3.0.4-PRODUCTION
 Last Updated: December 2024
-Status: BATTLE-TESTED PRODUCTION - LOCKED & SEALED
+Status: PRODUCTION READY - Professional Implementation
 """
 
 import streamlit as st
@@ -14,106 +15,51 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
-import traceback
-import sys
 from typing import Dict, List, Tuple, Optional, Any, Union, Set
 from dataclasses import dataclass, field
 from functools import lru_cache, wraps
 import time
 from io import BytesIO
 import warnings
-import json
-from contextlib import contextmanager
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 # Suppress warnings for clean output
 warnings.filterwarnings('ignore')
-pd.options.mode.chained_assignment = None
 
 # Set random seed for reproducibility
 np.random.seed(42)
 
 # ============================================
-# BULLETPROOF LOGGING SYSTEM
+# LOGGING CONFIGURATION
 # ============================================
 
-class ProductionLogger:
-    """Bulletproof logging system with error tracking"""
-    
-    def __init__(self):
-        self.setup_logging()
-        self.error_count = 0
-        self.warning_count = 0
-        self.critical_errors = []
-    
-    def setup_logging(self):
-        """Setup production-grade logging"""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S',
-            handlers=[
-                logging.StreamHandler(sys.stdout)
-            ]
-        )
-        self.logger = logging.getLogger(__name__)
-        
-        # Add error tracking
-        class ErrorTrackingHandler(logging.Handler):
-            def __init__(self, tracker):
-                super().__init__()
-                self.tracker = tracker
-            
-            def emit(self, record):
-                if record.levelno >= logging.ERROR:
-                    self.tracker.error_count += 1
-                    if record.levelno >= logging.CRITICAL:
-                        self.tracker.critical_errors.append(record.getMessage())
-                elif record.levelno >= logging.WARNING:
-                    self.tracker.warning_count += 1
-        
-        self.logger.addHandler(ErrorTrackingHandler(self))
-    
-    def get_logger(self):
-        return self.logger
-    
-    def get_stats(self):
-        return {
-            'errors': self.error_count,
-            'warnings': self.warning_count,
-            'critical_errors': self.critical_errors
-        }
+# Configure logging for production
+log_level = logging.INFO
 
-# Global logger instance
-PROD_LOGGER = ProductionLogger()
-logger = PROD_LOGGER.get_logger()
+logging.basicConfig(
+    level=log_level,
+    format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 # ============================================
-# BULLETPROOF CONFIGURATION
+# CONFIGURATION
 # ============================================
 
 @dataclass(frozen=True)
-class BulletproofConfig:
-    """Hardened system configuration with comprehensive validation"""
+class Config:
+    """System configuration with validated weights"""
     
-    # Data source - LOCKED for production
+    # Data source - HARDCODED for production
     DEFAULT_SHEET_URL: str = "https://docs.google.com/spreadsheets/d/1OEQ_qxL4lXbO9LlKWDGlDju2yQC1iYvOYeXF3mTQuJM/edit?usp=sharing"
     DEFAULT_GID: str = "1823439984"
     
-    # Cache settings optimized for reliability
-    CACHE_TTL: int = 3600  # 1 hour
-    MAX_CACHE_SIZE: int = 100  # Maximum cache entries
+    # Cache settings optimized for Streamlit Community Cloud
+    CACHE_TTL: int = 3600  # 1 hour for better performance
     
-    # Network settings for bulletproof data loading
-    REQUEST_TIMEOUT: int = 30
-    MAX_RETRIES: int = 3
-    RETRY_BACKOFF: float = 1.0
-    
-    # Master Score 3.1 weights (total = 100%) - LOCKED
+    # Master Score 3.0 weights (total = 100%)
     POSITION_WEIGHT: float = 0.30
     VOLUME_WEIGHT: float = 0.25
     MOMENTUM_WEIGHT: float = 0.15
@@ -121,24 +67,11 @@ class BulletproofConfig:
     BREAKOUT_WEIGHT: float = 0.10
     RVOL_WEIGHT: float = 0.10
     
-    # Data quality thresholds - STRICT
-    MIN_VALID_PRICE: float = 0.01
-    MAX_VALID_PRICE: float = 1000000.0
-    MIN_DATA_COMPLETENESS: float = 0.7  # 70% minimum
-    MAX_RVOL_THRESHOLD: float = 20.0
-    MAX_RETURN_THRESHOLD: float = 1000.0  # 1000% max return
-    MIN_VOLUME_RATIO: float = 0.01
-    MAX_VOLUME_RATIO: float = 50.0
-    
-    # Performance limits
-    MAX_PROCESSING_TIME: float = 60.0  # 60 seconds max
-    MAX_DATAFRAME_SIZE: int = 50000  # 50K rows max
-    
     # Display settings
     DEFAULT_TOP_N: int = 50
     AVAILABLE_TOP_N: List[int] = field(default_factory=lambda: [10, 20, 50, 100, 200, 500])
     
-    # Pattern thresholds - CALIBRATED
+    # Thresholds for patterns
     PATTERN_THRESHOLDS: Dict[str, float] = field(default_factory=lambda: {
         "category_leader": 90,
         "hidden_gem": 80,
@@ -152,7 +85,7 @@ class BulletproofConfig:
         "long_strength": 80
     })
     
-    # Tier definitions - LOCKED
+    # Tier definitions
     TIERS: Dict[str, Dict[str, Tuple[float, float]]] = field(default_factory=lambda: {
         "eps": {
             "Loss": (-float('inf'), 0),
@@ -182,1628 +115,1176 @@ class BulletproofConfig:
             "5000+": (5000, float('inf'))
         }
     })
-
-# Global bulletproof config
-CONFIG = BulletproofConfig()
-
-# ============================================
-# BULLETPROOF ERROR HANDLING SYSTEM
-# ============================================
-
-@contextmanager
-def bulletproof_operation(operation_name: str, critical: bool = False):
-    """Context manager for bulletproof error handling"""
-    start_time = time.perf_counter()
-    try:
-        logger.info(f"Starting {operation_name}")
-        yield
-        elapsed = time.perf_counter() - start_time
-        logger.info(f"Completed {operation_name} in {elapsed:.2f}s")
-    except Exception as e:
-        elapsed = time.perf_counter() - start_time
-        error_msg = f"FAILED {operation_name} after {elapsed:.2f}s: {str(e)}"
-        
-        if critical:
-            logger.critical(error_msg)
-            logger.critical(f"Stack trace: {traceback.format_exc()}")
-            st.error(f"🚨 Critical Error in {operation_name}: {str(e)}")
-            st.error("Please refresh the page or contact support.")
-        else:
-            logger.error(error_msg)
-            logger.debug(f"Stack trace: {traceback.format_exc()}")
-        
-        raise
-
-def safe_execute(func, default_value=None, operation_name="Unknown"):
-    """Safely execute a function with fallback"""
-    try:
-        return func()
-    except Exception as e:
-        logger.warning(f"Safe execution failed for {operation_name}: {str(e)}")
-        return default_value
-
-class DataValidationError(Exception):
-    """Custom exception for data validation failures"""
-    pass
-
-class SystemOverloadError(Exception):
-    """Custom exception for system overload conditions"""
-    pass
-
-# ============================================
-# BULLETPROOF PERFORMANCE MONITORING
-# ============================================
-
-class PerformanceMonitor:
-    """Advanced performance monitoring and optimization"""
     
-    def __init__(self):
-        self.metrics = {}
-        self.operation_times = {}
-        self.memory_usage = {}
-        self.warning_threshold = 5.0  # seconds
-        self.critical_threshold = 15.0  # seconds
+    # Performance thresholds - FIXED: Allow extreme RVOL values
+    RVOL_MAX_THRESHOLD: float = 1000000.0  # Allow up to 1M RVOL
+    MIN_VALID_PRICE: float = 0.01  # Minimum valid price
     
-    def timer(self, func):
-        """Enhanced performance timing decorator"""
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            operation_name = func.__name__
-            start_time = time.perf_counter()
-            start_memory = self._get_memory_usage()
-            
-            try:
-                with bulletproof_operation(f"Performance-tracked {operation_name}"):
-                    result = func(*args, **kwargs)
-                
-                elapsed = time.perf_counter() - start_time
-                memory_delta = self._get_memory_usage() - start_memory
-                
-                # Store metrics
-                self.operation_times[operation_name] = elapsed
-                self.memory_usage[operation_name] = memory_delta
-                
-                # Performance warnings
-                if elapsed > self.critical_threshold:
-                    logger.critical(f"CRITICAL PERFORMANCE: {operation_name} took {elapsed:.2f}s")
-                elif elapsed > self.warning_threshold:
-                    logger.warning(f"SLOW OPERATION: {operation_name} took {elapsed:.2f}s")
-                
-                # Store in session state for monitoring
-                if 'performance_metrics' not in st.session_state:
-                    st.session_state.performance_metrics = {}
-                st.session_state.performance_metrics[operation_name] = {
-                    'time': elapsed,
-                    'memory': memory_delta,
-                    'timestamp': datetime.now()
-                }
-                
-                return result
-                
-            except Exception as e:
-                elapsed = time.perf_counter() - start_time
-                logger.error(f"FAILED OPERATION: {operation_name} failed after {elapsed:.2f}s")
-                raise
-        
-        return wrapper
+    # Quick action thresholds
+    TOP_GAINER_MOMENTUM: float = 80
+    VOLUME_SURGE_RVOL: float = 3.0
+    BREAKOUT_READY_SCORE: float = 80
     
-    def _get_memory_usage(self):
-        """Get current memory usage (simplified)"""
+    # Data quality thresholds
+    MIN_DATA_COMPLETENESS: float = 0.8  # 80% data completeness required
+    STALE_DATA_HOURS: int = 24  # Data older than 24 hours is stale
+
+# Global configuration instance
+CONFIG = Config()
+
+# ============================================
+# PERFORMANCE MONITORING
+# ============================================
+
+def timer(func):
+    """Performance timing decorator with logging"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.perf_counter()
         try:
-            import psutil
-            return psutil.Process().memory_info().rss / 1024 / 1024  # MB
-        except ImportError:
-            return 0  # Fallback if psutil not available
-    
-    def get_performance_summary(self):
-        """Get performance summary for monitoring"""
-        return {
-            'operation_times': self.operation_times,
-            'memory_usage': self.memory_usage,
-            'total_operations': len(self.operation_times),
-            'avg_time': np.mean(list(self.operation_times.values())) if self.operation_times else 0,
-            'slowest_operation': max(self.operation_times.items(), key=lambda x: x[1]) if self.operation_times else None
-        }
-
-# Global performance monitor
-PERF_MONITOR = PerformanceMonitor()
+            result = func(*args, **kwargs)
+            elapsed = time.perf_counter() - start
+            if elapsed > 1.0:
+                logger.warning(f"{func.__name__} took {elapsed:.2f}s")
+            # Store timing for performance monitoring
+            if 'performance_metrics' not in st.session_state:
+                st.session_state.performance_metrics = {}
+            st.session_state.performance_metrics[func.__name__] = elapsed
+            return result
+        except Exception as e:
+            elapsed = time.perf_counter() - start
+            logger.error(f"{func.__name__} failed after {elapsed:.2f}s: {str(e)}")
+            raise
+    return wrapper
 
 # ============================================
-# BULLETPROOF DATA VALIDATION SYSTEM
+# DATA VALIDATION
 # ============================================
 
-class BulletproofValidator:
-    """Comprehensive data validation with strict quality controls"""
+class DataValidator:
+    """Validate data at each step"""
     
     @staticmethod
-    def validate_system_health():
-        """Validate system health before operations"""
-        health_checks = {
-            'streamlit_available': 'st' in globals(),
-            'pandas_version': pd.__version__ >= '1.5.0',
-            'numpy_version': np.__version__ >= '1.20.0',
-            'memory_ok': True,  # Simplified check
-            'config_valid': CONFIG is not None
-        }
+    def validate_dataframe(df: pd.DataFrame, required_cols: List[str], context: str) -> bool:
+        """Validate dataframe has required columns and data"""
+        if df is None or df.empty:
+            logger.error(f"{context}: Empty or None dataframe")
+            return False
         
-        failed_checks = [check for check, status in health_checks.items() if not status]
-        
-        if failed_checks:
-            raise SystemOverloadError(f"System health check failed: {failed_checks}")
-        
-        logger.info("System health check passed")
-        return True
-    
-    @staticmethod
-    def validate_dataframe_structure(df: pd.DataFrame, required_cols: List[str], context: str) -> bool:
-        """Bulletproof dataframe validation"""
-        if df is None:
-            raise DataValidationError(f"{context}: DataFrame is None")
-        
-        if df.empty:
-            raise DataValidationError(f"{context}: DataFrame is empty")
-        
-        if len(df) > CONFIG.MAX_DATAFRAME_SIZE:
-            raise SystemOverloadError(f"{context}: DataFrame too large ({len(df)} > {CONFIG.MAX_DATAFRAME_SIZE})")
-        
-        # Check required columns
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
-            logger.warning(f"{context}: Missing columns: {missing_cols}")
+            logger.warning(f"{context}: Missing required columns: {missing_cols}")
         
-        # Data quality assessment
-        total_cells = len(df) * len(df.columns)
-        valid_cells = df.notna().sum().sum()
-        completeness = valid_cells / total_cells if total_cells > 0 else 0
+        logger.info(f"{context}: Found {len(df.columns)} columns, {len(df)} rows")
         
-        if completeness < CONFIG.MIN_DATA_COMPLETENESS:
-            logger.warning(f"{context}: Low data completeness: {completeness:.1%}")
+        # Calculate data quality metrics
+        completeness = df.notna().sum().sum() / (len(df) * len(df.columns))
+        if 'data_quality' not in st.session_state:
+            st.session_state.data_quality = {}
+        st.session_state.data_quality['completeness'] = completeness
+        st.session_state.data_quality['total_rows'] = len(df)
+        st.session_state.data_quality['total_columns'] = len(df.columns)
         
-        # Store validation metrics
-        if 'validation_metrics' not in st.session_state:
-            st.session_state.validation_metrics = {}
-        
-        st.session_state.validation_metrics[context] = {
-            'rows': len(df),
-            'columns': len(df.columns),
-            'completeness': completeness,
-            'missing_columns': missing_cols,
-            'timestamp': datetime.now()
-        }
-        
-        logger.info(f"{context}: Validated {len(df):,} rows, {len(df.columns)} cols, {completeness:.1%} complete")
         return True
     
     @staticmethod
-    def validate_and_clean_numeric(series: pd.Series, col_name: str, 
-                                 min_val: Optional[float] = None, 
-                                 max_val: Optional[float] = None) -> pd.Series:
-        """Bulletproof numeric validation and cleaning"""
-        if series is None or series.empty:
-            logger.warning(f"{col_name}: Empty series, returning zeros")
-            return pd.Series(0.0, index=range(1), dtype=float)
+    def validate_numeric_column(series: pd.Series, col_name: str, 
+                              min_val: Optional[float] = None, 
+                              max_val: Optional[float] = None) -> pd.Series:
+        """Validate and clean numeric column"""
+        if series is None:
+            return pd.Series(dtype=float)
         
-        original_count = len(series)
-        
-        # Convert to numeric with error handling
+        # Convert to numeric, coercing errors
         series = pd.to_numeric(series, errors='coerce')
         
-        # Handle infinite values
-        inf_count = np.isinf(series).sum()
-        if inf_count > 0:
-            logger.warning(f"{col_name}: Replaced {inf_count} infinite values")
-            series = series.replace([np.inf, -np.inf], np.nan)
-        
-        # Apply bounds with validation
+        # Apply bounds if specified
         if min_val is not None:
-            below_min = (series < min_val).sum()
-            if below_min > 0:
-                logger.info(f"{col_name}: Clipped {below_min} values below {min_val}")
             series = series.clip(lower=min_val)
-        
         if max_val is not None:
-            above_max = (series > max_val).sum()
-            if above_max > 0:
-                logger.info(f"{col_name}: Clipped {above_max} values above {max_val}")
             series = series.clip(upper=max_val)
         
-        # Quality metrics
-        nan_count = series.isna().sum()
-        nan_pct = (nan_count / original_count) * 100 if original_count > 0 else 0
-        
-        if nan_pct > 80:
-            logger.error(f"{col_name}: Critical data quality - {nan_pct:.1f}% NaN values")
-        elif nan_pct > 50:
-            logger.warning(f"{col_name}: Poor data quality - {nan_pct:.1f}% NaN values")
+        # Log if too many NaN values
+        nan_pct = series.isna().sum() / len(series) * 100
+        if nan_pct > 50:
+            logger.warning(f"{col_name}: {nan_pct:.1f}% NaN values")
         
         return series
 
 # ============================================
-# BULLETPROOF NETWORK OPERATIONS
+# SMART CACHING FOR DATA LOADING
 # ============================================
 
-class BulletproofNetworking:
-    """Robust networking with comprehensive error handling and retries"""
-    
-    def __init__(self):
-        self.session = self._create_robust_session()
-    
-    def _create_robust_session(self):
-        """Create a robust requests session with retries and timeouts"""
-        session = requests.Session()
+@st.cache_data(ttl=CONFIG.CACHE_TTL, show_spinner=False)
+def load_and_process_data(sheet_url: str, gid: str) -> Tuple[pd.DataFrame, datetime]:
+    """Load and process data with smart caching - filters remain live"""
+    try:
+        # Record start time
+        start_time = time.perf_counter()
         
-        # Configure retry strategy
-        retry_strategy = Retry(
-            total=CONFIG.MAX_RETRIES,
-            backoff_factor=CONFIG.RETRY_BACKOFF,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["HEAD", "GET", "OPTIONS"]
-        )
+        # Validate inputs
+        if not sheet_url or not gid:
+            raise ValueError("Sheet URL and GID are required")
         
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
+        # Construct CSV URL
+        base_url = sheet_url.split('/edit')[0]
+        csv_url = f"{base_url}/export?format=csv&gid={gid}"
         
-        # Set default timeout
-        session.timeout = CONFIG.REQUEST_TIMEOUT
+        logger.info(f"Loading data from Google Sheets")
         
-        return session
-    
-    def fetch_data_with_fallback(self, primary_url: str, fallback_data: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-        """Fetch data with comprehensive fallback mechanisms"""
+        # Load with timeout and error handling
+        df = pd.read_csv(csv_url, low_memory=False)
         
-        # Try primary source
-        try:
-            with bulletproof_operation("Primary data fetch", critical=True):
-                logger.info(f"Fetching data from primary source")
-                
-                response = self.session.get(primary_url, timeout=CONFIG.REQUEST_TIMEOUT)
-                response.raise_for_status()
-                
-                # Validate response
-                if len(response.content) < 100:  # Minimum expected size
-                    raise DataValidationError("Response too small, likely empty")
-                
-                # Load and validate CSV
-                df = pd.read_csv(BytesIO(response.content), low_memory=False)
-                
-                if df.empty:
-                    raise DataValidationError("Loaded empty dataframe from primary source")
-                
-                logger.info(f"Successfully loaded {len(df):,} rows from primary source")
-                return df
-                
-        except Exception as e:
-            logger.error(f"Primary data fetch failed: {str(e)}")
-            
-            # Try fallback data
-            if fallback_data is not None and not fallback_data.empty:
-                logger.warning("Using fallback data")
-                st.warning("⚠️ Using cached data due to connection issues")
-                return fallback_data
-            
-            # Try local CSV as last resort
-            try:
-                logger.info("Attempting to load local CSV as last resort")
-                local_df = pd.read_csv('Stocks.csv', low_memory=False)
-                if not local_df.empty:
-                    st.warning("⚠️ Using local backup data")
-                    logger.info(f"Loaded {len(local_df):,} rows from local backup")
-                    return local_df
-            except Exception as local_e:
-                logger.error(f"Local backup failed: {str(local_e)}")
-            
-            # Final fallback - create minimal dataset
-            logger.critical("All data sources failed, creating minimal dataset")
-            st.error("🚨 All data sources unavailable. Please check your connection.")
-            return self._create_minimal_dataset()
-    
-    def _create_minimal_dataset(self) -> pd.DataFrame:
-        """Create a minimal dataset for system continuity"""
-        logger.warning("Creating minimal dataset for system continuity")
+        if df.empty:
+            raise ValueError("Loaded empty dataframe")
         
-        minimal_data = {
-            'ticker': ['DEMO'],
-            'company_name': ['Demo Company'],
-            'category': ['Demo'],
-            'sector': ['Demo'],
-            'price': [100.0],
-            'ret_1d': [0.0],
-            'ret_7d': [0.0],
-            'ret_30d': [0.0],
-            'volume_1d': [1000],
-            'rvol': [1.0],
-            'from_low_pct': [50.0],
-            'from_high_pct': [-50.0]
-        }
+        logger.info(f"Successfully loaded {len(df):,} rows with {len(df.columns)} columns")
         
-        return pd.DataFrame(minimal_data)
-
-# Global networking instance
-BULLETPROOF_NET = BulletproofNetworking()
+        # Process the data
+        df = DataProcessor.process_dataframe(df)
+        
+        # Calculate rankings
+        df = RankingEngine.calculate_rankings(df)
+        
+        # Record processing time
+        processing_time = time.perf_counter() - start_time
+        logger.info(f"Total data processing time: {processing_time:.2f}s")
+        
+        # Return processed data with timestamp
+        return df, datetime.now()
+        
+    except Exception as e:
+        logger.error(f"Failed to load and process data: {str(e)}")
+        raise
 
 # ============================================
-# BULLETPROOF DATA PROCESSING ENGINE
+# DATA PROCESSING
 # ============================================
 
-class BulletproofDataProcessor:
-    """Industrial-strength data processing with comprehensive validation"""
+class DataProcessor:
+    """Handle all data processing with validation and error handling"""
     
-    # Define expected columns with types and validation rules
-    COLUMN_SPECS = {
-        # Core identification
-        'ticker': {'type': 'string', 'required': True, 'max_length': 20},
-        'company_name': {'type': 'string', 'required': False, 'max_length': 200},
-        'category': {'type': 'string', 'required': False, 'max_length': 50},
-        'sector': {'type': 'string', 'required': False, 'max_length': 100},
-        
-        # Price data
-        'price': {'type': 'numeric', 'required': True, 'min': 0.01, 'max': 1000000},
-        'prev_close': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 1000000},
-        'low_52w': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 1000000},
-        'high_52w': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 1000000},
-        
-        # Position metrics
-        'from_low_pct': {'type': 'numeric', 'required': False, 'min': 0, 'max': 1000},
-        'from_high_pct': {'type': 'numeric', 'required': False, 'min': -100, 'max': 0},
-        
-        # Moving averages
-        'sma_20d': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 1000000},
-        'sma_50d': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 1000000},
-        'sma_200d': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 1000000},
-        
-        # Returns
-        'ret_1d': {'type': 'numeric', 'required': False, 'min': -100, 'max': 1000},
-        'ret_3d': {'type': 'numeric', 'required': False, 'min': -100, 'max': 1000},
-        'ret_7d': {'type': 'numeric', 'required': False, 'min': -100, 'max': 1000},
-        'ret_30d': {'type': 'numeric', 'required': False, 'min': -100, 'max': 1000},
-        'ret_3m': {'type': 'numeric', 'required': False, 'min': -100, 'max': 1000},
-        'ret_6m': {'type': 'numeric', 'required': False, 'min': -100, 'max': 1000},
-        'ret_1y': {'type': 'numeric', 'required': False, 'min': -100, 'max': 1000},
-        'ret_3y': {'type': 'numeric', 'required': False, 'min': -100, 'max': 1000},
-        'ret_5y': {'type': 'numeric', 'required': False, 'min': -100, 'max': 1000},
-        
-        # Volume data
-        'volume_1d': {'type': 'numeric', 'required': False, 'min': 0, 'max': 1e12},
-        'volume_7d': {'type': 'numeric', 'required': False, 'min': 0, 'max': 1e12},
-        'volume_30d': {'type': 'numeric', 'required': False, 'min': 0, 'max': 1e12},
-        'volume_90d': {'type': 'numeric', 'required': False, 'min': 0, 'max': 1e12},
-        'volume_180d': {'type': 'numeric', 'required': False, 'min': 0, 'max': 1e12},
-        
-        # Volume ratios
-        'vol_ratio_1d_90d': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 50},
-        'vol_ratio_7d_90d': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 50},
-        'vol_ratio_30d_90d': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 50},
-        'vol_ratio_1d_180d': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 50},
-        'vol_ratio_7d_180d': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 50},
-        'vol_ratio_30d_180d': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 50},
-        'vol_ratio_90d_180d': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 50},
-        
-        # Special metrics
-        'rvol': {'type': 'numeric', 'required': False, 'min': 0.01, 'max': 20},
-        'pe': {'type': 'numeric', 'required': False, 'min': -1000, 'max': 1000},
-        'eps_current': {'type': 'numeric', 'required': False, 'min': -1000, 'max': 10000},
-        'eps_last_qtr': {'type': 'numeric', 'required': False, 'min': -1000, 'max': 10000},
-        'eps_change_pct': {'type': 'numeric', 'required': False, 'min': -1000, 'max': 10000}
-    }
+    # Define all expected columns
+    NUMERIC_COLUMNS = [
+        'price', 'prev_close', 'low_52w', 'high_52w',
+        'from_low_pct', 'from_high_pct',
+        'sma_20d', 'sma_50d', 'sma_200d',
+        'ret_1d', 'ret_3d', 'ret_7d', 'ret_30d', 
+        'ret_3m', 'ret_6m', 'ret_1y', 'ret_3y', 'ret_5y',
+        'volume_1d', 'volume_7d', 'volume_30d', 'volume_90d', 'volume_180d',
+        'vol_ratio_1d_90d', 'vol_ratio_7d_90d', 'vol_ratio_30d_90d',
+        'vol_ratio_1d_180d', 'vol_ratio_7d_180d', 'vol_ratio_30d_180d', 
+        'vol_ratio_90d_180d',
+        'rvol', 'pe', 'eps_current', 'eps_last_qtr', 'eps_change_pct'
+    ]
+    
+    CATEGORICAL_COLUMNS = ['ticker', 'company_name', 'category', 'sector']
+    
+    REQUIRED_COLUMNS = ['ticker', 'price']
     
     @staticmethod
-    def clean_indian_number(value: Any) -> Optional[float]:
-        """Bulletproof Indian number format cleaning"""
+    def clean_numeric_value(value: Any, is_percentage: bool = False) -> Optional[float]:
+        """Clean and convert Indian number format to float - FIXED for percentages"""
         if pd.isna(value) or value == '':
             return np.nan
         
         try:
-            # Convert to string for processing
+            # Convert to string and clean
             cleaned = str(value).strip()
             
-            # Quick validation for invalid values
-            invalid_values = {'', '-', 'N/A', 'n/a', '#N/A', 'nan', 'None', '#VALUE!', '#ERROR!', 'null'}
-            if cleaned.lower() in invalid_values:
+            # Quick check for invalid values
+            if cleaned in ['', '-', 'N/A', 'n/a', '#N/A', 'nan', 'None', '#VALUE!', '#ERROR!']:
                 return np.nan
             
-            # Remove currency symbols and formatting
-            cleaned = (cleaned
-                      .replace('₹', '')
-                      .replace('$', '')
-                      .replace('%', '')
-                      .replace(',', '')
-                      .replace(' ', '')
-                      .replace('Cr', '')
-                      .replace('L', ''))
+            # FIXED: Handle percentage values properly
+            if is_percentage and '%' in cleaned:
+                # Remove % and convert (e.g., "-56.61%" -> -0.5661)
+                cleaned = cleaned.replace('%', '')
+                return float(cleaned) / 100.0
             
-            # Handle empty after cleaning
-            if not cleaned:
-                return np.nan
+            # Remove currency symbols and special characters efficiently
+            cleaned = cleaned.replace('₹', '').replace('$', '').replace(',', '').replace(' ', '')
+            
+            # Don't remove % for non-percentage columns
+            if not is_percentage:
+                cleaned = cleaned.replace('%', '')
             
             return float(cleaned)
-            
-        except (ValueError, AttributeError, TypeError) as e:
-            logger.debug(f"Number cleaning failed for '{value}': {str(e)}")
+        except (ValueError, AttributeError):
             return np.nan
     
     @staticmethod
-    @PERF_MONITOR.timer
-    def process_dataframe_bulletproof(df: pd.DataFrame) -> pd.DataFrame:
-        """Bulletproof data processing pipeline"""
+    @timer
+    def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+        """Complete data processing pipeline with validation"""
+        if not DataValidator.validate_dataframe(df, DataProcessor.REQUIRED_COLUMNS, "Initial data"):
+            return pd.DataFrame()
         
-        with bulletproof_operation("Bulletproof data processing", critical=True):
+        # Create copy to avoid modifying original
+        df = df.copy()
+        
+        # Define which columns are percentages
+        percentage_columns = [
+            'vol_ratio_1d_90d', 'vol_ratio_7d_90d', 'vol_ratio_30d_90d',
+            'vol_ratio_1d_180d', 'vol_ratio_7d_180d', 'vol_ratio_30d_180d',
+            'vol_ratio_90d_180d', 'eps_change_pct'
+        ]
+        
+        # Process numeric columns
+        for col in DataProcessor.NUMERIC_COLUMNS:
+            if col in df.columns:
+                # FIXED: Use proper percentage handling for percentage columns
+                is_pct = col in percentage_columns
+                df[col] = df[col].apply(lambda x: DataProcessor.clean_numeric_value(x, is_percentage=is_pct))
+                df[col] = DataValidator.validate_numeric_column(df[col], col)
+        
+        # Process categorical columns
+        for col in DataProcessor.CATEGORICAL_COLUMNS:
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.strip()
+                df[col] = df[col].replace(['nan', 'None', '', 'N/A', 'NaN'], 'Unknown')
+                # Remove extra whitespace
+                df[col] = df[col].str.replace(r'\s+', ' ', regex=True)
+        
+        # FIXED: Volume ratios are now properly converted from percentage strings
+        volume_ratio_columns = [
+            'vol_ratio_1d_90d', 'vol_ratio_7d_90d', 'vol_ratio_30d_90d',
+            'vol_ratio_1d_180d', 'vol_ratio_7d_180d', 'vol_ratio_30d_180d',
+            'vol_ratio_90d_180d'
+        ]
+        
+        for col in volume_ratio_columns:
+            if col in df.columns:
+                # Data is already converted to decimal form (e.g., -0.5661 for -56.61%)
+                # Just ensure it's in ratio form (add 1 to get actual ratio)
+                df[col] = 1 + df[col]  # -0.5661 becomes 0.4339 (correct ratio)
+                df[col] = df[col].fillna(1.0)
+                df[col] = df[col].clip(0.01, 100.0)  # Allow wider range
+        
+        # Validate data quality
+        initial_count = len(df)
+        
+        # Remove rows with critical missing data
+        df = df.dropna(subset=['ticker', 'price'], how='any')
+        df = df[df['price'] > CONFIG.MIN_VALID_PRICE]
+        
+        # For position data, fill NaN with reasonable defaults
+        if 'from_low_pct' in df.columns:
+            df['from_low_pct'] = df['from_low_pct'].fillna(50)
+        else:
+            df['from_low_pct'] = 50
             
-            # System health check
-            BulletproofValidator.validate_system_health()
-            
-            # Initial validation
-            required_cols = [col for col, spec in BulletproofDataProcessor.COLUMN_SPECS.items() 
-                           if spec.get('required', False)]
-            BulletproofValidator.validate_dataframe_structure(df, required_cols, "Raw input data")
-            
-            # Create working copy
-            df = df.copy()
-            original_count = len(df)
-            
-            logger.info(f"Processing {original_count:,} rows with {len(df.columns)} columns")
-            
-            # Process each column according to specifications
-            for col_name, spec in BulletproofDataProcessor.COLUMN_SPECS.items():
-                if col_name in df.columns:
-                    if spec['type'] == 'numeric':
-                        df[col_name] = df[col_name].apply(BulletproofDataProcessor.clean_indian_number)
-                        df[col_name] = BulletproofValidator.validate_and_clean_numeric(
-                            df[col_name], 
-                            col_name, 
-                            spec.get('min'), 
-                            spec.get('max')
-                        )
-                    elif spec['type'] == 'string':
-                        df[col_name] = df[col_name].astype(str).str.strip()
-                        df[col_name] = df[col_name].replace(['nan', 'None', '', 'N/A', 'NaN'], 'Unknown')
-                        # Limit string length
-                        max_len = spec.get('max_length', 1000)
-                        df[col_name] = df[col_name].str[:max_len]
-                        # Clean whitespace
-                        df[col_name] = df[col_name].str.replace(r'\s+', ' ', regex=True)
-            
-            # Handle missing critical columns
-            if 'ticker' not in df.columns:
-                raise DataValidationError("Critical column 'ticker' is missing")
-            
-            if 'price' not in df.columns:
-                raise DataValidationError("Critical column 'price' is missing")
-            
-            # Add default values for missing columns
-            default_values = {
-                'from_low_pct': 50.0,
-                'from_high_pct': -50.0,
-                'rvol': 1.0,
-                'ret_1d': 0.0,
-                'ret_7d': 0.0,
-                'ret_30d': 0.0,
-                'volume_1d': 100000,
-                'category': 'Unknown',
-                'sector': 'Unknown',
-                'company_name': 'Unknown'
-            }
-            
-            for col, default_val in default_values.items():
-                if col not in df.columns:
-                    df[col] = default_val
-                    logger.info(f"Added missing column '{col}' with default value {default_val}")
-            
-            # Data quality enforcement
-            df = df.dropna(subset=['ticker', 'price'], how='any')
-            df = df[df['price'] > CONFIG.MIN_VALID_PRICE]
-            df = df[df['price'] < CONFIG.MAX_VALID_PRICE]
-            
-            # Remove duplicates
-            before_dedup = len(df)
-            df = df.drop_duplicates(subset=['ticker'], keep='first')
-            dedup_removed = before_dedup - len(df)
-            if dedup_removed > 0:
-                logger.info(f"Removed {dedup_removed} duplicate tickers")
-            
-            # Final validation
-            final_count = len(df)
-            removed_count = original_count - final_count
-            removal_pct = (removed_count / original_count) * 100 if original_count > 0 else 0
-            
-            if removal_pct > 50:
-                logger.warning(f"High data removal rate: {removal_pct:.1f}% ({removed_count:,} rows)")
-            
-            if final_count == 0:
-                raise DataValidationError("No valid data remaining after processing")
-            
-            # Add tier classifications
-            df = BulletproofDataProcessor._add_bulletproof_tiers(df)
-            
-            logger.info(f"Successfully processed {final_count:,} stocks ({removal_pct:.1f}% filtered out)")
-            
-            # Store processing metrics
-            if 'processing_metrics' not in st.session_state:
-                st.session_state.processing_metrics = {}
-            
-            st.session_state.processing_metrics['last_processing'] = {
-                'original_count': original_count,
-                'final_count': final_count,
-                'removal_rate': removal_pct,
-                'columns_processed': len(df.columns),
-                'timestamp': datetime.now()
-            }
-            
-            return df
+        if 'from_high_pct' in df.columns:
+            df['from_high_pct'] = df['from_high_pct'].fillna(-50)
+        else:
+            df['from_high_pct'] = -50
+        
+        # Remove duplicate tickers (keep first)
+        before_dedup = len(df)
+        df = df.drop_duplicates(subset=['ticker'], keep='first')
+        if before_dedup > len(df):
+            logger.info(f"Removed {before_dedup - len(df)} duplicate tickers")
+        
+        removed = initial_count - len(df)
+        if removed > 0:
+            logger.info(f"Removed {removed} invalid/duplicate rows")
+        
+        # Add tier classifications
+        df = DataProcessor._add_tier_classifications(df)
+        
+        # FIXED: Allow extreme RVOL values
+        if 'rvol' not in df.columns:
+            df['rvol'] = 1.0
+        else:
+            df['rvol'] = pd.to_numeric(df['rvol'], errors='coerce')
+            df['rvol'] = df['rvol'].fillna(1.0).clip(lower=0.01)
+            # Don't cap extreme values - they're legitimate
+        
+        logger.info(f"Processed {len(df)} valid stocks")
+        return df
     
     @staticmethod
-    def _add_bulletproof_tiers(df: pd.DataFrame) -> pd.DataFrame:
-        """Add tier classifications with bulletproof error handling"""
+    def _add_tier_classifications(df: pd.DataFrame) -> pd.DataFrame:
+        """Add tier classifications for EPS, PE, and Price"""
         
-        def safe_classify_tier(value: float, tier_dict: Dict[str, Tuple[float, float]], default: str = "Unknown") -> str:
-            """Safely classify a value into appropriate tier"""
-            try:
-                if pd.isna(value) or not isinstance(value, (int, float)):
-                    return default
-                
-                for tier_name, (min_val, max_val) in tier_dict.items():
-                    if min_val < value <= max_val:
-                        return tier_name
-                return default
-            except Exception as e:
-                logger.debug(f"Tier classification failed for value {value}: {str(e)}")
-                return default
+        def classify_tier(value: float, tier_dict: Dict[str, Tuple[float, float]]) -> str:
+            """Classify a value into appropriate tier - FIXED boundary handling"""
+            if pd.isna(value):
+                return "Unknown"
+            
+            for tier_name, (min_val, max_val) in tier_dict.items():
+                # FIXED: Use <= for both boundaries to include edge cases
+                if min_val <= value <= max_val:
+                    return tier_name
+            return "Unknown"
         
-        # Add tier columns with error handling
-        try:
-            df['eps_tier'] = df['eps_current'].apply(
-                lambda x: safe_classify_tier(x, CONFIG.TIERS['eps'])
-            )
-        except Exception:
-            df['eps_tier'] = 'Unknown'
-            logger.warning("EPS tier classification failed, using default")
+        # Add tier columns
+        df['eps_tier'] = df['eps_current'].apply(
+            lambda x: classify_tier(x, CONFIG.TIERS['eps'])
+        )
         
-        try:
-            df['pe_tier'] = df['pe'].apply(
-                lambda x: "Negative/NA" if pd.isna(x) or x <= 0 
-                else safe_classify_tier(x, CONFIG.TIERS['pe'])
-            )
-        except Exception:
-            df['pe_tier'] = 'Unknown'
-            logger.warning("PE tier classification failed, using default")
+        df['pe_tier'] = df['pe'].apply(
+            lambda x: "Negative/NA" if pd.isna(x) or x <= 0 
+            else classify_tier(x, CONFIG.TIERS['pe'])
+        )
         
-        try:
-            df['price_tier'] = df['price'].apply(
-                lambda x: safe_classify_tier(x, CONFIG.TIERS['price'])
-            )
-        except Exception:
-            df['price_tier'] = 'Unknown'
-            logger.warning("Price tier classification failed, using default")
+        df['price_tier'] = df['price'].apply(
+            lambda x: classify_tier(x, CONFIG.TIERS['price'])
+        )
         
         return df
 
 # ============================================
-# BULLETPROOF RANKING ENGINE
+# RANKING ENGINE
 # ============================================
 
-class BulletproofRankingEngine:
-    """Military-grade ranking calculations with comprehensive error handling"""
+class RankingEngine:
+    """Core ranking calculations - optimized and vectorized"""
     
     @staticmethod
-    def safe_rank_bulletproof(series: pd.Series, pct: bool = True, ascending: bool = True, 
-                            operation_name: str = "Unknown") -> pd.Series:
-        """Bulletproof ranking with comprehensive error handling"""
+    def safe_rank(series: pd.Series, pct: bool = True, ascending: bool = True) -> pd.Series:
+        """Safely rank a series with proper handling of edge cases"""
+        if series is None or series.empty:
+            return pd.Series(dtype=float)
         
-        try:
-            if series is None or series.empty:
-                logger.warning(f"Empty series in {operation_name}, returning neutral ranks")
-                return pd.Series(50.0, index=range(1), dtype=float)
-            
-            # Create working copy
-            work_series = series.copy()
-            
-            # Handle infinite values
-            inf_mask = np.isinf(work_series)
-            if inf_mask.any():
-                inf_count = inf_mask.sum()
-                logger.info(f"{operation_name}: Replacing {inf_count} infinite values")
-                work_series = work_series.replace([np.inf, -np.inf], np.nan)
-            
-            # Count valid values
-            valid_count = work_series.notna().sum()
-            total_count = len(work_series)
-            
-            if valid_count == 0:
-                logger.warning(f"{operation_name}: No valid values, returning neutral ranks")
-                return pd.Series(50.0, index=series.index, dtype=float)
-            
-            # Calculate ranks
-            if pct:
-                ranks = work_series.rank(pct=True, ascending=ascending, method='min', na_option='bottom')
-                ranks = ranks * 100
-                # Fill NaN values with appropriate rank
-                fill_value = 1.0 if ascending else 99.0
-                ranks = ranks.fillna(fill_value)
+        # Create a copy to avoid modifying original
+        series = series.copy()
+        
+        # Replace inf values with NaN
+        series = series.replace([np.inf, -np.inf], np.nan)
+        
+        # Count valid values
+        valid_count = series.notna().sum()
+        if valid_count == 0:
+            # Add small random variation to avoid identical scores
+            return pd.Series(50 + np.random.uniform(-2, 2, size=len(series)), index=series.index)
+        
+        # For percentage ranks, ensure 0-100 scale
+        if pct:
+            ranks = series.rank(pct=True, ascending=ascending, na_option='bottom')
+            ranks = ranks * 100
+        else:
+            ranks = series.rank(ascending=ascending, method='min', na_option='bottom')
+        
+        # For NaN values, assign worst rank
+        if pct:
+            ranks = ranks.fillna(0 if ascending else 100)
+        else:
+            ranks = ranks.fillna(valid_count + 1)
+        
+        return ranks
+    
+    @staticmethod
+    def calculate_position_score(df: pd.DataFrame) -> pd.Series:
+        """Calculate position score from 52-week range - FIXED logic"""
+        # Initialize with neutral score
+        position_score = pd.Series(50, index=df.index, dtype=float)
+        
+        # Check if we have the required columns
+        has_from_low = 'from_low_pct' in df.columns and df['from_low_pct'].notna().any()
+        has_from_high = 'from_high_pct' in df.columns and df['from_high_pct'].notna().any()
+        
+        if not has_from_low and not has_from_high:
+            logger.warning("No position data available, using neutral position scores")
+            return position_score + np.random.uniform(-5, 5, size=len(df))
+        
+        # Get data with reasonable defaults
+        from_low = df['from_low_pct'].fillna(50) if has_from_low else pd.Series(50, index=df.index)
+        from_high = df['from_high_pct'].fillna(-50) if has_from_high else pd.Series(-50, index=df.index)
+        
+        # Rank distance from low (higher % from low is better)
+        if has_from_low:
+            rank_from_low = RankingEngine.safe_rank(from_low, pct=True, ascending=True)
+        else:
+            rank_from_low = pd.Series(50, index=df.index)
+        
+        # FIXED: For distance from high, closer to high is better
+        if has_from_high:
+            # Convert negative percentages to distance (0 = at high, -100 = far from high)
+            # Closer to 0 is better, so we use descending=False
+            rank_from_high = RankingEngine.safe_rank(from_high, pct=True, ascending=False)
+        else:
+            rank_from_high = pd.Series(50, index=df.index)
+        
+        # Combined position score
+        if has_from_low and has_from_high:
+            position_score = (rank_from_low * 0.6 + rank_from_high * 0.4)
+        elif has_from_low:
+            position_score = rank_from_low
+        else:
+            position_score = rank_from_high
+        
+        return position_score.clip(0, 100)
+    
+    @staticmethod
+    def calculate_volume_score(df: pd.DataFrame) -> pd.Series:
+        """Calculate comprehensive volume score"""
+        volume_score = pd.Series(50, index=df.index, dtype=float)
+        
+        vol_cols = [
+            ('vol_ratio_1d_90d', 0.20),
+            ('vol_ratio_7d_90d', 0.20),
+            ('vol_ratio_30d_90d', 0.20),
+            ('vol_ratio_30d_180d', 0.15),
+            ('vol_ratio_90d_180d', 0.25)
+        ]
+        
+        total_weight = 0
+        weighted_score = pd.Series(0, index=df.index, dtype=float)
+        has_any_vol_data = False
+        
+        for col, weight in vol_cols:
+            if col in df.columns and df[col].notna().any():
+                has_any_vol_data = True
+                col_data = df[col].copy()
+                col_data = col_data.fillna(1.0)
+                col_data = col_data.clip(lower=0.1)
+                col_rank = RankingEngine.safe_rank(col_data, pct=True, ascending=True)
+                weighted_score += col_rank * weight
+                total_weight += weight
+        
+        if total_weight > 0 and has_any_vol_data:
+            volume_score = weighted_score / total_weight
+        else:
+            logger.warning("No volume ratio data available, using neutral scores")
+            volume_score = pd.Series(50, index=df.index, dtype=float)
+            volume_score += np.random.uniform(-5, 5, size=len(df))
+        
+        return volume_score.clip(0, 100)
+    
+    @staticmethod
+    def calculate_momentum_score(df: pd.DataFrame) -> pd.Series:
+        """Calculate momentum score based on returns - FIXED fallback"""
+        momentum_score = pd.Series(50, index=df.index, dtype=float)
+        
+        if 'ret_30d' not in df.columns or df['ret_30d'].notna().sum() == 0:
+            logger.warning("No 30-day return data available, using neutral momentum scores")
+            if 'ret_7d' in df.columns and df['ret_7d'].notna().any():
+                # FIXED: Scale 7-day returns to approximate 30-day equivalent
+                ret_7d = df['ret_7d'].fillna(0)
+                # Approximate 30-day return from 7-day (not perfect but better than raw)
+                ret_30d_approx = ret_7d * 4.3  # 30/7 ≈ 4.3
+                momentum_score = RankingEngine.safe_rank(ret_30d_approx, pct=True, ascending=True)
+                logger.info("Using scaled 7-day returns for momentum score")
             else:
-                ranks = work_series.rank(ascending=ascending, method='min', na_option='bottom')
-                fill_value = total_count if ascending else 1
-                ranks = ranks.fillna(fill_value)
-            
-            # Validate output
-            if ranks.isna().any():
-                logger.warning(f"{operation_name}: NaN values in ranking output, filling with neutral")
-                ranks = ranks.fillna(50.0)
-            
-            # Ensure proper bounds for percentage ranks
-            if pct:
-                ranks = ranks.clip(0, 100)
-            
-            return ranks
-            
-        except Exception as e:
-            logger.error(f"Ranking failed for {operation_name}: {str(e)}")
-            # Return neutral ranking as fallback
-            return pd.Series(50.0, index=series.index if series is not None else range(1), dtype=float)
-    
-    @staticmethod
-    @PERF_MONITOR.timer
-    def calculate_position_score_bulletproof(df: pd.DataFrame) -> pd.Series:
-        """Bulletproof position score calculation"""
-        
-        with bulletproof_operation("Position score calculation"):
-            
-            # Initialize with neutral scores
-            position_score = pd.Series(50.0, index=df.index, dtype=float)
-            
-            # Check data availability
-            has_from_low = 'from_low_pct' in df.columns and df['from_low_pct'].notna().any()
-            has_from_high = 'from_high_pct' in df.columns and df['from_high_pct'].notna().any()
-            
-            if not has_from_low and not has_from_high:
-                logger.warning("No position data available, using neutral position scores")
-                # Add slight randomization to avoid identical scores
-                noise = np.random.uniform(-3, 3, size=len(df))
-                return (position_score + noise).clip(0, 100)
-            
-            # Process position data with bulletproof handling
-            try:
-                if has_from_low:
-                    from_low = df['from_low_pct'].fillna(50)
-                    # Validate and clean
-                    from_low = BulletproofValidator.validate_and_clean_numeric(
-                        from_low, 'from_low_pct', min_val=0, max_val=1000
-                    )
-                    rank_from_low = BulletproofRankingEngine.safe_rank_bulletproof(
-                        from_low, pct=True, ascending=True, operation_name="from_low_ranking"
-                    )
-                else:
-                    rank_from_low = pd.Series(50.0, index=df.index)
-                
-                if has_from_high:
-                    from_high = df['from_high_pct'].fillna(-50)
-                    # Convert to distance from high (positive values)
-                    distance_from_high = 100 + from_high  # Convert to positive scale
-                    distance_from_high = BulletproofValidator.validate_and_clean_numeric(
-                        distance_from_high, 'distance_from_high', min_val=0, max_val=200
-                    )
-                    rank_from_high = BulletproofRankingEngine.safe_rank_bulletproof(
-                        distance_from_high, pct=True, ascending=True, operation_name="from_high_ranking"
-                    )
-                else:
-                    rank_from_high = pd.Series(50.0, index=df.index)
-                
-                # Combine scores with error handling
-                if has_from_low and has_from_high:
-                    position_score = (rank_from_low * 0.6 + rank_from_high * 0.4)
-                elif has_from_low:
-                    position_score = rank_from_low
-                else:
-                    position_score = rank_from_high
-                
-            except Exception as e:
-                logger.error(f"Position score calculation failed: {str(e)}")
-                # Return neutral scores with small variation
-                noise = np.random.uniform(-5, 5, size=len(df))
-                position_score = pd.Series(50.0, index=df.index) + noise
-            
-            return position_score.clip(0, 100)
-    
-    @staticmethod
-    @PERF_MONITOR.timer
-    def calculate_volume_score_bulletproof(df: pd.DataFrame) -> pd.Series:
-        """Bulletproof volume score calculation"""
-        
-        with bulletproof_operation("Volume score calculation"):
-            
-            volume_score = pd.Series(50.0, index=df.index, dtype=float)
-            
-            # Define volume columns with weights
-            vol_cols = [
-                ('vol_ratio_1d_90d', 0.20),
-                ('vol_ratio_7d_90d', 0.20),
-                ('vol_ratio_30d_90d', 0.20),
-                ('vol_ratio_30d_180d', 0.15),
-                ('vol_ratio_90d_180d', 0.25)
-            ]
-            
-            total_weight = 0
-            weighted_score = pd.Series(0.0, index=df.index, dtype=float)
-            successful_cols = 0
-            
-            for col, weight in vol_cols:
-                try:
-                    if col in df.columns and df[col].notna().any():
-                        # Clean and validate volume ratio data
-                        col_data = df[col].copy()
-                        col_data = BulletproofValidator.validate_and_clean_numeric(
-                            col_data, col, min_val=CONFIG.MIN_VOLUME_RATIO, max_val=CONFIG.MAX_VOLUME_RATIO
-                        )
-                        col_data = col_data.fillna(1.0)
-                        
-                        # Calculate ranking
-                        col_rank = BulletproofRankingEngine.safe_rank_bulletproof(
-                            col_data, pct=True, ascending=True, operation_name=f"volume_{col}"
-                        )
-                        
-                        weighted_score += col_rank * weight
-                        total_weight += weight
-                        successful_cols += 1
-                        
-                except Exception as e:
-                    logger.warning(f"Volume column {col} processing failed: {str(e)}")
-                    continue
-            
-            if total_weight > 0 and successful_cols > 0:
-                volume_score = weighted_score / total_weight
-                logger.info(f"Volume score calculated using {successful_cols}/{len(vol_cols)} columns")
-            else:
-                logger.warning("No volume data available, using neutral volume scores")
-                # Add randomization to avoid identical scores
-                noise = np.random.uniform(-3, 3, size=len(df))
-                volume_score = pd.Series(50.0, index=df.index) + noise
-            
-            return volume_score.clip(0, 100)
-    
-    @staticmethod
-    @PERF_MONITOR.timer
-    def calculate_momentum_score_bulletproof(df: pd.DataFrame) -> pd.Series:
-        """Bulletproof momentum score calculation"""
-        
-        with bulletproof_operation("Momentum score calculation"):
-            
-            momentum_score = pd.Series(50.0, index=df.index, dtype=float)
-            
-            # Priority order for momentum calculation
-            momentum_cols = ['ret_30d', 'ret_7d', 'ret_1d', 'ret_3d']
-            available_cols = [col for col in momentum_cols if col in df.columns and df[col].notna().any()]
-            
-            if not available_cols:
-                logger.warning("No momentum data available, using neutral momentum scores")
-                noise = np.random.uniform(-3, 3, size=len(df))
-                return (pd.Series(50.0, index=df.index) + noise).clip(0, 100)
-            
-            try:
-                # Use the best available momentum column
-                primary_col = available_cols[0]
-                ret_data = df[primary_col].copy()
-                
-                # Clean and validate
-                ret_data = BulletproofValidator.validate_and_clean_numeric(
-                    ret_data, primary_col, min_val=-CONFIG.MAX_RETURN_THRESHOLD, max_val=CONFIG.MAX_RETURN_THRESHOLD
-                )
-                ret_data = ret_data.fillna(0)
-                
-                # Calculate base momentum score
-                momentum_score = BulletproofRankingEngine.safe_rank_bulletproof(
-                    ret_data, pct=True, ascending=True, operation_name=f"momentum_{primary_col}"
-                )
-                
-                # Add consistency bonus if multiple timeframes available
-                if len(available_cols) >= 2:
-                    try:
-                        short_term = df[available_cols[1]].fillna(0) if len(available_cols) > 1 else ret_data
-                        
-                        # Consistency bonus for positive momentum across timeframes
-                        consistency_bonus = pd.Series(0.0, index=df.index)
-                        positive_momentum = (ret_data > 0) & (short_term > 0)
-                        consistency_bonus[positive_momentum] = 3
-                        
-                        # Acceleration bonus
-                        if 'ret_7d' in available_cols and 'ret_30d' in available_cols:
-                            ret_7d_clean = BulletproofValidator.validate_and_clean_numeric(
-                                df['ret_7d'], 'ret_7d', min_val=-CONFIG.MAX_RETURN_THRESHOLD, max_val=CONFIG.MAX_RETURN_THRESHOLD
-                            ).fillna(0)
-                            ret_30d_clean = BulletproofValidator.validate_and_clean_numeric(
-                                df['ret_30d'], 'ret_30d', min_val=-CONFIG.MAX_RETURN_THRESHOLD, max_val=CONFIG.MAX_RETURN_THRESHOLD
-                            ).fillna(0)
-                            
-                            # Safe division for acceleration check
-                            with np.errstate(divide='ignore', invalid='ignore'):
-                                daily_7d = ret_7d_clean / 7
-                                daily_30d = ret_30d_clean / 30
-                            
-                            # Replace inf/nan with zeros
-                            daily_7d = pd.Series(daily_7d).replace([np.inf, -np.inf], 0).fillna(0)
-                            daily_30d = pd.Series(daily_30d).replace([np.inf, -np.inf], 0).fillna(0)
-                            
-                            accelerating = positive_momentum & (daily_7d > daily_30d)
-                            consistency_bonus[accelerating] = 6
-                        
-                        momentum_score = (momentum_score + consistency_bonus).clip(0, 100)
-                        
-                    except Exception as e:
-                        logger.warning(f"Momentum consistency calculation failed: {str(e)}")
-                
-                logger.info(f"Momentum score calculated using {primary_col}")
-                
-            except Exception as e:
-                logger.error(f"Momentum score calculation failed: {str(e)}")
-                noise = np.random.uniform(-3, 3, size=len(df))
-                momentum_score = pd.Series(50.0, index=df.index) + noise
+                momentum_score += np.random.uniform(-5, 5, size=len(df))
             
             return momentum_score.clip(0, 100)
+        
+        ret_30d = df['ret_30d'].fillna(0)
+        momentum_score = RankingEngine.safe_rank(ret_30d, pct=True, ascending=True)
+        
+        if all(col in df.columns for col in ['ret_7d', 'ret_30d']):
+            consistency_bonus = pd.Series(0, index=df.index, dtype=float)
+            all_positive = (df['ret_7d'] > 0) & (df['ret_30d'] > 0)
+            consistency_bonus[all_positive] = 5
+            
+            # Safe division to avoid divide by zero
+            with np.errstate(divide='ignore', invalid='ignore'):
+                daily_ret_7d = df['ret_7d'] / 7
+                daily_ret_30d = df['ret_30d'] / 30
+                
+            accelerating = all_positive & (daily_ret_7d > daily_ret_30d)
+            consistency_bonus[accelerating] = 10
+            
+            momentum_score = (momentum_score + consistency_bonus).clip(0, 100)
+        
+        return momentum_score
     
     @staticmethod
-    @PERF_MONITOR.timer
-    def calculate_acceleration_score_bulletproof(df: pd.DataFrame) -> pd.Series:
-        """Bulletproof acceleration score calculation"""
+    def calculate_acceleration_score(df: pd.DataFrame) -> pd.Series:
+        """Calculate if momentum is accelerating - FIXED math"""
+        acceleration_score = pd.Series(50, index=df.index, dtype=float)
         
-        with bulletproof_operation("Acceleration score calculation"):
+        req_cols = ['ret_1d', 'ret_7d', 'ret_30d']
+        available_cols = [col for col in req_cols if col in df.columns]
+        
+        if len(available_cols) < 2:
+            logger.warning("Insufficient return data for acceleration calculation")
+            return acceleration_score + np.random.uniform(-5, 5, size=len(df))
+        
+        ret_1d = df['ret_1d'].fillna(0) if 'ret_1d' in df.columns else pd.Series(0, index=df.index)
+        ret_7d = df['ret_7d'].fillna(0) if 'ret_7d' in df.columns else pd.Series(0, index=df.index)
+        ret_30d = df['ret_30d'].fillna(0) if 'ret_30d' in df.columns else pd.Series(0, index=df.index)
+        
+        # FIXED: Compare annualized rates for proper acceleration detection
+        with np.errstate(divide='ignore', invalid='ignore'):
+            # Annualize all returns for fair comparison
+            annual_1d = ret_1d * 252  # Trading days in year
+            annual_7d = (ret_7d / 7) * 252
+            annual_30d = (ret_30d / 30) * 252
+        
+        if all(col in df.columns for col in req_cols):
+            # Perfect acceleration: recent returns accelerating at each timeframe
+            perfect = (annual_1d > annual_7d) & (annual_7d > annual_30d) & (ret_1d > 0)
+            acceleration_score.loc[perfect] = 100
             
-            acceleration_score = pd.Series(50.0, index=df.index, dtype=float)
+            # Good acceleration: today beats week average
+            good = (~perfect) & (annual_1d > annual_7d) & (ret_1d > 0)
+            acceleration_score.loc[good] = 80
             
-            # Required columns for acceleration
-            req_cols = ['ret_1d', 'ret_7d', 'ret_30d']
-            available_cols = [col for col in req_cols if col in df.columns and df[col].notna().any()]
+            # Moderate: positive today
+            moderate = (~perfect) & (~good) & (ret_1d > 0)
+            acceleration_score.loc[moderate] = 60
             
-            if len(available_cols) < 2:
-                logger.warning("Insufficient return data for acceleration calculation")
-                noise = np.random.uniform(-3, 3, size=len(df))
-                return (pd.Series(50.0, index=df.index) + noise).clip(0, 100)
+            # Slight deceleration
+            slight_decel = (ret_1d <= 0) & (ret_7d > 0)
+            acceleration_score.loc[slight_decel] = 40
             
-            try:
-                # Get clean return data
-                ret_data = {}
-                for col in available_cols:
-                    ret_data[col] = BulletproofValidator.validate_and_clean_numeric(
-                        df[col], col, min_val=-CONFIG.MAX_RETURN_THRESHOLD, max_val=CONFIG.MAX_RETURN_THRESHOLD
-                    ).fillna(0)
-                
-                # Calculate acceleration score based on available data
-                if len(available_cols) >= 3:
-                    # Full acceleration calculation
-                    with np.errstate(divide='ignore', invalid='ignore'):
-                        daily_1d = ret_data['ret_1d']
-                        daily_7d = ret_data['ret_7d'] / 7
-                        daily_30d = ret_data['ret_30d'] / 30
-                    
-                    # Clean infinite values
-                    daily_1d = pd.Series(daily_1d).replace([np.inf, -np.inf], 0).fillna(0)
-                    daily_7d = pd.Series(daily_7d).replace([np.inf, -np.inf], 0).fillna(0)
-                    daily_30d = pd.Series(daily_30d).replace([np.inf, -np.inf], 0).fillna(0)
-                    
-                    # Acceleration conditions
-                    acceleration_conditions = pd.Series(0.0, index=df.index)
-                    
-                    # Strong acceleration: 1d > 7d avg > 30d avg
-                    strong_accel = (daily_1d > daily_7d) & (daily_7d > daily_30d) & (daily_1d > 0)
-                    acceleration_conditions[strong_accel] = 90
-                    
-                    # Moderate acceleration: 7d avg > 30d avg
-                    moderate_accel = (daily_7d > daily_30d) & (daily_7d > 0) & ~strong_accel
-                    acceleration_conditions[moderate_accel] = 70
-                    
-                    # Positive momentum but decelerating
-                    positive_decel = (daily_30d > 0) & (daily_7d < daily_30d)
-                    acceleration_conditions[positive_decel] = 30
-                    
-                    # Negative momentum
-                    negative = (daily_30d < 0)
-                    acceleration_conditions[negative] = 10
-                    
-                    # Default for others
-                    neutral = acceleration_conditions == 0
-                    acceleration_conditions[neutral] = 50
-                    
-                    acceleration_score = acceleration_conditions
-                    
-                else:
-                    # Simplified calculation with 2 columns
-                    short_term = ret_data[available_cols[0]]
-                    long_term = ret_data[available_cols[1]]
-                    
-                    # Simple acceleration based on short vs long term
-                    acceleration_score = BulletproofRankingEngine.safe_rank_bulletproof(
-                        short_term - long_term, pct=True, ascending=True, operation_name="simple_acceleration"
-                    )
-                
-                logger.info(f"Acceleration score calculated using {len(available_cols)} return columns")
-                
-            except Exception as e:
-                logger.error(f"Acceleration score calculation failed: {str(e)}")
-                noise = np.random.uniform(-3, 3, size=len(df))
-                acceleration_score = pd.Series(50.0, index=df.index) + noise
-            
-            return acceleration_score.clip(0, 100)
+            # Strong deceleration
+            strong_decel = (ret_1d <= 0) & (ret_7d <= 0)
+            acceleration_score.loc[strong_decel] = 20
+        else:
+            if 'ret_1d' in df.columns and 'ret_7d' in df.columns:
+                accelerating = annual_1d > annual_7d
+                acceleration_score.loc[accelerating & (ret_1d > 0)] = 75
+                acceleration_score.loc[~accelerating & (ret_1d > 0)] = 55
+                acceleration_score.loc[ret_1d <= 0] = 35
+        
+        return acceleration_score
     
     @staticmethod
-    @PERF_MONITOR.timer
-    def calculate_breakout_score_bulletproof(df: pd.DataFrame) -> pd.Series:
-        """Bulletproof breakout score calculation"""
+    def calculate_breakout_score(df: pd.DataFrame) -> pd.Series:
+        """Calculate breakout probability - FIXED distance calculation"""
+        breakout_score = pd.Series(50, index=df.index, dtype=float)
         
-        with bulletproof_operation("Breakout score calculation"):
+        # Factor 1: Distance from high (40% weight) - FIXED
+        if 'from_high_pct' in df.columns:
+            # from_high_pct is negative (e.g., -20 means 20% below high)
+            # Convert to positive distance where 0 = at high, 100 = far from high
+            distance_from_high_pct = -df['from_high_pct'].fillna(50)
+            # Now closer to high (smaller distance) is better
+            # Invert so that small distance = high score
+            distance_factor = (100 - distance_from_high_pct).clip(0, 100)
+        else:
+            distance_factor = pd.Series(50, index=df.index)
+        
+        # Factor 2: Volume surge (40% weight)
+        volume_factor = pd.Series(50, index=df.index)
+        if 'vol_ratio_7d_90d' in df.columns:
+            vol_ratio = df['vol_ratio_7d_90d'].fillna(1.0)
+            # vol_ratio > 1 means increasing volume
+            volume_factor = ((vol_ratio - 1) * 100).clip(0, 100)
+        
+        # Factor 3: Trend support (20% weight)
+        trend_factor = pd.Series(0, index=df.index, dtype=float)
+        trend_count = 0
+        
+        if 'sma_20d' in df.columns:
+            above_20 = (df['price'] > df['sma_20d']).fillna(False)
+            trend_factor += above_20.astype(float) * 33.33
+            trend_count += 1
+        
+        if 'sma_50d' in df.columns:
+            above_50 = (df['price'] > df['sma_50d']).fillna(False)
+            trend_factor += above_50.astype(float) * 33.33
+            trend_count += 1
+        
+        if 'sma_200d' in df.columns:
+            above_200 = (df['price'] > df['sma_200d']).fillna(False)
+            trend_factor += above_200.astype(float) * 33.34
+            trend_count += 1
+        
+        if trend_count > 0 and trend_count < 3:
+            trend_factor = trend_factor * (3 / trend_count)
+        
+        trend_factor = trend_factor.clip(0, 100)
+        
+        breakout_score = (
+            distance_factor * 0.4 +
+            volume_factor * 0.4 +
+            trend_factor * 0.2
+        )
+        
+        return breakout_score.clip(0, 100)
+    
+    @staticmethod
+    def calculate_rvol_score(df: pd.DataFrame) -> pd.Series:
+        """Calculate RVOL-based score - FIXED for extreme values"""
+        if 'rvol' not in df.columns:
+            return pd.Series(50, index=df.index)
+        
+        rvol = df['rvol'].fillna(1.0)
+        rvol_score = pd.Series(50, index=df.index, dtype=float)
+        
+        # FIXED: Handle extreme RVOL values properly
+        rvol_score.loc[rvol > 1000] = 100  # Extreme surge
+        rvol_score.loc[(rvol > 100) & (rvol <= 1000)] = 95
+        rvol_score.loc[(rvol > 10) & (rvol <= 100)] = 90
+        rvol_score.loc[(rvol > 5) & (rvol <= 10)] = 85
+        rvol_score.loc[(rvol > 3) & (rvol <= 5)] = 80
+        rvol_score.loc[(rvol > 2) & (rvol <= 3)] = 75
+        rvol_score.loc[(rvol > 1.5) & (rvol <= 2)] = 70
+        rvol_score.loc[(rvol > 1.2) & (rvol <= 1.5)] = 60
+        rvol_score.loc[(rvol > 0.8) & (rvol <= 1.2)] = 50
+        rvol_score.loc[(rvol > 0.5) & (rvol <= 0.8)] = 40
+        rvol_score.loc[(rvol > 0.3) & (rvol <= 0.5)] = 30
+        rvol_score.loc[rvol <= 0.3] = 20
+        
+        return rvol_score
+    
+    @staticmethod
+    def calculate_trend_quality(df: pd.DataFrame) -> pd.Series:
+        """Calculate trend quality score based on SMA alignment"""
+        trend_score = pd.Series(50, index=df.index, dtype=float)
+        
+        sma_cols = ['sma_20d', 'sma_50d', 'sma_200d']
+        available_smas = [col for col in sma_cols if col in df.columns and df[col].notna().any()]
+        
+        if len(available_smas) == 0:
+            return trend_score
+        
+        if len(available_smas) >= 3:
+            perfect_trend = (
+                (df['price'] > df['sma_20d']) & 
+                (df['sma_20d'] > df['sma_50d']) & 
+                (df['sma_50d'] > df['sma_200d'])
+            )
+            trend_score.loc[perfect_trend] = 100
             
-            breakout_score = pd.Series(50.0, index=df.index, dtype=float)
+            strong_trend = (
+                (~perfect_trend) &
+                (df['price'] > df['sma_20d']) & 
+                (df['price'] > df['sma_50d']) & 
+                (df['price'] > df['sma_200d'])
+            )
+            trend_score.loc[strong_trend] = 85
             
-            try:
-                # Check for required data
-                has_price = 'price' in df.columns and df['price'].notna().any()
-                has_smas = any(col in df.columns and df[col].notna().any() 
-                              for col in ['sma_20d', 'sma_50d', 'sma_200d'])
-                has_position = 'from_low_pct' in df.columns and df['from_low_pct'].notna().any()
+            above_count = (
+                (df['price'] > df['sma_20d']).astype(int) +
+                (df['price'] > df['sma_50d']).astype(int) +
+                (df['price'] > df['sma_200d']).astype(int)
+            )
+            good_trend = (above_count == 2) & (~perfect_trend) & (~strong_trend)
+            trend_score.loc[good_trend] = 70
+            
+            weak_trend = (above_count == 1)
+            trend_score.loc[weak_trend] = 40
+            
+            poor_trend = (above_count == 0)
+            trend_score.loc[poor_trend] = 20
+        
+        elif len(available_smas) == 2:
+            above_all = True
+            for sma in available_smas:
+                above_all &= (df['price'] > df[sma])
+            
+            trend_score.loc[above_all] = 80
+            trend_score.loc[~above_all] = 30
+        
+        elif len(available_smas) == 1:
+            sma = available_smas[0]
+            trend_score.loc[df['price'] > df[sma]] = 65
+            trend_score.loc[df['price'] <= df[sma]] = 35
+        
+        return trend_score
+    
+    @staticmethod
+    def calculate_long_term_strength(df: pd.DataFrame) -> pd.Series:
+        """Calculate long-term strength score"""
+        strength_score = pd.Series(50, index=df.index, dtype=float)
+        
+        lt_cols = ['ret_3m', 'ret_6m', 'ret_1y']
+        available_cols = [col for col in lt_cols if col in df.columns and df[col].notna().any()]
+        
+        if not available_cols:
+            return strength_score
+        
+        lt_returns = df[available_cols].fillna(0)
+        avg_return = lt_returns.mean(axis=1)
+        
+        if len(available_cols) >= 2:
+            if 'ret_3m' in available_cols and 'ret_1y' in available_cols:
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    annualized_3m = df['ret_3m'] * 4
+                improving = annualized_3m > df['ret_1y']
+            else:
+                improving = pd.Series(False, index=df.index)
+        else:
+            improving = pd.Series(False, index=df.index)
+        
+        exceptional = avg_return > 100
+        strength_score.loc[exceptional] = 100
+        
+        very_strong = (avg_return > 50) & (avg_return <= 100)
+        strength_score.loc[very_strong] = 90
+        
+        strong = (avg_return > 30) & (avg_return <= 50)
+        strength_score.loc[strong] = 80
+        
+        good = (avg_return > 15) & (avg_return <= 30)
+        strength_score.loc[good] = 70
+        
+        moderate = (avg_return > 5) & (avg_return <= 15)
+        strength_score.loc[moderate] = 60
+        
+        weak = (avg_return > 0) & (avg_return <= 5)
+        strength_score.loc[weak] = 50
+        
+        recovering = (avg_return > -10) & (avg_return <= 0)
+        strength_score.loc[recovering] = 40
+        
+        poor = (avg_return > -25) & (avg_return <= -10)
+        strength_score.loc[poor] = 30
+        
+        very_poor = avg_return <= -25
+        strength_score.loc[very_poor] = 20
+        
+        strength_score.loc[improving] += 5
+        
+        return strength_score.clip(0, 100)
+    
+    @staticmethod
+    def calculate_liquidity_score(df: pd.DataFrame) -> pd.Series:
+        """Calculate liquidity score based on trading volume - FIXED"""
+        liquidity_score = pd.Series(50, index=df.index, dtype=float)
+        
+        if 'volume_30d' in df.columns and 'price' in df.columns:
+            # FIXED: Use volume in shares, not value-weighted
+            # This prevents high-priced stocks from getting unfair advantage
+            avg_volume = df['volume_30d'].fillna(0)
+            
+            # Rank based on volume percentile
+            liquidity_score = RankingEngine.safe_rank(
+                avg_volume, pct=True, ascending=True
+            )
+            
+            # Add consistency bonus if multiple volume periods available
+            if all(col in df.columns for col in ['volume_7d', 'volume_30d', 'volume_90d']):
+                vol_data = df[['volume_7d', 'volume_30d', 'volume_90d']]
                 
-                if not has_price:
-                    logger.warning("No price data for breakout calculation")
-                    noise = np.random.uniform(-3, 3, size=len(df))
-                    return (pd.Series(50.0, index=df.index) + noise).clip(0, 100)
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    vol_mean = vol_data.mean(axis=1)
+                    vol_std = vol_data.std(axis=1)
+                    
+                    valid_mask = vol_mean > 0
+                    vol_cv = pd.Series(1.0, index=df.index)
+                    
+                    if valid_mask.any():
+                        vol_cv[valid_mask] = vol_std[valid_mask] / vol_mean[valid_mask]
                 
-                price = BulletproofValidator.validate_and_clean_numeric(
-                    df['price'], 'price', min_val=CONFIG.MIN_VALID_PRICE, max_val=CONFIG.MAX_VALID_PRICE
+                # Lower CV means more consistent volume
+                consistency_score = RankingEngine.safe_rank(
+                    vol_cv, pct=True, ascending=False
                 )
                 
-                breakout_conditions = pd.Series(0.0, index=df.index)
-                
-                # SMA-based breakout signals
-                if has_smas:
-                    sma_scores = pd.Series(0.0, index=df.index)
-                    
-                    for sma_col, points in [('sma_20d', 30), ('sma_50d', 20), ('sma_200d', 15)]:
-                        if sma_col in df.columns and df[sma_col].notna().any():
-                            sma_data = BulletproofValidator.validate_and_clean_numeric(
-                                df[sma_col], sma_col, min_val=CONFIG.MIN_VALID_PRICE, max_val=CONFIG.MAX_VALID_PRICE
-                            )
-                            
-                            # Price above SMA condition
-                            above_sma = price > sma_data
-                            sma_scores[above_sma] += points
-                    
-                    breakout_conditions += sma_scores
-                
-                # Position-based breakout signals
-                if has_position:
-                    from_low = BulletproofValidator.validate_and_clean_numeric(
-                        df['from_low_pct'], 'from_low_pct', min_val=0, max_val=1000
-                    ).fillna(50)
-                    
-                    # Near highs (strong breakout potential)
-                    near_highs = from_low > 80
-                    breakout_conditions[near_highs] += 25
-                    
-                    # Mid-range (moderate breakout potential)
-                    mid_range = (from_low > 40) & (from_low <= 80)
-                    breakout_conditions[mid_range] += 10
-                
-                # Convert to percentile ranking
-                if breakout_conditions.max() > 0:
-                    breakout_score = BulletproofRankingEngine.safe_rank_bulletproof(
-                        breakout_conditions, pct=True, ascending=True, operation_name="breakout_ranking"
-                    )
-                else:
-                    # No breakout signals, use neutral with variation
-                    noise = np.random.uniform(-5, 5, size=len(df))
-                    breakout_score = pd.Series(50.0, index=df.index) + noise
-                
-                logger.info("Breakout score calculated successfully")
-                
-            except Exception as e:
-                logger.error(f"Breakout score calculation failed: {str(e)}")
-                noise = np.random.uniform(-3, 3, size=len(df))
-                breakout_score = pd.Series(50.0, index=df.index) + noise
-            
-            return breakout_score.clip(0, 100)
+                liquidity_score = liquidity_score * 0.8 + consistency_score * 0.2
+        
+        return liquidity_score.clip(0, 100)
     
     @staticmethod
-    @PERF_MONITOR.timer
-    def calculate_rvol_score_bulletproof(df: pd.DataFrame) -> pd.Series:
-        """Bulletproof RVOL score calculation"""
+    @timer
+    def calculate_rankings(df: pd.DataFrame) -> pd.DataFrame:
+        """Main ranking calculation with all components"""
+        if df.empty:
+            return df
         
-        with bulletproof_operation("RVOL score calculation"):
-            
-            rvol_score = pd.Series(50.0, index=df.index, dtype=float)
-            
-            try:
-                if 'rvol' not in df.columns:
-                    logger.warning("No RVOL data available, using neutral scores")
-                    noise = np.random.uniform(-3, 3, size=len(df))
-                    return (pd.Series(50.0, index=df.index) + noise).clip(0, 100)
-                
-                # Clean and validate RVOL data
-                rvol_data = BulletproofValidator.validate_and_clean_numeric(
-                    df['rvol'], 'rvol', min_val=0.01, max_val=CONFIG.MAX_RVOL_THRESHOLD
-                ).fillna(1.0)
-                
-                # Calculate RVOL score
-                rvol_score = BulletproofRankingEngine.safe_rank_bulletproof(
-                    rvol_data, pct=True, ascending=True, operation_name="rvol_ranking"
-                )
-                
-                # Log extreme values
-                extreme_count = (rvol_data >= CONFIG.MAX_RVOL_THRESHOLD).sum()
-                if extreme_count > 0:
-                    logger.info(f"Capped {extreme_count} extreme RVOL values")
-                
-                logger.info("RVOL score calculated successfully")
-                
-            except Exception as e:
-                logger.error(f"RVOL score calculation failed: {str(e)}")
-                noise = np.random.uniform(-3, 3, size=len(df))
-                rvol_score = pd.Series(50.0, index=df.index) + noise
-            
-            return rvol_score.clip(0, 100)
-    
-    @staticmethod
-    @PERF_MONITOR.timer
-    def calculate_master_score_bulletproof(df: pd.DataFrame) -> pd.DataFrame:
-        """Bulletproof master score calculation with comprehensive error handling"""
+        logger.info("Starting ranking calculations...")
         
-        with bulletproof_operation("Master score calculation", critical=True):
-            
-            # Validate system and data
-            BulletproofValidator.validate_system_health()
-            BulletproofValidator.validate_dataframe_structure(df, ['ticker', 'price'], "Master score input")
-            
-            # Calculate all component scores with bulletproof handling
-            score_components = {}
-            
-            try:
-                score_components['position_score'] = BulletproofRankingEngine.calculate_position_score_bulletproof(df)
-            except Exception as e:
-                logger.error(f"Position score failed: {str(e)}")
-                score_components['position_score'] = pd.Series(50.0, index=df.index)
-            
-            try:
-                score_components['volume_score'] = BulletproofRankingEngine.calculate_volume_score_bulletproof(df)
-            except Exception as e:
-                logger.error(f"Volume score failed: {str(e)}")
-                score_components['volume_score'] = pd.Series(50.0, index=df.index)
-            
-            try:
-                score_components['momentum_score'] = BulletproofRankingEngine.calculate_momentum_score_bulletproof(df)
-            except Exception as e:
-                logger.error(f"Momentum score failed: {str(e)}")
-                score_components['momentum_score'] = pd.Series(50.0, index=df.index)
-            
-            try:
-                score_components['acceleration_score'] = BulletproofRankingEngine.calculate_acceleration_score_bulletproof(df)
-            except Exception as e:
-                logger.error(f"Acceleration score failed: {str(e)}")
-                score_components['acceleration_score'] = pd.Series(50.0, index=df.index)
-            
-            try:
-                score_components['breakout_score'] = BulletproofRankingEngine.calculate_breakout_score_bulletproof(df)
-            except Exception as e:
-                logger.error(f"Breakout score failed: {str(e)}")
-                score_components['breakout_score'] = pd.Series(50.0, index=df.index)
-            
-            try:
-                score_components['rvol_score'] = BulletproofRankingEngine.calculate_rvol_score_bulletproof(df)
-            except Exception as e:
-                logger.error(f"RVOL score failed: {str(e)}")
-                score_components['rvol_score'] = pd.Series(50.0, index=df.index)
-            
-            # Calculate weighted master score
-            try:
-                master_score = (
-                    score_components['position_score'] * CONFIG.POSITION_WEIGHT +
-                    score_components['volume_score'] * CONFIG.VOLUME_WEIGHT +
-                    score_components['momentum_score'] * CONFIG.MOMENTUM_WEIGHT +
-                    score_components['acceleration_score'] * CONFIG.ACCELERATION_WEIGHT +
-                    score_components['breakout_score'] * CONFIG.BREAKOUT_WEIGHT +
-                    score_components['rvol_score'] * CONFIG.RVOL_WEIGHT
-                )
-                
-                # Validate master score
-                master_score = master_score.clip(0, 100)
-                if master_score.isna().any():
-                    logger.warning("NaN values in master score, filling with neutral")
-                    master_score = master_score.fillna(50.0)
-                
-            except Exception as e:
-                logger.critical(f"Master score calculation catastrophically failed: {str(e)}")
-                master_score = pd.Series(50.0, index=df.index)
-            
-            # Add all scores to dataframe
-            result_df = df.copy()
-            
-            for score_name, score_series in score_components.items():
-                try:
-                    result_df[score_name] = score_series
-                except Exception as e:
-                    logger.error(f"Failed to add {score_name}: {str(e)}")
-                    result_df[score_name] = 50.0
-            
-            result_df['master_score'] = master_score
-            
-            # Calculate final ranking
-            try:
-                result_df['rank'] = BulletproofRankingEngine.safe_rank_bulletproof(
-                    master_score, pct=False, ascending=False, operation_name="final_ranking"
-                ).astype(int)
-            except Exception as e:
-                logger.error(f"Final ranking failed: {str(e)}")
-                result_df['rank'] = range(1, len(result_df) + 1)
-            
-            # Sort by rank
-            try:
-                result_df = result_df.sort_values('rank').reset_index(drop=True)
-            except Exception as e:
-                logger.error(f"Sorting failed: {str(e)}")
-                # Fallback: sort by master score
-                result_df = result_df.sort_values('master_score', ascending=False).reset_index(drop=True)
-                result_df['rank'] = range(1, len(result_df) + 1)
-            
-            # Validation of final result
-            if len(result_df) == 0:
-                raise DataValidationError("Final ranking produced empty dataframe")
-            
-            # Store ranking metrics
-            if 'ranking_metrics' not in st.session_state:
-                st.session_state.ranking_metrics = {}
-            
-            st.session_state.ranking_metrics['last_ranking'] = {
-                'total_stocks': len(result_df),
-                'avg_master_score': master_score.mean(),
-                'score_std': master_score.std(),
-                'top_score': master_score.max(),
-                'bottom_score': master_score.min(),
-                'timestamp': datetime.now()
-            }
-            
-            logger.info(f"Master score calculation completed for {len(result_df):,} stocks")
-            logger.info(f"Score range: {master_score.min():.1f} - {master_score.max():.1f}, avg: {master_score.mean():.1f}")
-            
-            return result_df
-
-# ============================================
-# BULLETPROOF SMART CACHING SYSTEM
-# ============================================
-
-@st.cache_data(ttl=CONFIG.CACHE_TTL, show_spinner=False, max_entries=CONFIG.MAX_CACHE_SIZE)
-def load_and_process_data_bulletproof(sheet_url: str, gid: str, 
-                                    force_refresh: bool = False) -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
-    """Bulletproof data loading with comprehensive fallback mechanisms"""
-    
-    load_start = time.perf_counter()
-    
-    with bulletproof_operation("Bulletproof data loading", critical=True):
+        # Calculate all component scores
+        df['position_score'] = RankingEngine.calculate_position_score(df)
+        df['volume_score'] = RankingEngine.calculate_volume_score(df)
+        df['momentum_score'] = RankingEngine.calculate_momentum_score(df)
+        df['acceleration_score'] = RankingEngine.calculate_acceleration_score(df)
+        df['breakout_score'] = RankingEngine.calculate_breakout_score(df)
+        df['rvol_score'] = RankingEngine.calculate_rvol_score(df)
         
-        # System health check
-        BulletproofValidator.validate_system_health()
+        # Calculate auxiliary scores
+        df['trend_quality'] = RankingEngine.calculate_trend_quality(df)
+        df['long_term_strength'] = RankingEngine.calculate_long_term_strength(df)
+        df['liquidity_score'] = RankingEngine.calculate_liquidity_score(df)
         
-        # Validate inputs
-        if not sheet_url or not gid:
-            raise DataValidationError("Sheet URL and GID are required")
-        
-        # Construct CSV URL
-        try:
-            base_url = sheet_url.split('/edit')[0]
-            csv_url = f"{base_url}/export?format=csv&gid={gid}"
-            logger.info(f"Constructed CSV URL for data loading")
-        except Exception as e:
-            raise DataValidationError(f"Invalid sheet URL format: {str(e)}")
-        
-        # Attempt to load fallback data first
-        fallback_data = None
-        try:
-            fallback_data = pd.read_csv('Stocks.csv', low_memory=False)
-            logger.info(f"Loaded {len(fallback_data):,} rows from local fallback")
-        except Exception:
-            logger.info("No local fallback data available")
-        
-        # Load data with bulletproof networking
-        df = BULLETPROOF_NET.fetch_data_with_fallback(csv_url, fallback_data)
-        
-        # Process the data with bulletproof processing
-        processed_df = BulletproofDataProcessor.process_dataframe_bulletproof(df)
-        
-        # Calculate rankings with bulletproof engine
-        ranked_df = BulletproofRankingEngine.calculate_master_score_bulletproof(processed_df)
-        
-        # Final validation
-        if len(ranked_df) == 0:
-            raise DataValidationError("No valid data after complete processing pipeline")
-        
-        # Calculate load metrics
-        load_time = time.perf_counter() - load_start
-        
-        load_metrics = {
-            'load_time': load_time,
-            'raw_rows': len(df),
-            'processed_rows': len(processed_df),
-            'final_rows': len(ranked_df),
-            'data_source': 'primary' if fallback_data is None else 'fallback',
-            'processing_efficiency': len(ranked_df) / len(df) if len(df) > 0 else 0,
-            'timestamp': datetime.now()
+        # MASTER SCORE 3.0
+        components = {
+            'position_score': CONFIG.POSITION_WEIGHT,
+            'volume_score': CONFIG.VOLUME_WEIGHT,
+            'momentum_score': CONFIG.MOMENTUM_WEIGHT,
+            'acceleration_score': CONFIG.ACCELERATION_WEIGHT,
+            'breakout_score': CONFIG.BREAKOUT_WEIGHT,
+            'rvol_score': CONFIG.RVOL_WEIGHT
         }
         
-        logger.info(f"Complete data pipeline finished in {load_time:.2f}s")
-        logger.info(f"Data efficiency: {load_metrics['processing_efficiency']:.1%}")
+        # Calculate master score
+        df['master_score'] = 0
+        total_weight = 0
         
-        return ranked_df, datetime.now(), load_metrics
-
-# ============================================
-# BULLETPROOF FILTER ENGINE
-# ============================================
-
-class BulletproofFilterEngine:
-    """Military-grade filtering system with comprehensive error handling"""
+        for component, weight in components.items():
+            if component in df.columns:
+                df['master_score'] += df[component].fillna(50) * weight
+                total_weight += weight
+            else:
+                logger.warning(f"Missing component: {component}")
+        
+        # FIXED: Only normalize if weights don't sum to 1.0
+        if total_weight > 0 and abs(total_weight - 1.0) > 0.001:
+            logger.warning(f"Total weight is {total_weight}, normalizing...")
+            df['master_score'] = df['master_score'] / total_weight
+        
+        df['master_score'] = df['master_score'].clip(0, 100)
+        
+        # Calculate ranks with proper handling
+        valid_scores = df['master_score'].notna()
+        
+        if valid_scores.sum() == 0:
+            logger.error("No valid master scores calculated!")
+            df['rank'] = 9999
+            df['percentile'] = 0
+        else:
+            # Use method='first' to ensure unique ranks
+            df['rank'] = df['master_score'].rank(method='first', ascending=False, na_option='bottom')
+            df['rank'] = df['rank'].fillna(len(df) + 1).astype(int)
+            
+            df['percentile'] = df['master_score'].rank(pct=True, ascending=True, na_option='bottom') * 100
+            df['percentile'] = df['percentile'].fillna(0)
+        
+        # Calculate category-specific ranks
+        df = RankingEngine._calculate_category_ranks(df)
+        
+        # Detect patterns
+        df = RankingEngine._detect_patterns(df)
+        
+        logger.info(f"Ranking complete: {len(df)} stocks processed")
+        
+        return df
     
     @staticmethod
-    def get_unique_values_bulletproof(df: pd.DataFrame, column: str, 
-                                    exclude_unknown: bool = True,
-                                    filters: Dict[str, Any] = None) -> List[str]:
-        """Bulletproof unique value extraction with error handling"""
+    def _calculate_category_ranks(df: pd.DataFrame) -> pd.DataFrame:
+        """Calculate percentile ranks within each category"""
+        # Get unique categories
+        categories = df['category'].unique()
+        
+        # Initialize category rank column
+        df['category_rank'] = 9999
+        df['category_percentile'] = 0.0
+        
+        # Rank within each category
+        for category in categories:
+            if category != 'Unknown':
+                mask = df['category'] == category
+                cat_df = df[mask]
+                
+                if len(cat_df) > 0:
+                    # Calculate ranks within category
+                    cat_ranks = RankingEngine.safe_rank(
+                        cat_df['master_score'], pct=False, ascending=False
+                    )
+                    df.loc[mask, 'category_rank'] = cat_ranks.astype(int)
+                    
+                    # Calculate percentiles within category
+                    cat_percentiles = RankingEngine.safe_rank(
+                        cat_df['master_score'], pct=True, ascending=True
+                    )
+                    df.loc[mask, 'category_percentile'] = cat_percentiles
+        
+        return df
+    
+    @staticmethod
+    def _detect_patterns(df: pd.DataFrame) -> pd.DataFrame:
+        """Detect patterns using vectorized operations - FIXED string handling"""
+        # Initialize pattern column properly
+        df['patterns'] = ''
+        
+        # Create a list to collect patterns for each stock
+        pattern_list = [[] for _ in range(len(df))]
+        
+        # 1. Category Leader
+        if 'category_percentile' in df.columns:
+            mask = df['category_percentile'] >= CONFIG.PATTERN_THRESHOLDS['category_leader']
+            indices = df.index[mask].tolist()
+            for idx in indices:
+                pattern_list[idx].append('🔥 CAT LEADER')
+        
+        # 2. Hidden Gem
+        if 'category_percentile' in df.columns and 'percentile' in df.columns:
+            mask = (
+                (df['category_percentile'] >= CONFIG.PATTERN_THRESHOLDS['hidden_gem']) & 
+                (df['percentile'] < 70)
+            )
+            indices = df.index[mask].tolist()
+            for idx in indices:
+                pattern_list[idx].append('💎 HIDDEN GEM')
+        
+        # 3. Accelerating
+        if 'acceleration_score' in df.columns:
+            mask = df['acceleration_score'] >= CONFIG.PATTERN_THRESHOLDS['acceleration']
+            indices = df.index[mask].tolist()
+            for idx in indices:
+                pattern_list[idx].append('🚀 ACCELERATING')
+        
+        # 4. Institutional
+        if 'volume_score' in df.columns and 'vol_ratio_90d_180d' in df.columns:
+            mask = (
+                (df['volume_score'] >= CONFIG.PATTERN_THRESHOLDS['institutional']) &
+                (df['vol_ratio_90d_180d'] > 1.1)
+            )
+            indices = df.index[mask].tolist()
+            for idx in indices:
+                pattern_list[idx].append('🏦 INSTITUTIONAL')
+        
+        # 5. Volume Explosion
+        if 'rvol' in df.columns:
+            mask = df['rvol'] > 3
+            indices = df.index[mask].tolist()
+            for idx in indices:
+                pattern_list[idx].append('⚡ VOL EXPLOSION')
+        
+        # 6. Breakout Ready
+        if 'breakout_score' in df.columns:
+            mask = df['breakout_score'] >= CONFIG.PATTERN_THRESHOLDS['breakout_ready']
+            indices = df.index[mask].tolist()
+            for idx in indices:
+                pattern_list[idx].append('🎯 BREAKOUT')
+        
+        # 7. Market Leader
+        if 'percentile' in df.columns:
+            mask = df['percentile'] >= CONFIG.PATTERN_THRESHOLDS['market_leader']
+            indices = df.index[mask].tolist()
+            for idx in indices:
+                pattern_list[idx].append('👑 MARKET LEADER')
+        
+        # 8. Momentum Wave
+        if 'momentum_score' in df.columns and 'acceleration_score' in df.columns:
+            mask = (
+                (df['momentum_score'] >= CONFIG.PATTERN_THRESHOLDS['momentum_wave']) &
+                (df['acceleration_score'] >= 70)
+            )
+            indices = df.index[mask].tolist()
+            for idx in indices:
+                pattern_list[idx].append('🌊 MOMENTUM WAVE')
+        
+        # 9. Liquid Leader
+        if 'liquidity_score' in df.columns and 'percentile' in df.columns:
+            mask = (
+                (df['liquidity_score'] >= CONFIG.PATTERN_THRESHOLDS['liquid_leader']) &
+                (df['percentile'] >= CONFIG.PATTERN_THRESHOLDS['liquid_leader'])
+            )
+            indices = df.index[mask].tolist()
+            for idx in indices:
+                pattern_list[idx].append('💰 LIQUID LEADER')
+        
+        # 10. Long-term Strength
+        if 'long_term_strength' in df.columns:
+            mask = df['long_term_strength'] >= CONFIG.PATTERN_THRESHOLDS['long_strength']
+            indices = df.index[mask].tolist()
+            for idx in indices:
+                pattern_list[idx].append('💪 LONG STRENGTH')
+        
+        # 11. Quality Trend
+        if 'trend_quality' in df.columns:
+            mask = df['trend_quality'] >= 80
+            indices = df.index[mask].tolist()
+            for idx in indices:
+                pattern_list[idx].append('📈 QUALITY TREND')
+        
+        # SMART FUNDAMENTAL PATTERNS
+        # 12. Value Momentum
+        if 'pe' in df.columns and 'percentile' in df.columns:
+            has_valid_pe = (
+                df['pe'].notna() & 
+                (df['pe'] > 0) & 
+                (df['pe'] < 10000) &
+                ~np.isinf(df['pe'])
+            )
+            value_momentum = has_valid_pe & (df['pe'] < 15) & (df['master_score'] >= 70)
+            indices = df.index[value_momentum].tolist()
+            for idx in indices:
+                pattern_list[idx].append('💎 VALUE MOMENTUM')
+        
+        # 13. Earnings Rocket
+        if 'eps_change_pct' in df.columns and 'acceleration_score' in df.columns:
+            has_eps_growth = df['eps_change_pct'].notna() & ~np.isinf(df['eps_change_pct'])
+            extreme_growth = has_eps_growth & (df['eps_change_pct'] > 10)  # 1000% as decimal = 10
+            normal_growth = has_eps_growth & (df['eps_change_pct'] > 0.5) & (df['eps_change_pct'] <= 10)
+            
+            earnings_rocket = (
+                (extreme_growth & (df['acceleration_score'] >= 80)) |
+                (normal_growth & (df['acceleration_score'] >= 70))
+            )
+            indices = df.index[earnings_rocket].tolist()
+            for idx in indices:
+                pattern_list[idx].append('📊 EARNINGS ROCKET')
+        
+        # 14. Quality Leader
+        if all(col in df.columns for col in ['pe', 'eps_change_pct', 'percentile']):
+            has_complete_data = (
+                df['pe'].notna() & 
+                df['eps_change_pct'].notna() & 
+                (df['pe'] > 0) &
+                (df['pe'] < 10000) &
+                ~np.isinf(df['pe']) &
+                ~np.isinf(df['eps_change_pct'])
+            )
+            quality_leader = (
+                has_complete_data &
+                (df['pe'] >= 10) & (df['pe'] <= 25) &
+                (df['eps_change_pct'] > 0.2) &  # 20% as decimal
+                (df['percentile'] >= 80)
+            )
+            indices = df.index[quality_leader].tolist()
+            for idx in indices:
+                pattern_list[idx].append('🏆 QUALITY LEADER')
+        
+        # 15. Turnaround Play
+        if 'eps_change_pct' in df.columns and 'volume_score' in df.columns:
+            has_eps = df['eps_change_pct'].notna() & ~np.isinf(df['eps_change_pct'])
+            mega_turnaround = has_eps & (df['eps_change_pct'] > 5) & (df['volume_score'] >= 60)  # 500% as decimal
+            strong_turnaround = has_eps & (df['eps_change_pct'] > 1) & (df['eps_change_pct'] <= 5) & (df['volume_score'] >= 70)
+            
+            turnaround = mega_turnaround | strong_turnaround
+            indices = df.index[turnaround].tolist()
+            for idx in indices:
+                pattern_list[idx].append('⚡ TURNAROUND')
+        
+        # 16. Overvalued Warning
+        if 'pe' in df.columns:
+            has_valid_pe = df['pe'].notna() & (df['pe'] > 0) & ~np.isinf(df['pe'])
+            extreme_pe = has_valid_pe & (df['pe'] > 100)
+            indices = df.index[extreme_pe].tolist()
+            for idx in indices:
+                pattern_list[idx].append('⚠️ HIGH PE')
+        
+        # FIXED: Efficiently join patterns
+        for i, patterns in enumerate(pattern_list):
+            if patterns:
+                df.iloc[i, df.columns.get_loc('patterns')] = ' | '.join(patterns)
+        
+        return df
+
+# ============================================
+# FILTER ENGINE
+# ============================================
+
+class FilterEngine:
+    """Handle all filtering operations with smart interconnected filters"""
+    
+    @staticmethod
+    def get_unique_values(df: pd.DataFrame, column: str, 
+                         exclude_unknown: bool = True,
+                         filters: Dict[str, Any] = None) -> List[str]:
+        """Get sorted unique values for a column with smart filtering"""
+        if df.empty or column not in df.columns:
+            return []
+        
+        # Apply any existing filters first (for interconnected filtering)
+        if filters:
+            filtered_df = FilterEngine._apply_filter_subset(df, filters, exclude_cols=[column])
+        else:
+            filtered_df = df
         
         try:
-            with bulletproof_operation(f"Get unique values for {column}"):
-                
-                if df is None or df.empty:
-                    logger.warning(f"Empty dataframe for column {column}")
-                    return []
-                
-                if column not in df.columns:
-                    logger.warning(f"Column {column} not found in dataframe")
-                    return []
-                
-                # Apply any existing filters first (for interconnected filtering)
-                if filters:
-                    filtered_df = BulletproofFilterEngine._apply_filter_subset_bulletproof(
-                        df, filters, exclude_cols=[column]
-                    )
-                else:
-                    filtered_df = df
-                
-                # Extract values with bulletproof handling
-                if filtered_df.empty:
-                    logger.warning(f"No data after filtering for column {column}")
-                    return []
-                
-                # Get unique values safely
-                unique_series = filtered_df[column].dropna()
-                if unique_series.empty:
-                    logger.warning(f"No non-null values in column {column}")
-                    return []
-                
-                values = unique_series.unique().tolist()
-                
-                # Convert to strings with error handling
-                safe_values = []
-                for v in values:
-                    try:
-                        str_val = str(v).strip()
-                        if str_val:  # Not empty after conversion
-                            safe_values.append(str_val)
-                    except Exception as e:
-                        logger.debug(f"Failed to convert value {v} to string: {str(e)}")
-                        continue
-                
-                # Filter out unknown values if requested
-                if exclude_unknown:
-                    unknown_values = {'Unknown', 'unknown', 'nan', 'NaN', '', 'None', 'null'}
-                    safe_values = [v for v in safe_values if v not in unknown_values]
-                
-                # Sort safely
-                try:
-                    safe_values.sort()
-                except Exception as e:
-                    logger.warning(f"Failed to sort values for {column}: {str(e)}")
-                    # Return unsorted if sort fails
-                
-                logger.debug(f"Found {len(safe_values)} unique values for {column}")
-                return safe_values
-                
+            values = filtered_df[column].dropna().unique().tolist()
+            
+            # Convert to strings to ensure consistency
+            values = [str(v) for v in values]
+            
+            if exclude_unknown:
+                values = [v for v in values if v not in ['Unknown', 'unknown', 'nan', 'NaN', '']]
+            
+            return sorted(values)
         except Exception as e:
-            logger.error(f"Failed to get unique values for {column}: {str(e)}")
+            logger.error(f"Error getting unique values for {column}: {str(e)}")
             return []
     
     @staticmethod
-    def _apply_filter_subset_bulletproof(df: pd.DataFrame, filters: Dict[str, Any], exclude_cols: List[str]) -> pd.DataFrame:
-        """Bulletproof filter application with comprehensive error handling"""
+    def _apply_filter_subset(df: pd.DataFrame, filters: Dict[str, Any], exclude_cols: List[str]) -> pd.DataFrame:
+        """Apply filters excluding specific columns (for interconnected filtering)"""
+        filtered_df = df.copy()
         
-        try:
-            with bulletproof_operation("Filter subset application"):
-                
-                if df is None or df.empty:
-                    logger.warning("Empty dataframe in filter subset")
-                    return pd.DataFrame()
-                
-                if not filters:
-                    return df.copy()
-                
-                filtered_df = df.copy()
-                initial_count = len(filtered_df)
-                
-                # Define filter mappings with validation
-                filter_mappings = [
-                    ('categories', 'category'),
-                    ('sectors', 'sector'),
-                    ('eps_tiers', 'eps_tier'),
-                    ('pe_tiers', 'pe_tier'),
-                    ('price_tiers', 'price_tier')
-                ]
-                
-                for filter_key, column_name in filter_mappings:
-                    try:
-                        # Skip if column is excluded or filter not present
-                        if column_name in exclude_cols or filter_key not in filters:
-                            continue
-                        
-                        filter_values = filters.get(filter_key, [])
-                        
-                        # Validate filter values
-                        if not filter_values or 'All' in filter_values or filter_values == ['']:
-                            continue
-                        
-                        # Check if column exists
-                        if column_name not in filtered_df.columns:
-                            logger.warning(f"Filter column {column_name} not found in dataframe")
-                            continue
-                        
-                        # Apply filter safely
-                        before_filter = len(filtered_df)
-                        
-                        # Handle potential data type mismatches
-                        column_data = filtered_df[column_name].astype(str)
-                        filter_values_str = [str(v) for v in filter_values]
-                        
-                        mask = column_data.isin(filter_values_str)
-                        filtered_df = filtered_df[mask]
-                        
-                        after_filter = len(filtered_df)
-                        logger.debug(f"Filter {filter_key}: {before_filter} -> {after_filter} rows")
-                        
-                        # Check if filter removed all data
-                        if filtered_df.empty:
-                            logger.warning(f"Filter {filter_key} removed all data")
-                            break
-                            
-                    except Exception as e:
-                        logger.error(f"Failed to apply filter {filter_key}: {str(e)}")
-                        # Continue with other filters even if one fails
-                        continue
-                
-                final_count = len(filtered_df)
-                filter_efficiency = (final_count / initial_count) * 100 if initial_count > 0 else 0
-                
-                logger.debug(f"Filter subset completed: {initial_count} -> {final_count} rows ({filter_efficiency:.1f}% retained)")
-                
-                return filtered_df
-                
-        except Exception as e:
-            logger.error(f"Filter subset application failed: {str(e)}")
-            # Return original dataframe as fallback
-            return df.copy() if df is not None else pd.DataFrame()
+        # Apply each filter except excluded ones
+        if 'categories' in filters and 'category' not in exclude_cols:
+            categories = filters.get('categories', [])
+            if categories and 'All' not in categories and categories != ['']:
+                filtered_df = filtered_df[filtered_df['category'].isin(categories)]
+        
+        if 'sectors' in filters and 'sector' not in exclude_cols:
+            sectors = filters.get('sectors', [])
+            if sectors and 'All' not in sectors and sectors != ['']:
+                filtered_df = filtered_df[filtered_df['sector'].isin(sectors)]
+        
+        if 'eps_tiers' in filters and 'eps_tier' not in exclude_cols:
+            eps_tiers = filters.get('eps_tiers', [])
+            if eps_tiers and 'All' not in eps_tiers and eps_tiers != ['']:
+                filtered_df = filtered_df[filtered_df['eps_tier'].isin(eps_tiers)]
+        
+        if 'pe_tiers' in filters and 'pe_tier' not in exclude_cols:
+            pe_tiers = filters.get('pe_tiers', [])
+            if pe_tiers and 'All' not in pe_tiers and pe_tiers != ['']:
+                filtered_df = filtered_df[filtered_df['pe_tier'].isin(pe_tiers)]
+        
+        if 'price_tiers' in filters and 'price_tier' not in exclude_cols:
+            price_tiers = filters.get('price_tiers', [])
+            if price_tiers and 'All' not in price_tiers and price_tiers != ['']:
+                filtered_df = filtered_df[filtered_df['price_tier'].isin(price_tiers)]
+        
+        return filtered_df
     
     @staticmethod
-    @PERF_MONITOR.timer
-    def apply_filters_bulletproof(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
-        """Bulletproof filter application with comprehensive error handling and validation"""
+    def apply_filters(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
+        """Apply all filters with validation"""
+        if df.empty:
+            return df
         
-        try:
-            with bulletproof_operation("Bulletproof filter application", critical=False):
-                
-                # Input validation
-                if df is None or df.empty:
-                    logger.warning("Empty dataframe provided to filter engine")
-                    return pd.DataFrame()
-                
-                if not filters:
-                    logger.info("No filters provided, returning original dataframe")
-                    return df.copy()
-                
-                # Initialize with copy
-                filtered_df = df.copy()
-                initial_count = len(filtered_df)
-                
-                logger.info(f"Starting filter application on {initial_count:,} rows")
-                
-                # Store filter metrics
-                filter_steps = []
-                
-                # Define comprehensive filter mappings
-                categorical_filters = [
-                    ('categories', 'category'),
-                    ('sectors', 'sector'),
-                    ('eps_tiers', 'eps_tier'),
-                    ('pe_tiers', 'pe_tier'),
-                    ('price_tiers', 'price_tier')
+        filtered_df = df.copy()
+        initial_count = len(filtered_df)
+        
+        # Category filter
+        categories = filters.get('categories', [])
+        if categories and 'All' not in categories and categories != ['']:
+            filtered_df = filtered_df[filtered_df['category'].isin(categories)]
+        
+        # Sector filter
+        sectors = filters.get('sectors', [])
+        if sectors and 'All' not in sectors and sectors != ['']:
+            filtered_df = filtered_df[filtered_df['sector'].isin(sectors)]
+        
+        # EPS tier filter
+        eps_tiers = filters.get('eps_tiers', [])
+        if eps_tiers and 'All' not in eps_tiers and eps_tiers != ['']:
+            filtered_df = filtered_df[filtered_df['eps_tier'].isin(eps_tiers)]
+        
+        # PE tier filter
+        pe_tiers = filters.get('pe_tiers', [])
+        if pe_tiers and 'All' not in pe_tiers and pe_tiers != ['']:
+            filtered_df = filtered_df[filtered_df['pe_tier'].isin(pe_tiers)]
+        
+        # Price tier filter
+        price_tiers = filters.get('price_tiers', [])
+        if price_tiers and 'All' not in price_tiers and price_tiers != ['']:
+            filtered_df = filtered_df[filtered_df['price_tier'].isin(price_tiers)]
+        
+        # Score filter
+        min_score = filters.get('min_score', 0)
+        if min_score > 0:
+            filtered_df = filtered_df[filtered_df['master_score'] >= min_score]
+        
+        # EPS change filter - FIXED: Handle percentage data properly
+        min_eps_change = filters.get('min_eps_change')
+        if min_eps_change is not None and 'eps_change_pct' in filtered_df.columns:
+            # Convert user input percentage to decimal
+            min_eps_decimal = min_eps_change / 100.0
+            filtered_df = filtered_df[
+                (filtered_df['eps_change_pct'] >= min_eps_decimal) | 
+                (filtered_df['eps_change_pct'].isna())
+            ]
+        
+        # Pattern filter
+        patterns = filters.get('patterns', [])
+        if patterns:
+            pattern_mask = filtered_df['patterns'].str.contains(
+                '|'.join(patterns), 
+                case=False, 
+                na=False
+            )
+            filtered_df = filtered_df[pattern_mask]
+        
+        # Trend filter
+        if filters.get('trend_range') and filters.get('trend_filter') != 'All Trends':
+            min_trend, max_trend = filters['trend_range']
+            if 'trend_quality' in filtered_df.columns:
+                filtered_df = filtered_df[
+                    (filtered_df['trend_quality'] >= min_trend) & 
+                    (filtered_df['trend_quality'] <= max_trend)
                 ]
-                
-                # Apply categorical filters with bulletproof handling
-                for filter_key, column_name in categorical_filters:
-                    try:
-                        filter_values = filters.get(filter_key, [])
-                        
-                        if not filter_values or 'All' in filter_values or filter_values == ['']:
-                            continue
-                        
-                        if column_name not in filtered_df.columns:
-                            logger.warning(f"Filter column {column_name} not found")
-                            continue
-                        
-                        before_count = len(filtered_df)
-                        
-                        # Safe filtering with type conversion
-                        column_data = filtered_df[column_name].astype(str)
-                        filter_values_str = [str(v) for v in filter_values]
-                        
-                        mask = column_data.isin(filter_values_str)
-                        filtered_df = filtered_df[mask]
-                        
-                        after_count = len(filtered_df)
-                        removed = before_count - after_count
-                        
-                        filter_steps.append({
-                            'filter': filter_key,
-                            'before': before_count,
-                            'after': after_count,
-                            'removed': removed
-                        })
-                        
-                        logger.debug(f"Filter {filter_key}: {before_count:,} -> {after_count:,} (-{removed:,})")
-                        
-                        if filtered_df.empty:
-                            logger.warning(f"Filter {filter_key} removed all data")
-                            break
-                            
-                    except Exception as e:
-                        logger.error(f"Failed to apply categorical filter {filter_key}: {str(e)}")
-                        continue
-                
-                # Apply numeric filters with bulletproof handling
-                if not filtered_df.empty:
-                    numeric_filters = [
-                        ('min_score', 'master_score', 'ge'),
-                        ('min_eps_change', 'eps_change_pct', 'ge'),
-                        ('min_pe', 'pe', 'ge'),
-                        ('max_pe', 'pe', 'le')
-                    ]
-                    
-                    for filter_key, column_name, operator in numeric_filters:
-                        try:
-                            filter_value = filters.get(filter_key)
-                            
-                            if filter_value is None:
-                                continue
-                            
-                            if column_name not in filtered_df.columns:
-                                logger.warning(f"Numeric filter column {column_name} not found")
-                                continue
-                            
-                            before_count = len(filtered_df)
-                            
-                            # Safe numeric filtering
-                            column_data = pd.to_numeric(filtered_df[column_name], errors='coerce')
-                            
-                            if operator == 'ge':
-                                mask = (column_data >= filter_value) | column_data.isna()
-                            elif operator == 'le':
-                                mask = (column_data <= filter_value) | column_data.isna()
-                            else:
-                                continue
-                            
-                            filtered_df = filtered_df[mask]
-                            
-                            after_count = len(filtered_df)
-                            removed = before_count - after_count
-                            
-                            filter_steps.append({
-                                'filter': filter_key,
-                                'before': before_count,
-                                'after': after_count,
-                                'removed': removed
-                            })
-                            
-                            logger.debug(f"Numeric filter {filter_key}: {before_count:,} -> {after_count:,} (-{removed:,})")
-                            
-                            if filtered_df.empty:
-                                logger.warning(f"Numeric filter {filter_key} removed all data")
-                                break
-                                
-                        except Exception as e:
-                            logger.error(f"Failed to apply numeric filter {filter_key}: {str(e)}")
-                            continue
-                
-                # Apply pattern filter with bulletproof handling
-                if not filtered_df.empty:
-                    try:
-                        patterns = filters.get('patterns', [])
-                        if patterns:
-                            before_count = len(filtered_df)
-                            
-                            # Ensure patterns column exists
-                            if 'patterns' not in filtered_df.columns:
-                                logger.warning("Patterns column not found, skipping pattern filter")
-                            else:
-                                # Safe pattern matching
-                                pattern_str = '|'.join([str(p) for p in patterns])
-                                pattern_mask = filtered_df['patterns'].astype(str).str.contains(
-                                    pattern_str, case=False, na=False, regex=False
-                                )
-                                filtered_df = filtered_df[pattern_mask]
-                                
-                                after_count = len(filtered_df)
-                                removed = before_count - after_count
-                                
-                                filter_steps.append({
-                                    'filter': 'patterns',
-                                    'before': before_count,
-                                    'after': after_count,
-                                    'removed': removed
-                                })
-                                
-                                logger.debug(f"Pattern filter: {before_count:,} -> {after_count:,} (-{removed:,})")
-                        
-                    except Exception as e:
-                        logger.error(f"Failed to apply pattern filter: {str(e)}")
-                
-                # Apply trend filter with bulletproof handling
-                if not filtered_df.empty:
-                    try:
-                        if (filters.get('trend_range') and 
-                            filters.get('trend_filter') != 'All Trends' and
-                            'trend_quality' in filtered_df.columns):
-                            
-                            before_count = len(filtered_df)
-                            min_trend, max_trend = filters['trend_range']
-                            
-                            trend_data = pd.to_numeric(filtered_df['trend_quality'], errors='coerce')
-                            trend_mask = (
-                                (trend_data >= min_trend) & 
-                                (trend_data <= max_trend)
-                            ) | trend_data.isna()
-                            
-                            filtered_df = filtered_df[trend_mask]
-                            
-                            after_count = len(filtered_df)
-                            removed = before_count - after_count
-                            
-                            filter_steps.append({
-                                'filter': 'trend_range',
-                                'before': before_count,
-                                'after': after_count,
-                                'removed': removed
-                            })
-                            
-                            logger.debug(f"Trend filter: {before_count:,} -> {after_count:,} (-{removed:,})")
-                        
-                    except Exception as e:
-                        logger.error(f"Failed to apply trend filter: {str(e)}")
-                
-                # Final validation and metrics
-                final_count = len(filtered_df)
-                total_removed = initial_count - final_count
-                retention_rate = (final_count / initial_count) * 100 if initial_count > 0 else 0
-                
-                # Store filter metrics in session state
-                if 'filter_metrics' not in st.session_state:
-                    st.session_state.filter_metrics = {}
-                
-                st.session_state.filter_metrics['last_filter'] = {
-                    'initial_count': initial_count,
-                    'final_count': final_count,
-                    'total_removed': total_removed,
-                    'retention_rate': retention_rate,
-                    'filter_steps': filter_steps,
-                    'timestamp': datetime.now()
-                }
-                
-                logger.info(f"Filter application completed: {initial_count:,} -> {final_count:,} ({retention_rate:.1f}% retained)")
-                
-                return filtered_df
-                
-        except Exception as e:
-            logger.critical(f"Bulletproof filter application failed catastrophically: {str(e)}")
-            logger.critical(f"Stack trace: {traceback.format_exc()}")
-            
-            # Return original dataframe as ultimate fallback
-            st.error(f"⚠️ Filter application failed: {str(e)}")
-            return df.copy() if df is not None else pd.DataFrame()
         
         # PE filters
         min_pe = filters.get('min_pe')
@@ -2072,12 +1553,18 @@ class SearchEngine:
     """Advanced search functionality with improved robustness"""
     
     @staticmethod
-    def create_search_index(df: pd.DataFrame) -> Dict[str, Set[str]]:
-        """Create search index mapping search terms to ticker symbols"""
+    @lru_cache(maxsize=1)
+    def create_search_index(df_hash: int, df_len: int) -> Dict[str, Set[str]]:
+        """Create search index with caching based on dataframe hash"""
+        # Get the actual dataframe from session state
+        if 'ranked_df' not in st.session_state:
+            return {}
+        
+        df = st.session_state.ranked_df
         search_index = {}
         
         try:
-            for _, row in df.iterrows():
+            for idx, row in df.iterrows():
                 ticker = str(row.get('ticker', '')).upper()
                 if not ticker or ticker == 'NAN':
                     continue
@@ -2183,7 +1670,7 @@ class ExportEngine:
                 })
                 
                 # 1. Top 100 Stocks
-                top_100 = df.nlargest(min(100, len(df)), 'master_score').copy()
+                top_100 = df.nlargest(min(100, len(df)), 'master_score')
                 
                 # Select columns based on template
                 if template in templates and templates[template]:
@@ -2201,7 +1688,15 @@ class ExportEngine:
                     ]
                 
                 available_cols = [col for col in export_cols if col in top_100.columns]
-                top_100[available_cols].to_excel(
+                
+                # Create a copy for export to avoid modifying original
+                export_df = top_100[available_cols].copy()
+                
+                # Format percentage columns for export
+                if 'eps_change_pct' in export_df.columns:
+                    export_df['eps_change_pct'] = export_df['eps_change_pct'] * 100  # Convert to percentage
+                
+                export_df.to_excel(
                     writer, sheet_name='Top 100', index=False
                 )
                 
@@ -2218,7 +1713,12 @@ class ExportEngine:
                     'patterns', 'category', 'sector'
                 ]
                 available_summary = [col for col in summary_cols if col in df.columns]
-                df[available_summary].to_excel(
+                
+                summary_df = df[available_summary].copy()
+                if 'eps_change_pct' in summary_df.columns:
+                    summary_df['eps_change_pct'] = summary_df['eps_change_pct'] * 100
+                
+                summary_df.to_excel(
                     writer, sheet_name='All Stocks', index=False
                 )
                 
@@ -2280,9 +1780,9 @@ class ExportEngine:
                 
                 # 5. Pattern Analysis
                 pattern_data = []
-                for pattern in df['patterns'].dropna():
-                    if pattern:
-                        for p in pattern.split(' | '):
+                for patterns in df['patterns'].dropna():
+                    if patterns:
+                        for p in patterns.split(' | '):
                             pattern_data.append(p)
                 
                 if pattern_data:
@@ -2306,7 +1806,12 @@ class ExportEngine:
                                 'pe', 'eps_change_pct', 
                                 'category', 'sector']
                     available_wave_cols = [col for col in wave_cols if col in momentum_shifts.columns]
-                    momentum_shifts[available_wave_cols].to_excel(
+                    
+                    wave_df = momentum_shifts[available_wave_cols].copy()
+                    if 'eps_change_pct' in wave_df.columns:
+                        wave_df['eps_change_pct'] = wave_df['eps_change_pct'] * 100
+                    
+                    wave_df.to_excel(
                         writer, sheet_name='Wave Radar Signals', index=False
                     )
                 
@@ -2334,7 +1839,20 @@ class ExportEngine:
         ]
         
         available_cols = [col for col in export_cols if col in df.columns]
-        return df[available_cols].to_csv(index=False)
+        
+        # Create a copy for export
+        export_df = df[available_cols].copy()
+        
+        # Convert percentage columns back to percentage format for CSV
+        if 'eps_change_pct' in export_df.columns:
+            export_df['eps_change_pct'] = export_df['eps_change_pct'] * 100
+        
+        # Convert volume ratios back to percentage format
+        vol_ratio_cols = [col for col in export_df.columns if 'vol_ratio' in col]
+        for col in vol_ratio_cols:
+            export_df[col] = (export_df[col] - 1) * 100  # Convert back to percentage
+        
+        return export_df.to_csv(index=False)
 
 # ============================================
 # DATA QUALITY MONITORING
@@ -2444,15 +1962,10 @@ def main():
         margin-bottom: 2rem;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     ">
-        <h1 style="margin: 0; font-size: 2.5rem;">🛡️ Wave Detection Ultimate 3.1 - BULLETPROOF</h1>
+        <h1 style="margin: 0; font-size: 2.5rem;">🌊 Wave Detection Ultimate 3.0</h1>
         <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">
-            Military-Grade Stock Analysis • Battle-Tested • Production-Ready
+            Professional Stock Ranking System with Wave Radar™ Early Detection
         </p>
-        <div style="margin-top: 0.5rem; padding: 0.3rem 0.8rem; background: rgba(40, 167, 69, 0.2); border: 1px solid rgba(40, 167, 69, 0.5); border-radius: 15px; display: inline-block;">
-            <span style="font-size: 0.9rem; font-weight: bold;">
-                🔒 LOCKED & SEALED • ⚡ OPTIMIZED • ✅ BULLETPROOF
-            </span>
-        </div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -2507,67 +2020,25 @@ def main():
                     st.caption(f"Data loaded: {st.session_state.data_timestamp.strftime('%I:%M %p')}")
         
         st.markdown("---")
-        st.markdown("#### 🛡️ System Health")
-        
-        # Bulletproof system monitoring
-        health_col1, health_col2 = st.columns(2)
-        
-        with health_col1:
-            # Error tracking
-            error_stats = PROD_LOGGER.get_stats()
-            if error_stats['errors'] == 0:
-                st.success("✅ Error Free")
-            else:
-                st.error(f"❌ {error_stats['errors']} Errors")
-        
-        with health_col2:
-            # Performance monitoring
-            perf_summary = PERF_MONITOR.get_performance_summary()
-            if perf_summary['avg_time'] < 3.0:
-                st.success("⚡ Fast")
-            elif perf_summary['avg_time'] < 8.0:
-                st.warning(f"⏱️ {perf_summary['avg_time']:.1f}s")
-            else:
-                st.error(f"🐌 {perf_summary['avg_time']:.1f}s")
-        
-        # Data quality and load metrics
-        if 'processing_metrics' in st.session_state:
-            last_processing = st.session_state.processing_metrics.get('last_processing', {})
-            removal_rate = last_processing.get('removal_rate', 0)
-            
-            if removal_rate < 10:
-                st.success(f"📊 Data Quality: {100-removal_rate:.1f}%")
-            elif removal_rate < 30:
-                st.warning(f"📊 Data Quality: {100-removal_rate:.1f}%")
-            else:
-                st.error(f"📊 Data Quality: {100-removal_rate:.1f}%")
-        
-        # Load efficiency indicator
-        if 'load_metrics' in st.session_state:
-            load_metrics = st.session_state.load_metrics
-            efficiency = load_metrics.get('processing_efficiency', 0) * 100
-            load_time = load_metrics.get('load_time', 0)
-            
-            if efficiency > 95 and load_time < 5:
-                st.success(f"⚡ Load: {efficiency:.1f}% in {load_time:.1f}s")
-            elif efficiency > 90 and load_time < 10:
-                st.info(f"⚡ Load: {efficiency:.1f}% in {load_time:.1f}s")
-            else:
-                st.warning(f"⚡ Load: {efficiency:.1f}% in {load_time:.1f}s")
-        
-        st.markdown("---")
         st.markdown("### 🔍 Smart Filters")
         
-        # Clear Filters button
+        # FIXED: Clear Filters button
         if st.button("🗑️ Clear All Filters", use_container_width=True):
-            # Clear all filter-related session state
+            # Clear ALL filter-related session state keys
             filter_keys = [
                 'category_filter', 'sector_filter', 'eps_tier_filter', 
-                'pe_tier_filter', 'price_tier_filter'
+                'pe_tier_filter', 'price_tier_filter', 'min_score',
+                'patterns', 'trend_filter', 'min_eps_change', 
+                'min_pe', 'max_pe', 'require_fundamental_data',
+                'trend_range', 'display_mode_toggle'
             ]
             for key in filter_keys:
                 if key in st.session_state:
                     del st.session_state[key]
+            # Also clear any other keys that might be filter-related
+            keys_to_remove = [k for k in st.session_state.keys() if 'filter' in k.lower()]
+            for key in keys_to_remove:
+                del st.session_state[key]
             st.rerun()
         
         # Performance metrics (if available)
@@ -2575,36 +2046,13 @@ def main():
             with st.expander("⚡ Performance Stats"):
                 perf = st.session_state.performance_metrics
                 
-                # Extract time values from the new metric structure
-                try:
-                    time_values = []
-                    operation_details = []
-                    
-                    for func_name, metric_data in perf.items():
-                        if isinstance(metric_data, dict) and 'time' in metric_data:
-                            elapsed = metric_data['time']
-                            time_values.append(elapsed)
-                            operation_details.append((func_name, elapsed))
-                        elif isinstance(metric_data, (int, float)):
-                            # Fallback for old format
-                            time_values.append(metric_data)
-                            operation_details.append((func_name, metric_data))
-                    
-                    if time_values:
-                        total_time = sum(time_values)
-                        st.metric("Total Processing Time", f"{total_time:.2f}s")
-                        
-                        # Show slowest operations
-                        slowest = sorted(operation_details, key=lambda x: x[1], reverse=True)[:3]
-                        for func_name, elapsed in slowest:
-                            clean_name = func_name.replace('Performance-tracked ', '').replace('_bulletproof', '')
-                            st.caption(f"🔧 {clean_name}: {elapsed:.2f}s")
-                    else:
-                        st.info("No performance data available yet")
-                        
-                except Exception as e:
-                    st.error(f"Performance metrics error: {str(e)}")
-                    logger.error(f"Performance stats display error: {str(e)}")
+                total_time = sum(perf.values())
+                st.metric("Total Load Time", f"{total_time:.2f}s")
+                
+                # Show slowest operations
+                slowest = sorted(perf.items(), key=lambda x: x[1], reverse=True)[:3]
+                for func_name, elapsed in slowest:
+                    st.caption(f"{func_name}: {elapsed:.2f}s")
         
         # Debug checkbox at the bottom of sidebar
         st.markdown("---")
@@ -2620,18 +2068,19 @@ def main():
         else:
             # Load and process data with caching
             with st.spinner("📥 Loading and processing data..."):
-                ranked_df, data_timestamp, load_metrics = load_and_process_data_bulletproof(CONFIG.DEFAULT_SHEET_URL, CONFIG.DEFAULT_GID)
+                ranked_df, data_timestamp = load_and_process_data(CONFIG.DEFAULT_SHEET_URL, CONFIG.DEFAULT_GID)
                 st.session_state.ranked_df = ranked_df
                 st.session_state.data_timestamp = data_timestamp
                 st.session_state.last_refresh = datetime.now()
-                st.session_state.load_metrics = load_metrics  # Store load metrics
                 
                 # Calculate data quality
                 st.session_state.data_quality = calculate_data_quality(ranked_df)
         
-        # Create or use cached search index
-        if st.session_state.search_index is None:
-            st.session_state.search_index = SearchEngine.create_search_index(ranked_df)
+        # FIXED: Create search index with proper caching
+        if st.session_state.search_index is None and 'ranked_df' in st.session_state:
+            # Create a hash of the dataframe for cache key
+            df_hash = hash(tuple(ranked_df['ticker'].values))
+            st.session_state.search_index = SearchEngine.create_search_index(df_hash, len(ranked_df))
         
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
@@ -2690,7 +2139,7 @@ def main():
         ranked_df_display = ranked_df
     
     # Get filter options
-    # Bulletproof filtering system - no instantiation needed (static methods)
+    filter_engine = FilterEngine()
     
     # Sidebar filters with smart interconnection
     with st.sidebar:
@@ -2716,7 +2165,7 @@ def main():
         st.markdown("---")
         
         # Category filter with smart updates
-        categories = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'category', filters=filters)
+        categories = filter_engine.get_unique_values(ranked_df_display, 'category', filters=filters)
         category_counts = ranked_df_display['category'].value_counts()
         category_options = [
             f"{cat} ({category_counts.get(cat, 0)})" 
@@ -2738,7 +2187,7 @@ def main():
         ] if selected_categories else []
         
         # Sector filter with smart updates based on selected categories
-        sectors = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'sector', filters=filters)
+        sectors = filter_engine.get_unique_values(ranked_df_display, 'sector', filters=filters)
         
         selected_sectors = st.multiselect(
             "Sector",
@@ -2796,7 +2245,7 @@ def main():
         # Advanced filters in expander
         with st.expander("🔧 Advanced Filters"):
             # EPS tier filter with smart updates
-            eps_tiers = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'eps_tier', filters=filters)
+            eps_tiers = filter_engine.get_unique_values(ranked_df_display, 'eps_tier', filters=filters)
             
             selected_eps_tiers = st.multiselect(
                 "EPS Tier",
@@ -2808,7 +2257,7 @@ def main():
             filters['eps_tiers'] = selected_eps_tiers if selected_eps_tiers else []
             
             # PE tier filter with smart updates
-            pe_tiers = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'pe_tier', filters=filters)
+            pe_tiers = filter_engine.get_unique_values(ranked_df_display, 'pe_tier', filters=filters)
             
             selected_pe_tiers = st.multiselect(
                 "PE Tier",
@@ -2820,7 +2269,7 @@ def main():
             filters['pe_tiers'] = selected_pe_tiers if selected_pe_tiers else []
             
             # Price tier filter with smart updates
-            price_tiers = BulletproofFilterEngine.get_unique_values_bulletproof(ranked_df_display, 'price_tier', filters=filters)
+            price_tiers = filter_engine.get_unique_values(ranked_df_display, 'price_tier', filters=filters)
             
             selected_price_tiers = st.multiselect(
                 "Price Range",
@@ -2831,7 +2280,7 @@ def main():
             )
             filters['price_tiers'] = selected_price_tiers if selected_price_tiers else []
             
-            # EPS change filter
+            # EPS change filter - FIXED: Show as percentage input
             if 'eps_change_pct' in ranked_df_display.columns:
                 eps_change_input = st.text_input(
                     "Min EPS Change %",
@@ -2895,12 +2344,14 @@ def main():
                     help="Filter out stocks missing fundamental data"
                 )
     
-    # Apply filters (unless quick filter is active)
-    if not quick_filter_applied:
-        filtered_df = BulletproofFilterEngine.apply_filters_bulletproof(ranked_df_display, filters)
+    # FIXED: Apply filters properly - allow combination with quick filters
+    if quick_filter_applied:
+        # Apply filters to the quick-filtered dataset
+        filtered_df = filter_engine.apply_filters(ranked_df_display, filters)
     else:
-        filtered_df = ranked_df_display
-        
+        # Apply filters to the full dataset
+        filtered_df = filter_engine.apply_filters(ranked_df, filters)
+    
     filtered_df = filtered_df.sort_values('rank')
     
     # Save current filters to preferences
@@ -2981,10 +2432,11 @@ def main():
     
     with col4:
         if show_fundamentals and 'eps_change_pct' in filtered_df.columns:
+            # FIXED: Handle percentage data properly
             valid_eps_change = filtered_df['eps_change_pct'].notna() & ~np.isinf(filtered_df['eps_change_pct'])
             positive_eps_growth = valid_eps_change & (filtered_df['eps_change_pct'] > 0)
-            strong_growth = valid_eps_change & (filtered_df['eps_change_pct'] > 50)
-            mega_growth = valid_eps_change & (filtered_df['eps_change_pct'] > 100)
+            strong_growth = valid_eps_change & (filtered_df['eps_change_pct'] > 0.5)  # 50% as decimal
+            mega_growth = valid_eps_change & (filtered_df['eps_change_pct'] > 1.0)  # 100% as decimal
             
             growth_count = positive_eps_growth.sum()
             strong_count = strong_growth.sum()
@@ -3150,13 +2602,14 @@ def main():
                 except (ValueError, TypeError, OverflowError):
                     return '-'
             
-            # Smart EPS change formatting function
+            # FIXED: Smart EPS change formatting function for decimal data
             def format_eps_change(value):
                 try:
                     if pd.isna(value) or value == 'N/A' or value == '':
                         return '-'
                     
-                    val = float(value)
+                    # Value is already in decimal form (0.5 = 50%)
+                    val = float(value) * 100  # Convert to percentage for display
                     
                     if np.isinf(val):
                         return '∞' if val > 0 else '-∞'
@@ -3257,9 +2710,10 @@ def main():
                             if valid_eps.any():
                                 eps_data = filtered_df.loc[valid_eps, 'eps_change_pct']
                                 
-                                mega_growth = (eps_data > 100).sum()
-                                strong_growth = ((eps_data > 50) & (eps_data <= 100)).sum()
-                                moderate_growth = ((eps_data > 0) & (eps_data <= 50)).sum()
+                                # FIXED: Handle decimal percentage data
+                                mega_growth = (eps_data > 1.0).sum()  # >100%
+                                strong_growth = ((eps_data > 0.5) & (eps_data <= 1.0)).sum()  # 50-100%
+                                moderate_growth = ((eps_data > 0) & (eps_data <= 0.5)).sum()  # 0-50%
                                 declining = (eps_data < 0).sum()
                                 
                                 if mega_growth > 0:
@@ -3506,7 +2960,7 @@ def main():
                 median_return = momentum_shifts['ret_7d'].median()
                 return_condition = momentum_shifts['ret_7d'] > median_return
             else:
-                return_condition = True
+                return_condition = pd.Series(True, index=momentum_shifts.index)
             
             momentum_shifts['momentum_shift'] = (
                 (momentum_shifts['momentum_score'] >= cross_threshold) & 
@@ -3615,40 +3069,16 @@ def main():
                 with col1:
                     # Calculate category performance using TOP 25 by market cap
                     try:
-                        if not wave_filtered_df.empty and 'category' in wave_filtered_df.columns and 'market_cap' in wave_filtered_df.columns:
-                            # Group by category and get top 25 by market cap
-                            category_leaders = pd.DataFrame()
+                        if not wave_filtered_df.empty and 'category' in wave_filtered_df.columns:
+                            # Use all stocks for category flow (market_cap column may not exist)
+                            category_flow = wave_filtered_df.groupby('category').agg({
+                                'master_score': ['mean', 'count'],
+                                'momentum_score': 'mean',
+                                'volume_score': 'mean',
+                                'rvol': 'mean'
+                            }).round(2)
                             
-                            for category in wave_filtered_df['category'].unique():
-                                if category != 'Unknown':
-                                    # Get stocks in this category
-                                    cat_stocks = wave_filtered_df[wave_filtered_df['category'] == category]
-                                    
-                                    # Sort by market cap and take top 25
-                                    if len(cat_stocks) > 25:
-                                        # Convert market_cap to numeric for proper sorting
-                                        cat_stocks = cat_stocks.copy()
-                                        cat_stocks['market_cap_numeric'] = pd.to_numeric(
-                                            cat_stocks['market_cap'].astype(str).str.replace(',', ''), 
-                                            errors='coerce'
-                                        )
-                                        # Take top 25 by market cap
-                                        top_25 = cat_stocks.nlargest(25, 'market_cap_numeric')
-                                    else:
-                                        # If less than 25 stocks, take all
-                                        top_25 = cat_stocks
-                                    
-                                    category_leaders = pd.concat([category_leaders, top_25])
-                            
-                            # Calculate flow scores using leaders only
-                            if not category_leaders.empty:
-                                category_flow = category_leaders.groupby('category').agg({
-                                    'master_score': ['mean', 'count'],
-                                    'momentum_score': 'mean',
-                                    'volume_score': 'mean',
-                                    'rvol': 'mean'
-                                }).round(2)
-                                
+                            if not category_flow.empty:
                                 category_flow.columns = ['Avg Score', 'Count', 'Avg Momentum', 'Avg Volume', 'Avg RVOL']
                                 category_flow['Flow Score'] = (
                                     category_flow['Avg Score'] * 0.4 +
@@ -3680,11 +3110,12 @@ def main():
                                     textposition='outside',
                                     marker_color=['#2ecc71' if score > 60 else '#e74c3c' if score < 40 else '#f39c12' 
                                                  for score in category_flow['Flow Score']],
-                                    hovertemplate='Category: %{x}<br>Flow Score: %{y:.1f}<br>Stocks Analyzed: Top 25 by Market Cap<extra></extra>'
+                                    hovertemplate='Category: %{x}<br>Flow Score: %{y:.1f}<br>Stocks: %{customdata}<extra></extra>',
+                                    customdata=category_flow['Count']
                                 ))
                                 
                                 fig_flow.update_layout(
-                                    title=f"Smart Money Flow Direction: {flow_direction} (Top 25 Leaders per Category)",
+                                    title=f"Smart Money Flow Direction: {flow_direction}",
                                     xaxis_title="Market Cap Category",
                                     yaxis_title="Flow Score",
                                     height=300,
@@ -3697,66 +3128,9 @@ def main():
                                 flow_direction = "➡️ Neutral"
                                 category_flow = pd.DataFrame()
                         else:
-                            # Fallback if market_cap column is missing
-                            if not wave_filtered_df.empty and 'category' in wave_filtered_df.columns:
-                                # Use all stocks (original method)
-                                category_flow = wave_filtered_df.groupby('category').agg({
-                                    'master_score': ['mean', 'count'],
-                                    'momentum_score': 'mean',
-                                    'volume_score': 'mean',
-                                    'rvol': 'mean'
-                                }).round(2)
-                                
-                                if not category_flow.empty:
-                                    category_flow.columns = ['Avg Score', 'Count', 'Avg Momentum', 'Avg Volume', 'Avg RVOL']
-                                    category_flow['Flow Score'] = (
-                                        category_flow['Avg Score'] * 0.4 +
-                                        category_flow['Avg Momentum'] * 0.3 +
-                                        category_flow['Avg Volume'] * 0.3
-                                    )
-                                    
-                                    category_flow = category_flow.sort_values('Flow Score', ascending=False)
-                                    if len(category_flow) > 0:
-                                        top_category = category_flow.index[0]
-                                        if 'Small' in top_category or 'Micro' in top_category:
-                                            flow_direction = "🔥 Risk-ON"
-                                        elif 'Large' in top_category or 'Mega' in top_category:
-                                            flow_direction = "❄️ Risk-OFF"
-                                        else:
-                                            flow_direction = "➡️ Neutral"
-                                    else:
-                                        flow_direction = "➡️ Neutral"
-                                    
-                                    # Create flow visualization
-                                    fig_flow = go.Figure()
-                                    
-                                    fig_flow.add_trace(go.Bar(
-                                        x=category_flow.index,
-                                        y=category_flow['Flow Score'],
-                                        text=[f"{val:.1f}" for val in category_flow['Flow Score']],
-                                        textposition='outside',
-                                        marker_color=['#2ecc71' if score > 60 else '#e74c3c' if score < 40 else '#f39c12' 
-                                                     for score in category_flow['Flow Score']],
-                                        hovertemplate='Category: %{x}<br>Flow Score: %{y:.1f}<br>Stocks Analyzed: All<extra></extra>'
-                                    ))
-                                    
-                                    fig_flow.update_layout(
-                                        title=f"Smart Money Flow Direction: {flow_direction}",
-                                        xaxis_title="Market Cap Category",
-                                        yaxis_title="Flow Score",
-                                        height=300,
-                                        template='plotly_white'
-                                    )
-                                    
-                                    st.plotly_chart(fig_flow, use_container_width=True)
-                                else:
-                                    st.info("No category data available for flow analysis")
-                                    flow_direction = "➡️ Neutral"
-                                    category_flow = pd.DataFrame()
-                            else:
-                                st.info("Category data not available")
-                                flow_direction = "➡️ Neutral"
-                                category_flow = pd.DataFrame()
+                            st.info("Category data not available")
+                            flow_direction = "➡️ Neutral"
+                            category_flow = pd.DataFrame()
                             
                     except Exception as e:
                         logger.error(f"Error in category flow analysis: {str(e)}")
@@ -3779,7 +3153,7 @@ def main():
                     else:
                         st.info("No category data available")
                     
-                    # Category shift detection with proper name matching
+                    # FIXED: Category shift detection with proper score comparison
                     st.markdown("**🔄 Category Shifts:**")
                     if not category_flow.empty:
                         # Look for categories containing 'Small' and 'Large' (flexible matching)
@@ -3792,12 +3166,20 @@ def main():
                                 small_score = category_flow.loc[small_cats[0], 'Flow Score']
                                 large_score = category_flow.loc[large_cats[0], 'Flow Score']
                                 
-                                if small_score > large_score * 1.2:
+                                # FIXED: Better regime detection logic
+                                score_diff = abs(small_score - large_score)
+                                if score_diff < 5:  # Within 5 points
+                                    st.info("➡️ Balanced Market - No Clear Leader")
+                                elif small_score > large_score + 10:  # Small caps leading by 10+
                                     st.success("📈 Small Caps Leading - Early Bull Signal!")
-                                elif large_score > small_score * 1.2:
+                                elif large_score > small_score + 10:  # Large caps leading by 10+
                                     st.warning("📉 Large Caps Leading - Defensive Mode")
                                 else:
-                                    st.info("➡️ Balanced Market - No Clear Leader")
+                                    # Small difference
+                                    if small_score > large_score:
+                                        st.info("📊 Small caps slightly ahead")
+                                    else:
+                                        st.info("📊 Large caps slightly ahead")
                             except Exception as e:
                                 logger.error(f"Error in category shift detection: {str(e)}")
                                 st.info("Unable to determine category shifts")
@@ -4427,10 +3809,11 @@ def main():
                                 else:
                                     st.text("EPS: - (N/A)")
                                 
-                                # EPS Change
+                                # EPS Change - FIXED for decimal data
                                 if 'eps_change_pct' in stock and pd.notna(stock['eps_change_pct']):
                                     try:
-                                        eps_chg = float(stock['eps_change_pct'])
+                                        # Value is in decimal form (0.5 = 50%)
+                                        eps_chg = float(stock['eps_change_pct']) * 100
                                         
                                         if np.isinf(eps_chg):
                                             eps_display = "∞" if eps_chg > 0 else "-∞"
@@ -4812,60 +4195,13 @@ def main():
                 "Refresh recommended" if minutes > 60 else "Fresh"
             )
     
-    # Bulletproof System Summary
-    st.markdown("---")
-    st.markdown("#### 🛡️ Bulletproof System Summary")
-    
-    summary_cols = st.columns(4)
-    
-    with summary_cols[0]:
-        error_stats = PROD_LOGGER.get_stats()
-        st.metric(
-            "System Errors",
-            error_stats['errors'],
-            delta=f"-{error_stats['warnings']} warnings" if error_stats['warnings'] > 0 else "Clean"
-        )
-    
-    with summary_cols[1]:
-        perf_summary = PERF_MONITOR.get_performance_summary()
-        st.metric(
-            "Avg Performance",
-            f"{perf_summary['avg_time']:.2f}s",
-            delta="Optimized" if perf_summary['avg_time'] < 3.0 else "Acceptable"
-        )
-    
-    with summary_cols[2]:
-        if 'processing_metrics' in st.session_state:
-            last_processing = st.session_state.processing_metrics.get('last_processing', {})
-            data_quality = 100 - last_processing.get('removal_rate', 0)
-            st.metric(
-                "Data Quality",
-                f"{data_quality:.1f}%",
-                delta="Excellent" if data_quality > 90 else "Good" if data_quality > 70 else "Acceptable"
-            )
-        else:
-            st.metric("Data Quality", "Not Available")
-    
-    with summary_cols[3]:
-        if 'filter_metrics' in st.session_state:
-            last_filter = st.session_state.filter_metrics.get('last_filter', {})
-            retention_rate = last_filter.get('retention_rate', 100)
-            st.metric(
-                "Filter Efficiency",
-                f"{retention_rate:.1f}%",
-                delta="Balanced" if retention_rate > 10 else "Aggressive"
-            )
-        else:
-            st.metric("Filter Efficiency", "100.0%")
-    
     # Footer
     st.markdown("---")
     st.markdown(
         """
         <div style="text-align: center; color: #666; padding: 1rem;">
-            🛡️ Wave Detection Ultimate 3.1 - BULLETPROOF EDITION<br>
-            <small>Military-Grade Analysis • Battle-Tested Reliability • Production-Ready Performance</small><br>
-            <small style="color: #28a745; font-weight: bold;">🔒 LOCKED & SEALED • ERROR-HANDLED • FAILSAFE</small>
+            Wave Detection Ultimate 3.0 | Professional Edition with Wave Radar™<br>
+            <small>Real-time momentum detection • Early entry signals • Smart money flow tracking</small>
         </div>
         """,
         unsafe_allow_html=True
