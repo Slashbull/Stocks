@@ -984,15 +984,15 @@ class RankingEngine:
         # Initialize pattern column properly
         df['patterns'] = ''
         
-        # Create a list to collect patterns for each stock
-        pattern_list = [[] for _ in range(len(df))]
+        # FIXED: Create pattern dictionary using actual index values
+        pattern_dict = {idx: [] for idx in df.index}
         
         # 1. Category Leader
         if 'category_percentile' in df.columns:
             mask = df['category_percentile'] >= CONFIG.PATTERN_THRESHOLDS['category_leader']
             indices = df.index[mask].tolist()
             for idx in indices:
-                pattern_list[idx].append('🔥 CAT LEADER')
+                pattern_dict[idx].append('🔥 CAT LEADER')
         
         # 2. Hidden Gem
         if 'category_percentile' in df.columns and 'percentile' in df.columns:
@@ -1002,14 +1002,14 @@ class RankingEngine:
             )
             indices = df.index[mask].tolist()
             for idx in indices:
-                pattern_list[idx].append('💎 HIDDEN GEM')
+                pattern_dict[idx].append('💎 HIDDEN GEM')
         
         # 3. Accelerating
         if 'acceleration_score' in df.columns:
             mask = df['acceleration_score'] >= CONFIG.PATTERN_THRESHOLDS['acceleration']
             indices = df.index[mask].tolist()
             for idx in indices:
-                pattern_list[idx].append('🚀 ACCELERATING')
+                pattern_dict[idx].append('🚀 ACCELERATING')
         
         # 4. Institutional
         if 'volume_score' in df.columns and 'vol_ratio_90d_180d' in df.columns:
@@ -1019,28 +1019,28 @@ class RankingEngine:
             )
             indices = df.index[mask].tolist()
             for idx in indices:
-                pattern_list[idx].append('🏦 INSTITUTIONAL')
+                pattern_dict[idx].append('🏦 INSTITUTIONAL')
         
         # 5. Volume Explosion
         if 'rvol' in df.columns:
             mask = df['rvol'] > 3
             indices = df.index[mask].tolist()
             for idx in indices:
-                pattern_list[idx].append('⚡ VOL EXPLOSION')
+                pattern_dict[idx].append('⚡ VOL EXPLOSION')
         
         # 6. Breakout Ready
         if 'breakout_score' in df.columns:
             mask = df['breakout_score'] >= CONFIG.PATTERN_THRESHOLDS['breakout_ready']
             indices = df.index[mask].tolist()
             for idx in indices:
-                pattern_list[idx].append('🎯 BREAKOUT')
+                pattern_dict[idx].append('🎯 BREAKOUT')
         
         # 7. Market Leader
         if 'percentile' in df.columns:
             mask = df['percentile'] >= CONFIG.PATTERN_THRESHOLDS['market_leader']
             indices = df.index[mask].tolist()
             for idx in indices:
-                pattern_list[idx].append('👑 MARKET LEADER')
+                pattern_dict[idx].append('👑 MARKET LEADER')
         
         # 8. Momentum Wave
         if 'momentum_score' in df.columns and 'acceleration_score' in df.columns:
@@ -1050,7 +1050,7 @@ class RankingEngine:
             )
             indices = df.index[mask].tolist()
             for idx in indices:
-                pattern_list[idx].append('🌊 MOMENTUM WAVE')
+                pattern_dict[idx].append('🌊 MOMENTUM WAVE')
         
         # 9. Liquid Leader
         if 'liquidity_score' in df.columns and 'percentile' in df.columns:
@@ -1060,21 +1060,21 @@ class RankingEngine:
             )
             indices = df.index[mask].tolist()
             for idx in indices:
-                pattern_list[idx].append('💰 LIQUID LEADER')
+                pattern_dict[idx].append('💰 LIQUID LEADER')
         
         # 10. Long-term Strength
         if 'long_term_strength' in df.columns:
             mask = df['long_term_strength'] >= CONFIG.PATTERN_THRESHOLDS['long_strength']
             indices = df.index[mask].tolist()
             for idx in indices:
-                pattern_list[idx].append('💪 LONG STRENGTH')
+                pattern_dict[idx].append('💪 LONG STRENGTH')
         
         # 11. Quality Trend
         if 'trend_quality' in df.columns:
             mask = df['trend_quality'] >= 80
             indices = df.index[mask].tolist()
             for idx in indices:
-                pattern_list[idx].append('📈 QUALITY TREND')
+                pattern_dict[idx].append('📈 QUALITY TREND')
         
         # SMART FUNDAMENTAL PATTERNS
         # 12. Value Momentum
@@ -1088,7 +1088,7 @@ class RankingEngine:
             value_momentum = has_valid_pe & (df['pe'] < 15) & (df['master_score'] >= 70)
             indices = df.index[value_momentum].tolist()
             for idx in indices:
-                pattern_list[idx].append('💎 VALUE MOMENTUM')
+                pattern_dict[idx].append('💎 VALUE MOMENTUM')
         
         # 13. Earnings Rocket
         if 'eps_change_pct' in df.columns and 'acceleration_score' in df.columns:
@@ -1102,7 +1102,7 @@ class RankingEngine:
             )
             indices = df.index[earnings_rocket].tolist()
             for idx in indices:
-                pattern_list[idx].append('📊 EARNINGS ROCKET')
+                pattern_dict[idx].append('📊 EARNINGS ROCKET')
         
         # 14. Quality Leader
         if all(col in df.columns for col in ['pe', 'eps_change_pct', 'percentile']):
@@ -1122,7 +1122,7 @@ class RankingEngine:
             )
             indices = df.index[quality_leader].tolist()
             for idx in indices:
-                pattern_list[idx].append('🏆 QUALITY LEADER')
+                pattern_dict[idx].append('🏆 QUALITY LEADER')
         
         # 15. Turnaround Play
         if 'eps_change_pct' in df.columns and 'volume_score' in df.columns:
@@ -1133,7 +1133,7 @@ class RankingEngine:
             turnaround = mega_turnaround | strong_turnaround
             indices = df.index[turnaround].tolist()
             for idx in indices:
-                pattern_list[idx].append('⚡ TURNAROUND')
+                pattern_dict[idx].append('⚡ TURNAROUND')
         
         # 16. Overvalued Warning
         if 'pe' in df.columns:
@@ -1141,12 +1141,12 @@ class RankingEngine:
             extreme_pe = has_valid_pe & (df['pe'] > 100)
             indices = df.index[extreme_pe].tolist()
             for idx in indices:
-                pattern_list[idx].append('⚠️ HIGH PE')
+                pattern_dict[idx].append('⚠️ HIGH PE')
         
-        # FIXED: Efficiently join patterns
-        for i, patterns in enumerate(pattern_list):
-            if patterns:
-                df.iloc[i, df.columns.get_loc('patterns')] = ' | '.join(patterns)
+        # FIXED: Efficiently join patterns using actual DataFrame indices
+        for idx in df.index:
+            if idx in pattern_dict and pattern_dict[idx]:
+                df.at[idx, 'patterns'] = ' | '.join(pattern_dict[idx])
         
         return df
 
