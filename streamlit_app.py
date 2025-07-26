@@ -1474,6 +1474,315 @@ class MarketIntelligence:
         return sector_metrics.sort_values('flow_score', ascending=False)
 
 # ============================================
+# VISUALIZATION ENGINE
+# ============================================
+
+class Visualizer:
+    """Create all visualizations with proper error handling"""
+    
+    @staticmethod
+    def create_score_distribution(df: pd.DataFrame) -> go.Figure:
+        """Create score distribution chart"""
+        fig = go.Figure()
+        
+        if df.empty:
+            fig.add_annotation(
+                text="No data available for visualization",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False
+            )
+            return fig
+        
+        # Score components to visualize
+        scores = [
+            ('position_score', 'Position', '#3498db'),
+            ('volume_score', 'Volume', '#e74c3c'),
+            ('momentum_score', 'Momentum', '#2ecc71'),
+            ('acceleration_score', 'Acceleration', '#f39c12'),
+            ('breakout_score', 'Breakout', '#9b59b6'),
+            ('rvol_score', 'RVOL', '#e67e22')
+        ]
+        
+        for score_col, label, color in scores:
+            if score_col in df.columns:
+                score_data = df[score_col].dropna()
+                if len(score_data) > 0:
+                    fig.add_trace(go.Box(
+                        y=score_data,
+                        name=label,
+                        marker_color=color,
+                        boxpoints='outliers',
+                        hovertemplate=f'{label}<br>Score: %{{y:.1f}}<extra></extra>'
+                    ))
+        
+        fig.update_layout(
+            title="Score Component Distribution",
+            yaxis_title="Score (0-100)",
+            template='plotly_white',
+            height=400,
+            showlegend=False
+        )
+        
+        return fig
+    
+    @staticmethod
+    def create_master_score_breakdown(df: pd.DataFrame, n: int = 20) -> go.Figure:
+        """Create master score breakdown chart showing component contributions"""
+        # Get top stocks
+        top_df = df.nlargest(min(n, len(df)), 'master_score').copy()
+        
+        if len(top_df) == 0:
+            return go.Figure()
+        
+        # Calculate weighted contributions
+        components = [
+            ('Position', 'position_score', CONFIG.POSITION_WEIGHT, '#3498db'),
+            ('Volume', 'volume_score', CONFIG.VOLUME_WEIGHT, '#e74c3c'),
+            ('Momentum', 'momentum_score', CONFIG.MOMENTUM_WEIGHT, '#2ecc71'),
+            ('Acceleration', 'acceleration_score', CONFIG.ACCELERATION_WEIGHT, '#f39c12'),
+            ('Breakout', 'breakout_score', CONFIG.BREAKOUT_WEIGHT, '#9b59b6'),
+            ('RVOL', 'rvol_score', CONFIG.RVOL_WEIGHT, '#e67e22')
+        ]
+        
+        fig = go.Figure()
+        
+        # Add bars for each component
+        for name, score_col, weight, color in components:
+            if score_col in top_df.columns:
+                # Calculate weighted contribution
+                weighted_contrib = top_df[score_col] * weight
+                
+                fig.add_trace(go.Bar(
+                    name=f'{name} ({weight:.0%})',
+                    y=top_df['ticker'],
+                    x=weighted_contrib,
+                    orientation='h',
+                    marker_color=color,
+                    text=[f"{val:.1f}" for val in top_df[score_col]],
+                    textposition='inside',
+                    hovertemplate=(
+                        f'{name}<br>'
+                        'Raw Score: %{text}<br>'
+                        'Weight: ' + f'{weight:.0%}' + '<br>'
+                        'Contribution: %{x:.1f}<extra></extra>'
+                    )
+                ))
+        
+        # Add master score annotations
+        for i, (idx, row) in enumerate(top_df.iterrows()):
+            fig.add_annotation(
+                x=row['master_score'] + 1,
+                y=i,
+                text=f"<b>{row['master_score']:.1f}</b>",
+                showarrow=False,
+                xanchor='left',
+                font=dict(size=12, color='black'),
+                bgcolor='rgba(255,255,255,0.8)',
+                bordercolor='black',
+                borderwidth=1
+            )
+        
+        fig.update_layout(
+            title=f"Top {len(top_df)} Stocks - Master Score 3.0 Component Breakdown",
+            xaxis_title="Weighted Score Contribution",
+            xaxis_range=[0, 110],
+            barmode='stack',
+            template='plotly_white',
+            height=max(400, len(top_df) * 35),
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5
+            ),
+            margin=dict(l=100, r=100, t=100, b=50)
+        )
+        
+        return fig
+    
+    @staticmethod
+    def create_sector_performance_scatter(df: pd.DataFrame) -> go.Figure:
+        """Create sector performance scatter plot with bubble size"""
+        try:
+            # Aggregate by sector
+            sector_stats = df.groupby('sector').agg({
+                'master_score': ['mean', 'std', 'count'],
+                'percentile': 'mean',
+                'rvol': 'mean',
+                'momentum_score': 'mean',
+                'ret_30d': 'mean'
+            }).reset_index()
+            
+            # Flatten column names
+            sector_stats.columns = ['sector', 'avg_score', 'std_score', 'count', 
+                                   'avg_percentile', 'avg_rvol', 'avg_momentum', 'avg_ret_30d']
+            
+            # Filter sectors with at least 3 stocks
+            sector_stats = sector_stats[sector_stats['count'] >= 3]
+            
+            if len(sector_stats) == 0:
+                return go.Figure()
+            
+            # Create scatter plot
+            fig = go.Figure()
+            
+            # Add scatter trace
+            fig.add_trace(go.Scatter(
+                x=sector_stats['avg_percentile'],
+                y=sector_stats['avg_score'],
+                mode='markers+text',
+                text=sector_stats['sector'],
+                textposition='top center',
+                marker=dict(
+                    size=sector_stats['count'] * 2,  # Scale bubble size
+                    sizemin=10,
+                    sizemode='diameter',
+                    sizeref=2,
+                    color=sector_stats['avg_rvol'],
+                    colorscale='Viridis',
+                    colorbar=dict(title="Avg RVOL"),
+                    line=dict(width=2, color='white'),
+                    showscale=True
+                ),
+                customdata=np.column_stack((
+                    sector_stats['count'],
+                    sector_stats['std_score'],
+                    sector_stats['avg_rvol'],
+                    sector_stats['avg_momentum'],
+                    sector_stats['avg_ret_30d']
+                )),
+                hovertemplate=(
+                    '<b>%{text}</b><br>' +
+                    'Avg Score: %{y:.1f}<br>' +
+                    'Avg Percentile: %{x:.1f}<br>' +
+                    'Stocks: %{customdata[0]}<br>' +
+                    'Std Dev: %{customdata[1]:.1f}<br>' +
+                    'Avg RVOL: %{customdata[2]:.2f}x<br>' +
+                    'Avg Momentum: %{customdata[3]:.1f}<br>' +
+                    '30D Return: %{customdata[4]:.1f}%<extra></extra>'
+                )
+            ))
+            
+            # Add quadrant lines
+            fig.add_hline(y=50, line_dash="dash", line_color="gray", opacity=0.5)
+            fig.add_vline(x=50, line_dash="dash", line_color="gray", opacity=0.5)
+            
+            # Add quadrant labels
+            fig.add_annotation(x=75, y=75, text="Leaders", showarrow=False, 
+                             font=dict(size=14, color="green"), opacity=0.7)
+            fig.add_annotation(x=25, y=75, text="Hidden Gems", showarrow=False,
+                             font=dict(size=14, color="blue"), opacity=0.7)
+            fig.add_annotation(x=75, y=25, text="Overvalued", showarrow=False,
+                             font=dict(size=14, color="orange"), opacity=0.7)
+            fig.add_annotation(x=25, y=25, text="Laggards", showarrow=False,
+                             font=dict(size=14, color="red"), opacity=0.7)
+            
+            fig.update_layout(
+                title='Sector Performance Analysis - Size = Stock Count, Color = RVOL',
+                xaxis_title='Average Percentile Rank',
+                yaxis_title='Average Master Score',
+                template='plotly_white',
+                height=500,
+                xaxis=dict(range=[0, 100]),
+                yaxis=dict(range=[0, 100])
+            )
+            
+            return fig
+            
+        except Exception as e:
+            logger.error(f"Error creating sector scatter: {str(e)}")
+            return go.Figure()
+    
+    @staticmethod
+    def create_acceleration_profiles(df: pd.DataFrame, n: int = 10) -> go.Figure:
+        """Create acceleration profiles showing momentum over time"""
+        try:
+            # Get top accelerating stocks
+            accel_df = df.nlargest(min(n, len(df)), 'acceleration_score')
+            
+            if len(accel_df) == 0:
+                return go.Figure()
+            
+            fig = go.Figure()
+            
+            # Create lines for each stock
+            for _, stock in accel_df.iterrows():
+                # Build timeline data
+                x_points = []
+                y_points = []
+                
+                # Start point
+                x_points.append('Start')
+                y_points.append(0)
+                
+                # Add available return data points
+                if 'ret_30d' in stock.index and pd.notna(stock['ret_30d']):
+                    x_points.append('30D')
+                    y_points.append(stock['ret_30d'])
+                
+                if 'ret_7d' in stock.index and pd.notna(stock['ret_7d']):
+                    x_points.append('7D')
+                    y_points.append(stock['ret_7d'])
+                
+                if 'ret_1d' in stock.index and pd.notna(stock['ret_1d']):
+                    x_points.append('Today')
+                    y_points.append(stock['ret_1d'])
+                
+                if len(x_points) > 1:  # Only plot if we have data
+                    # Determine line style based on acceleration
+                    if stock['acceleration_score'] >= 85:
+                        line_style = dict(width=3, dash='solid')
+                        marker_style = dict(size=10, symbol='star')
+                    elif stock['acceleration_score'] >= 70:
+                        line_style = dict(width=2, dash='solid')
+                        marker_style = dict(size=8)
+                    else:
+                        line_style = dict(width=2, dash='dot')
+                        marker_style = dict(size=6)
+                    
+                    fig.add_trace(go.Scatter(
+                        x=x_points,
+                        y=y_points,
+                        mode='lines+markers',
+                        name=f"{stock['ticker']} ({stock['acceleration_score']:.0f})",
+                        line=line_style,
+                        marker=marker_style,
+                        hovertemplate=(
+                            f"<b>{stock['ticker']}</b><br>" +
+                            "%{x}: %{y:.1f}%<br>" +
+                            f"Accel Score: {stock['acceleration_score']:.0f}<extra></extra>"
+                        )
+                    ))
+            
+            # Add zero line
+            fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+            
+            fig.update_layout(
+                title=f"Acceleration Profiles - Top {len(accel_df)} Momentum Builders",
+                xaxis_title="Time Frame",
+                yaxis_title="Return %",
+                height=400,
+                template='plotly_white',
+                showlegend=True,
+                legend=dict(
+                    orientation="v",
+                    yanchor="top",
+                    y=1,
+                    xanchor="left",
+                    x=1.02
+                ),
+                hovermode='x unified'
+            )
+            
+            return fig
+            
+        except Exception as e:
+            logger.error(f"Error creating acceleration profiles: {str(e)}")
+            return go.Figure()
+
+# ============================================
 # FILTER ENGINE - OPTIMIZED
 # ============================================
 
