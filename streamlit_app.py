@@ -3095,6 +3095,34 @@ def main():
         
         else:
             st.warning("No stocks match the selected filters.")
+        
+        # Master Score Breakdown Visualization
+        if not filtered_df.empty:
+            st.markdown("---")
+            st.markdown("### 📊 Master Score Component Analysis")
+            
+            # Allow user to select number of stocks to show
+            breakdown_col1, breakdown_col2 = st.columns([1, 4])
+            with breakdown_col1:
+                breakdown_count = st.selectbox(
+                    "Show breakdown for top",
+                    options=[10, 20, 30, 50],
+                    index=1,
+                    key="breakdown_count"
+                )
+            
+            # Create and display the breakdown chart
+            fig_breakdown = Visualizer.create_master_score_breakdown(filtered_df, n=breakdown_count)
+            st.plotly_chart(fig_breakdown, use_container_width=True)
+            
+            # Explanation
+            st.info(
+                "📊 **How to read this chart:**\n"
+                "- Each horizontal bar shows how a stock's Master Score is built\n"
+                "- Different colors represent different components (Position, Volume, Momentum, etc.)\n"
+                "- The length of each colored section shows its weighted contribution\n"
+                "- The total Master Score is shown at the end of each bar"
+            )
     
     # Tab 2: Wave Radar - Enhanced
     with tabs[2]:
@@ -3130,6 +3158,13 @@ def main():
                 options=["Conservative", "Balanced", "Aggressive"],
                 value="Balanced",
                 help="Conservative = Stronger signals, Aggressive = More signals"
+            )
+            
+            # Sensitivity details toggle
+            show_sensitivity_details = st.checkbox(
+                "Show thresholds",
+                value=False,
+                help="Display exact threshold values for current sensitivity"
             )
         
         with radar_col3:
@@ -3178,6 +3213,39 @@ def main():
                 except Exception as e:
                     logger.error(f"Error calculating wave strength: {str(e)}")
                     UIComponents.render_metric_card("Wave Strength", "N/A", "Error")
+        
+        # Display sensitivity thresholds if enabled
+        if show_sensitivity_details:
+            with st.expander("📊 Current Sensitivity Thresholds", expanded=True):
+                if sensitivity == "Conservative":
+                    st.markdown("""
+                    **Conservative Settings** 🛡️
+                    - **Momentum Shifts:** Score ≥ 60, Acceleration ≥ 70
+                    - **Emerging Patterns:** Within 5% of qualifying threshold
+                    - **Volume Surges:** RVOL ≥ 3.0x (extreme volumes only)
+                    - **Acceleration Alerts:** Score ≥ 85 (strongest signals)
+                    - **Pattern Distance:** 5% from qualification
+                    """)
+                elif sensitivity == "Balanced":
+                    st.markdown("""
+                    **Balanced Settings** ⚖️
+                    - **Momentum Shifts:** Score ≥ 50, Acceleration ≥ 60
+                    - **Emerging Patterns:** Within 10% of qualifying threshold
+                    - **Volume Surges:** RVOL ≥ 2.0x (standard threshold)
+                    - **Acceleration Alerts:** Score ≥ 70 (good acceleration)
+                    - **Pattern Distance:** 10% from qualification
+                    """)
+                else:  # Aggressive
+                    st.markdown("""
+                    **Aggressive Settings** 🚀
+                    - **Momentum Shifts:** Score ≥ 40, Acceleration ≥ 50
+                    - **Emerging Patterns:** Within 15% of qualifying threshold
+                    - **Volume Surges:** RVOL ≥ 1.5x (building volume)
+                    - **Acceleration Alerts:** Score ≥ 60 (early signals)
+                    - **Pattern Distance:** 15% from qualification
+                    """)
+                
+                st.info("💡 **Tip**: Start with Balanced, then adjust based on market conditions and your risk tolerance.")
         
         # Apply timeframe filtering
         if wave_timeframe != "All Waves":
@@ -3309,10 +3377,49 @@ def main():
                 multi_signal = len(top_shifts[top_shifts['signal_count'] >= 3])
                 if multi_signal > 0:
                     st.success(f"🏆 Found {multi_signal} stocks with 3+ signals (strongest momentum)")
+                
+                # Show stocks with 4+ signals separately
+                super_signals = top_shifts[top_shifts['signal_count'] >= 4]
+                if len(super_signals) > 0:
+                    st.warning(f"🔥🔥 {len(super_signals)} stocks showing EXTREME momentum (4+ signals)!")
             else:
                 st.info(f"No momentum shifts detected in {wave_timeframe} timeframe. Try 'Aggressive' sensitivity.")
             
-            # 2. CATEGORY ROTATION FLOW
+            # 2. ACCELERATION PROFILES
+            st.markdown("#### 🚀 Acceleration Profiles - Momentum Building Over Time")
+            
+            # Get accelerating stocks based on sensitivity
+            if sensitivity == "Conservative":
+                accel_threshold = 85
+            elif sensitivity == "Balanced":
+                accel_threshold = 70
+            else:  # Aggressive
+                accel_threshold = 60
+            
+            accelerating_stocks = wave_filtered_df[
+                wave_filtered_df['acceleration_score'] >= accel_threshold
+            ].nlargest(10, 'acceleration_score')
+            
+            if len(accelerating_stocks) > 0:
+                # Create acceleration profiles chart
+                fig_accel = Visualizer.create_acceleration_profiles(accelerating_stocks, n=10)
+                st.plotly_chart(fig_accel, use_container_width=True)
+                
+                # Summary stats
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    perfect_accel = len(accelerating_stocks[accelerating_stocks['acceleration_score'] >= 90])
+                    st.metric("Perfect Acceleration (90+)", perfect_accel)
+                with col2:
+                    strong_accel = len(accelerating_stocks[accelerating_stocks['acceleration_score'] >= 80])
+                    st.metric("Strong Acceleration (80+)", strong_accel)
+                with col3:
+                    avg_accel = accelerating_stocks['acceleration_score'].mean()
+                    st.metric("Avg Acceleration Score", f"{avg_accel:.1f}")
+            else:
+                st.info(f"No stocks meet the acceleration threshold ({accel_threshold}+) for {sensitivity} sensitivity.")
+            
+            # 3. CATEGORY ROTATION FLOW
             if show_market_regime:
                 st.markdown("#### 💰 Category Rotation - Smart Money Flow")
                 
@@ -3413,7 +3520,7 @@ def main():
                     else:
                         st.info("Category data not available")
             
-            # 3. EMERGING PATTERNS
+            # 4. EMERGING PATTERNS
             st.markdown("#### 🎯 Emerging Patterns - About to Qualify")
             
             # Set pattern distance based on sensitivity
@@ -3463,7 +3570,7 @@ def main():
             else:
                 st.info(f"No patterns emerging within {pattern_distance}% threshold.")
             
-            # 4. VOLUME SURGE DETECTION
+            # 5. VOLUME SURGE DETECTION
             st.markdown("#### 🌊 Volume Surges - Unusual Activity NOW")
             
             # Set RVOL threshold based on sensitivity
@@ -3525,6 +3632,14 @@ def main():
                     UIComponents.render_metric_card("Active Surges", len(volume_surges))
                     UIComponents.render_metric_card("Extreme (>5x)", len(volume_surges[volume_surges['rvol'] > 5]))
                     UIComponents.render_metric_card("High (>3x)", len(volume_surges[volume_surges['rvol'] > 3]))
+                    
+                    # Surge distribution by category
+                    if 'category' in volume_surges.columns:
+                        st.markdown("**📊 Surge by Category:**")
+                        surge_categories = volume_surges['category'].value_counts()
+                        if len(surge_categories) > 0:
+                            for cat, count in surge_categories.head(3).items():
+                                st.caption(f"• {cat}: {count} stocks")
             else:
                 st.info(f"No volume surges detected with {sensitivity} sensitivity (requires RVOL ≥ {rvol_threshold}x).")
         
@@ -3611,6 +3726,37 @@ def main():
                     st.plotly_chart(fig_patterns, use_container_width=True)
                 else:
                     st.info("No patterns detected in current selection")
+            
+            # Sector Performance Scatter Plot
+            st.markdown("---")
+            st.markdown("#### 🎯 Sector Performance Scatter Analysis")
+            
+            fig_sector_scatter = Visualizer.create_sector_performance_scatter(filtered_df)
+            if fig_sector_scatter.data:
+                st.plotly_chart(fig_sector_scatter, use_container_width=True)
+                
+                # Explanation
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.info(
+                        "**📊 How to interpret:**\n"
+                        "- **Position**: Shows sector strength vs market position\n"
+                        "- **Size**: Larger bubbles = more stocks in sector\n"
+                        "- **Color**: Darker = higher average RVOL\n"
+                        "- **Quadrants**: Leaders (top-right), Hidden Gems (top-left)"
+                    )
+                with col2:
+                    st.success(
+                        "**💡 Trading insights:**\n"
+                        "- **Leaders**: Strong sectors with high rankings\n"
+                        "- **Hidden Gems**: Strong performance, lower visibility\n"
+                        "- **Overvalued**: Popular but weak performance\n"
+                        "- **Laggards**: Weak in both dimensions"
+                    )
+            else:
+                st.info("Need more data for sector scatter analysis")
+            
+            st.markdown("---")
             
             # Sector performance
             st.markdown("#### Sector Performance (Top 25 Stocks per Sector)")
