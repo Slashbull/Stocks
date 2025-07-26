@@ -1,13 +1,13 @@
 """
-Wave Detection Ultimate 3.0 - FINAL PERFECTED VERSION
-=====================================================
+Wave Detection Ultimate 3.0 - FINAL ENHANCED VERSION
+===================================================
 Professional Stock Ranking System with Advanced Analytics
 All bugs fixed, optimized for Streamlit Community Cloud
-Enhanced with smart filters, improved search, and clean UI
+Enhanced with all valuable features from previous versions
 
-Version: 3.0.5-PRODUCTION-BUGFREE
+Version: 3.0.7-FINAL-COMPLETE
 Last Updated: December 2024
-Status: PRODUCTION READY - All Bugs Fixed
+Status: PRODUCTION READY - Feature Complete
 """
 
 import streamlit as st
@@ -83,14 +83,20 @@ class Config:
         "market_leader": 95,
         "momentum_wave": 75,
         "liquid_leader": 80,
-        "long_strength": 80
+        "long_strength": 80,
+        "52w_high_approach": 90,
+        "52w_low_bounce": 85,
+        "golden_zone": 85,
+        "vol_accumulation": 80,
+        "momentum_diverge": 90,
+        "range_compress": 75,
     })
     
     # Tier definitions
     TIERS: Dict[str, Dict[str, Tuple[float, float]]] = field(default_factory=lambda: {
         "eps": {
             "Loss": (-float('inf'), 0),
-            "0-5": (0.01, 5),  # Fixed boundary overlap
+            "0-5": (0.01, 5),
             "5-10": (5.01, 10),
             "10-20": (10.01, 20),
             "20-50": (20.01, 50),
@@ -213,36 +219,48 @@ class DataValidator:
         return series
 
 # ============================================
-# SMART CACHING FOR DATA LOADING
+# SMART CACHING FOR DATA LOADING - ENHANCED
 # ============================================
 
 @st.cache_data(ttl=CONFIG.CACHE_TTL, show_spinner=False)
-def load_and_process_data(sheet_url: str, gid: str) -> Tuple[pd.DataFrame, datetime]:
-    """Load and process data with smart caching - filters remain live"""
+def load_and_process_data(source_type: str = "sheet", file_data=None, sheet_url: str = None, gid: str = None) -> Tuple[pd.DataFrame, datetime]:
+    """Load and process data with smart caching - supports both Google Sheets and CSV upload"""
     try:
         # Record start time
         start_time = time.perf_counter()
         
-        # Validate inputs
-        if not sheet_url or not gid:
-            raise ValueError("Sheet URL and GID are required")
-        
-        # Construct CSV URL
-        base_url = sheet_url.split('/edit')[0]
-        csv_url = f"{base_url}/export?format=csv&gid={gid}"
-        
-        logger.info(f"Loading data from Google Sheets")
-        
-        # Load with timeout and error handling
-        try:
-            df = pd.read_csv(csv_url, low_memory=False)
-        except Exception as e:
-            logger.error(f"Failed to load from Google Sheets: {str(e)}")
-            # Fallback to cached data if available
-            if 'last_good_data' in st.session_state:
-                logger.info("Using cached data as fallback")
-                return st.session_state.last_good_data
-            raise
+        if source_type == "upload" and file_data is not None:
+            # Load from uploaded file
+            logger.info("Loading data from uploaded CSV")
+            df = pd.read_csv(file_data)
+            logger.info(f"Successfully loaded {len(df)} rows from uploaded CSV")
+        else:
+            # Load from Google Sheets
+            # Validate inputs
+            if not sheet_url:
+                sheet_url = CONFIG.DEFAULT_SHEET_URL
+            if not gid:
+                gid = CONFIG.DEFAULT_GID
+                
+            if not sheet_url or not gid:
+                raise ValueError("Sheet URL and GID are required")
+            
+            # Construct CSV URL
+            base_url = sheet_url.split('/edit')[0]
+            csv_url = f"{base_url}/export?format=csv&gid={gid}"
+            
+            logger.info(f"Loading data from Google Sheets")
+            
+            # Load with timeout and error handling
+            try:
+                df = pd.read_csv(csv_url, low_memory=False)
+            except Exception as e:
+                logger.error(f"Failed to load from Google Sheets: {str(e)}")
+                # Fallback to cached data if available
+                if 'last_good_data' in st.session_state:
+                    logger.info("Using cached data as fallback")
+                    return st.session_state.last_good_data
+                raise
         
         if df.empty:
             raise ValueError("Loaded empty dataframe")
@@ -1202,6 +1220,74 @@ class RankingEngine:
             extreme_pe_mask = has_valid_pe & (df['pe'] > 100)
             patterns_list.append((extreme_pe_mask, '⚠️ HIGH PE'))
         
+        # ============================================
+        # ADD THESE NEW PATTERNS AFTER EXISTING ONES
+        # ============================================
+
+        # 17. 52W High Approach - VERY RELIABLE
+        if 'from_high_pct' in df.columns and 'volume_score' in df.columns and 'momentum_score' in df.columns:
+            high_approach_mask = (
+                (df['from_high_pct'] > -5) & 
+                (df['volume_score'] >= 70) & 
+                (df['momentum_score'] >= 60)
+            )
+            patterns_list.append((high_approach_mask, '🎯 52W HIGH APPROACH'))
+
+        # 18. 52W Low Bounce - REVERSAL PLAY
+        if all(col in df.columns for col in ['from_low_pct', 'acceleration_score', 'ret_30d']):
+            low_bounce_mask = (
+                (df['from_low_pct'] < 20) & 
+                (df['acceleration_score'] >= 80) & 
+                (df['ret_30d'] > 10)
+            )
+            patterns_list.append((low_bounce_mask, '🔄 52W LOW BOUNCE'))
+
+        # 19. Golden Zone - OPTIMAL RANGE
+        if all(col in df.columns for col in ['from_low_pct', 'from_high_pct', 'trend_quality']):
+            golden_zone_mask = (
+                (df['from_low_pct'] > 60) & 
+                (df['from_high_pct'] > -40) & 
+                (df['trend_quality'] >= 70)
+            )
+            patterns_list.append((golden_zone_mask, '👑 GOLDEN ZONE'))
+
+        # 20. Volume Accumulation - SMART MONEY
+        if all(col in df.columns for col in ['vol_ratio_30d_90d', 'vol_ratio_90d_180d', 'ret_30d']):
+            vol_accum_mask = (
+                (df['vol_ratio_30d_90d'] > 1.2) & 
+                (df['vol_ratio_90d_180d'] > 1.1) & 
+                (df['ret_30d'] > 5)
+            )
+            patterns_list.append((vol_accum_mask, '📊 VOL ACCUMULATION'))
+
+        # 21. Momentum Divergence - ACCELERATION
+        if all(col in df.columns for col in ['ret_7d', 'ret_30d', 'acceleration_score', 'rvol']):
+            # Calculate daily pace safely
+            with np.errstate(divide='ignore', invalid='ignore'):
+                daily_7d_pace = df['ret_7d'] / 7
+                daily_30d_pace = df['ret_30d'] / 30
+                
+            divergence_mask = (
+                (daily_7d_pace > daily_30d_pace * 1.5) & 
+                (df['acceleration_score'] >= 85) & 
+                (df['rvol'] > 2)
+            )
+            divergence_mask = divergence_mask.fillna(False)
+            patterns_list.append((divergence_mask, '🔀 MOMENTUM DIVERGE'))
+
+        # 22. Range Compression - BREAKOUT SETUP
+        if all(col in df.columns for col in ['high_52w', 'low_52w', 'from_low_pct']):
+            # Calculate range safely
+            with np.errstate(divide='ignore', invalid='ignore'):
+                range_pct = ((df['high_52w'] - df['low_52w']) / df['low_52w']) * 100
+                range_pct = range_pct.fillna(100)  # Default to 100 if calculation fails
+                
+            compression_mask = (
+                (range_pct < 50) & 
+                (df['from_low_pct'] > 30)
+            )
+            patterns_list.append((compression_mask, '🎯 RANGE COMPRESS'))
+        
         # Efficiently combine all patterns
         for mask, pattern_name in patterns_list:
             df.loc[mask, 'patterns'] = df.loc[mask, 'patterns'].apply(
@@ -1979,6 +2065,8 @@ def main():
             'display_mode': 'Technical',
             'last_filters': {}
         }
+    if 'data_source' not in st.session_state:
+        st.session_state.data_source = "sheet"
     
     # Sidebar configuration
     with st.sidebar:
@@ -1999,6 +2087,27 @@ def main():
                 time.sleep(0.5)
                 st.rerun()
         
+        # Data source selection - ENHANCED
+        st.markdown("---")
+        st.markdown("### 📂 Data Source")
+        data_source = st.radio(
+            "Choose data source:",
+            ["Google Sheets", "Upload CSV"],
+            index=0 if st.session_state.data_source == "sheet" else 1,
+            help="Load data from Google Sheets or upload your own CSV file"
+        )
+        st.session_state.data_source = "sheet" if data_source == "Google Sheets" else "upload"
+        
+        uploaded_file = None
+        if st.session_state.data_source == "upload":
+            uploaded_file = st.file_uploader(
+                "Choose CSV file", 
+                type="csv",
+                help="Upload a CSV file with stock data. Must contain 'ticker' and 'price' columns."
+            )
+            if uploaded_file is None:
+                st.info("Please upload a CSV file to continue")
+        
         # Data quality indicator
         if 'data_quality' in st.session_state:
             with st.expander("📊 Data Quality", expanded=True):
@@ -2016,6 +2125,19 @@ def main():
                 # Last update time
                 if 'data_timestamp' in st.session_state:
                     st.caption(f"Data loaded: {st.session_state.data_timestamp.strftime('%I:%M %p')}")
+        
+        # Performance metrics - ENHANCED
+        if 'performance_metrics' in st.session_state and st.session_state.performance_metrics:
+            with st.expander("⚡ Performance Stats"):
+                perf = st.session_state.performance_metrics
+                
+                total_time = sum(perf.values())
+                st.metric("Total Load Time", f"{total_time:.2f}s")
+                
+                # Show slowest operations
+                slowest = sorted(perf.items(), key=lambda x: x[1], reverse=True)[:3]
+                for func_name, elapsed in slowest:
+                    st.caption(f"{func_name}: {elapsed:.2f}s")
         
         st.markdown("---")
         st.markdown("### 🔍 Smart Filters")
@@ -2147,25 +2269,20 @@ def main():
             st.success("✅ All filters cleared!")
             st.rerun()
         
-        # Performance metrics (if available)
-        if 'performance_metrics' in st.session_state:
-            with st.expander("⚡ Performance Stats"):
-                perf = st.session_state.performance_metrics
-                
-                total_time = sum(perf.values())
-                st.metric("Total Load Time", f"{total_time:.2f}s")
-                
-                # Show slowest operations
-                slowest = sorted(perf.items(), key=lambda x: x[1], reverse=True)[:3]
-                for func_name, elapsed in slowest:
-                    st.caption(f"{func_name}: {elapsed:.2f}s")
-        
-        # Debug checkbox at the bottom of sidebar
+        # Debug checkbox at the bottom of sidebar - ENHANCED
         st.markdown("---")
         show_debug = st.checkbox("🐛 Show Debug Info", value=st.session_state.get('show_debug', False), key="show_debug")
     
     # Data loading and processing with smart caching
     try:
+        # Check if we need to load data
+        should_load_data = True
+        
+        if st.session_state.data_source == "upload" and uploaded_file is None:
+            should_load_data = False
+            st.warning("Please upload a CSV file to continue")
+            st.stop()
+        
         # Check if we have cached data
         if 'ranked_df' in st.session_state and (datetime.now() - st.session_state.last_refresh).seconds < 3600:
             # Use cached data
@@ -2175,7 +2292,11 @@ def main():
             # Load and process data with caching
             with st.spinner("📥 Loading and processing data..."):
                 try:
-                    ranked_df, data_timestamp = load_and_process_data(CONFIG.DEFAULT_SHEET_URL, CONFIG.DEFAULT_GID)
+                    if st.session_state.data_source == "upload" and uploaded_file is not None:
+                        ranked_df, data_timestamp = load_and_process_data("upload", file_data=uploaded_file)
+                    else:
+                        ranked_df, data_timestamp = load_and_process_data("sheet", sheet_url=CONFIG.DEFAULT_SHEET_URL, gid=CONFIG.DEFAULT_GID)
+                    
                     st.session_state.ranked_df = ranked_df
                     st.session_state.data_timestamp = data_timestamp
                     st.session_state.last_refresh = datetime.now()
@@ -2195,7 +2316,7 @@ def main():
         st.error(f"❌ Error: {str(e)}")
         with st.expander("🔍 Error Details"):
             st.code(str(e))
-            st.info("Common issues:\n- Network connectivity\n- Google Sheets permissions\n- Data format issues")
+            st.info("Common issues:\n- Network connectivity\n- Google Sheets permissions\n- Data format issues\n- Invalid CSV structure")
         st.stop()
     
     # Quick Action Buttons (Top of page)
@@ -2482,9 +2603,9 @@ def main():
     # Save current filters to preferences
     st.session_state.user_preferences['last_filters'] = filters
     
-    # Debug filter information
+    # Debug filter information - ENHANCED
     if show_debug:
-        with st.sidebar.expander("Filter Debug Info", expanded=True):
+        with st.sidebar.expander("🐛 Filter Debug Info", expanded=True):
             st.write("**Active Filters:**")
             
             # Show active filters with actual values
@@ -2508,7 +2629,7 @@ def main():
                 active_filters.append(f"Min Score: ≥{filters['min_score']}")
             if filters.get('patterns', []):
                 active_filters.append(f"Patterns: {', '.join(filters['patterns'][:3])}{'...' if len(filters['patterns']) > 3 else ''}")
-            if filters.get('trend_range', 'All') != 'All' and filters.get('trend_filter') != 'All Trends':
+            if filters.get('trend_filter') != 'All Trends':
                 active_filters.append(f"Trend: {filters['trend_filter']}")
             if filters.get('eps_tiers', []):
                 active_filters.append(f"EPS Tiers: {', '.join(filters['eps_tiers'])}")
@@ -2536,6 +2657,22 @@ def main():
             st.write(f"Before: {len(ranked_df)} stocks")
             st.write(f"After: {len(filtered_df)} stocks")
             st.write(f"Filtered: {len(ranked_df) - len(filtered_df)} stocks ({(len(ranked_df) - len(filtered_df))/len(ranked_df)*100:.1f}%)")
+            
+            # Additional debug info
+            st.write(f"\n**Data Source:**")
+            st.write(f"Type: {st.session_state.data_source}")
+            if st.session_state.data_source == "upload":
+                st.write(f"File: {uploaded_file.name if uploaded_file else 'None'}")
+            else:
+                st.write(f"Sheet: Google Sheets")
+            
+            # Data quality debug
+            if st.session_state.get('data_quality'):
+                st.write(f"\n**Data Quality Metrics:**")
+                quality = st.session_state.data_quality
+                st.write(f"• Completeness: {quality.get('completeness', 0):.1f}%")
+                st.write(f"• Freshness: {quality.get('freshness', 0):.1f}%")
+                st.write(f"• Volume Coverage: {quality.get('volume_coverage', 0):.1f}%")
     
     # Main content area
     # Show filter status if any filters are active
@@ -2664,11 +2801,360 @@ def main():
     
     # Main tabs
     tabs = st.tabs([
-        "🏆 Rankings", "🌊 Wave Radar", "📊 Analysis", "🔍 Search", "📥 Export", "ℹ️ About"
+        "📊 Summary", "🏆 Rankings", "🌊 Wave Radar", "📊 Analysis", "🔍 Search", "📥 Export", "ℹ️ About"
     ])
     
-    # Tab 1: Rankings
+    # Tab 0: Summary - ENHANCED VERSION WITH ALL FEATURES
     with tabs[0]:
+        st.markdown("### 📊 Executive Summary Dashboard")
+        
+        if not filtered_df.empty:
+            # 1. MARKET PULSE METRICS
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                # Trend Distribution
+                strong_up = len(filtered_df[filtered_df['trend_quality'] >= 80])
+                good_up = len(filtered_df[(filtered_df['trend_quality'] >= 60) & (filtered_df['trend_quality'] < 80)])
+                neutral = len(filtered_df[(filtered_df['trend_quality'] >= 40) & (filtered_df['trend_quality'] < 60)])
+                weak_down = len(filtered_df[filtered_df['trend_quality'] < 40])
+                
+                total_uptrend = strong_up + good_up
+                total_stocks = len(filtered_df)
+                uptrend_pct = (total_uptrend / total_stocks * 100) if total_stocks > 0 else 0
+                
+                st.metric(
+                    "Market Breadth",
+                    f"{total_uptrend}/{total_stocks}",
+                    f"{uptrend_pct:.0f}% in uptrend"
+                )
+            
+            with col2:
+                # Average Score
+                avg_score = filtered_df['master_score'].mean()
+                median_score = filtered_df['master_score'].median()
+                st.metric(
+                    "Avg Master Score",
+                    f"{avg_score:.1f}",
+                    f"Median: {median_score:.1f}"
+                )
+            
+            with col3:
+                # High Momentum Count
+                high_momentum = len(filtered_df[filtered_df['momentum_score'] >= 70])
+                momentum_pct = (high_momentum / total_stocks * 100) if total_stocks > 0 else 0
+                st.metric(
+                    "High Momentum",
+                    f"{high_momentum}",
+                    f"{momentum_pct:.0f}% of stocks"
+                )
+            
+            with col4:
+                # Market Regime
+                if strong_up > weak_down:
+                    regime = "🔥 BULLISH"
+                    regime_color = "inverse"
+                elif weak_down > strong_up:
+                    regime = "❄️ BEARISH"
+                    regime_color = "normal"
+                else:
+                    regime = "➡️ NEUTRAL"
+                    regime_color = "off"
+                
+                st.metric(
+                    "Market Regime",
+                    regime,
+                    f"Score: {strong_up - weak_down}",
+                    delta_color=regime_color
+                )
+            
+            # 2. TREND BREAKDOWN
+            st.markdown("#### 📈 Trend Analysis")
+            
+            trend_col1, trend_col2 = st.columns([2, 1])
+            
+            with trend_col1:
+                # Trend distribution chart
+                trend_data = pd.DataFrame({
+                    'Trend': ['🔥 Strong Up', '✅ Good Up', '➡️ Neutral', '⚠️ Weak/Down'],
+                    'Count': [strong_up, good_up, neutral, weak_down],
+                    'Percentage': [
+                        strong_up/total_stocks*100,
+                        good_up/total_stocks*100,
+                        neutral/total_stocks*100,
+                        weak_down/total_stocks*100
+                    ]
+                })
+                
+                fig_trend = px.bar(
+                    trend_data,
+                    x='Count',
+                    y='Trend',
+                    orientation='h',
+                    text='Count',
+                    title='Trend Distribution',
+                    color='Trend',
+                    color_discrete_map={
+                        '🔥 Strong Up': '#2ecc71',
+                        '✅ Good Up': '#3498db',
+                        '➡️ Neutral': '#f39c12',
+                        '⚠️ Weak/Down': '#e74c3c'
+                    }
+                )
+                fig_trend.update_layout(
+                    height=300,
+                    showlegend=False,
+                    template='plotly_white'
+                )
+                st.plotly_chart(fig_trend, use_container_width=True)
+            
+            with trend_col2:
+                # Trend Leaders
+                st.markdown("**🏆 Trend Leaders**")
+                
+                # Strong uptrend leaders
+                strong_leaders = filtered_df[filtered_df['trend_quality'] >= 80].nlargest(5, 'master_score')
+                if len(strong_leaders) > 0:
+                    st.markdown("**🔥 Strong Uptrend:**")
+                    for _, stock in strong_leaders.iterrows():
+                        st.write(f"• {stock['ticker']} ({stock['master_score']:.1f})")
+                
+                # Pattern count stats
+                st.markdown("**📊 Pattern Stats**")
+                multi_pattern = len(filtered_df[filtered_df['patterns'].str.count('\\|') >= 2])
+                st.write(f"• Multi-Pattern: {multi_pattern}")
+                
+                high_rvol = len(filtered_df[filtered_df['rvol'] > 3])
+                st.write(f"• High RVOL (>3x): {high_rvol}")
+            
+            # 3. TOP OPPORTUNITIES
+            st.markdown("#### 🎯 Today's Best Opportunities")
+            
+            opp_col1, opp_col2, opp_col3 = st.columns(3)
+            
+            with opp_col1:
+                # Strong Trend + Breakout
+                strong_breakout = filtered_df[
+                    (filtered_df['trend_quality'] >= 80) & 
+                    (filtered_df['breakout_score'] >= 80)
+                ].nlargest(5, 'master_score')
+                
+                st.markdown("**🚀 Trend + Breakout**")
+                if len(strong_breakout) > 0:
+                    for _, stock in strong_breakout.iterrows():
+                        st.write(f"• {stock['ticker']} - {stock['company_name'][:20]}")
+                        st.caption(f"  Score: {stock['master_score']:.1f} | Trend: {stock['trend_quality']:.0f}")
+                else:
+                    st.info("No stocks match criteria")
+            
+            with opp_col2:
+                # New Pattern: 52W High Approach
+                if '52W HIGH APPROACH' in filtered_df['patterns'].str.cat():
+                    high_approach = filtered_df[
+                        filtered_df['patterns'].str.contains('52W HIGH APPROACH', na=False)
+                    ].nlargest(5, 'master_score')
+                    
+                    st.markdown("**🎯 Near 52W High**")
+                    if len(high_approach) > 0:
+                        for _, stock in high_approach.iterrows():
+                            st.write(f"• {stock['ticker']} - {stock['company_name'][:20]}")
+                            st.caption(f"  From High: {stock['from_high_pct']:.1f}%")
+                    else:
+                        st.info("No stocks near 52W high")
+                else:
+                    st.info("No 52W High Approach patterns")
+            
+            with opp_col3:
+                # Volume Accumulation
+                if 'VOL ACCUMULATION' in filtered_df['patterns'].str.cat():
+                    vol_accum = filtered_df[
+                        filtered_df['patterns'].str.contains('VOL ACCUMULATION', na=False)
+                    ].nlargest(5, 'master_score')
+                    
+                    st.markdown("**📊 Volume Accumulation**")
+                    if len(vol_accum) > 0:
+                        for _, stock in vol_accum.iterrows():
+                            st.write(f"• {stock['ticker']} - {stock['company_name'][:20]}")
+                            st.caption(f"  RVOL: {stock['rvol']:.1f}x")
+                    else:
+                        st.info("No volume accumulation")
+                else:
+                    st.info("No volume accumulation patterns")
+            
+            # 4. RISK INDICATORS - ENHANCED
+            st.markdown("#### ⚠️ Risk Indicators")
+            
+            risk_cols = st.columns(4)
+            
+            with risk_cols[0]:
+                # Overextended stocks
+                if 'from_high_pct' in filtered_df.columns and 'momentum_score' in filtered_df.columns:
+                    at_highs_risky = len(filtered_df[
+                        (filtered_df['from_high_pct'] >= 0) & 
+                        (filtered_df['momentum_score'] < 50)
+                    ])
+                    st.metric("Overextended", f"{at_highs_risky}", "At high, low momentum")
+                else:
+                    st.metric("Overextended", "N/A")
+            
+            with risk_cols[1]:
+                # Extreme RVOL (pump risk)
+                if 'rvol' in filtered_df.columns and 'master_score' in filtered_df.columns:
+                    extreme_rvol_risky = len(filtered_df[
+                        (filtered_df['rvol'] > 10) & 
+                        (filtered_df['master_score'] < 50)
+                    ])
+                    st.metric("Pump Risk", f"{extreme_rvol_risky}", "High RVOL, low score")
+                else:
+                    st.metric("Pump Risk", "N/A")
+            
+            with risk_cols[2]:
+                # Downtrend count
+                if 'trend_quality' in filtered_df.columns:
+                    downtrend = len(filtered_df[filtered_df['trend_quality'] < 40])
+                    st.metric("Downtrends", f"{downtrend}")
+                else:
+                    st.metric("Downtrends", "N/A")
+            
+            with risk_cols[3]:
+                # Overall risk score
+                risk_factors = 0
+                if 'at_highs_risky' in locals() and at_highs_risky > 20: 
+                    risk_factors += 1
+                if 'downtrend' in locals() and downtrend > total_stocks * 0.3: 
+                    risk_factors += 1
+                if 'extreme_rvol_risky' in locals() and extreme_rvol_risky > 10: 
+                    risk_factors += 1
+                
+                risk_level = ["LOW", "MODERATE", "HIGH", "EXTREME"][min(risk_factors, 3)]
+                risk_color = ["🟢", "🟡", "🟠", "🔴"][min(risk_factors, 3)]
+                
+                st.metric("Risk Level", f"{risk_color} {risk_level}", f"{risk_factors} factors")
+            
+            # 5. KEY INSIGHTS
+            st.markdown("#### 💡 Key Market Insights")
+            
+            insights = []
+            
+            # Trend insight
+            if uptrend_pct > 60:
+                insights.append(f"🔥 {uptrend_pct:.0f}% stocks in uptrend - STRONG BULL MARKET!")
+            elif uptrend_pct < 40:
+                insights.append(f"⚠️ Only {uptrend_pct:.0f}% in uptrend - DEFENSIVE MARKET")
+            
+            # Momentum insight
+            if high_momentum > 100:
+                insights.append(f"⚡ {high_momentum} stocks with high momentum - ACTIVE MARKET!")
+            
+            # Pattern insights
+            if multi_pattern > 20:
+                insights.append(f"💎 {multi_pattern} stocks showing multiple patterns - OPPORTUNITIES ABOUND!")
+            
+            # New pattern insights
+            new_patterns_count = 0
+            for pattern in ['52W HIGH APPROACH', '52W LOW BOUNCE', 'GOLDEN ZONE', 'VOL ACCUMULATION']:
+                if pattern in filtered_df['patterns'].str.cat():
+                    new_patterns_count += len(filtered_df[filtered_df['patterns'].str.contains(pattern, na=False)])
+            
+            if new_patterns_count > 10:
+                insights.append(f"🎯 {new_patterns_count} stocks with new advanced patterns detected!")
+            
+            # Display insights
+            for insight in insights:
+                st.info(insight)
+            
+            # 6. DOWNLOAD CLEAN DATA SECTION - ENHANCED
+            st.markdown("---")
+            st.markdown("#### 💾 Download Clean Processed Data")
+            
+            download_cols = st.columns(3)
+            
+            with download_cols[0]:
+                # Download filtered data
+                st.markdown("**📊 Current View Data**")
+                st.write(f"Includes {len(filtered_df)} stocks matching current filters")
+                
+                csv_filtered = ExportEngine.create_csv_export(filtered_df)
+                st.download_button(
+                    label="📥 Download Filtered Data (CSV)",
+                    data=csv_filtered,
+                    file_name=f"wave_detection_filtered_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    help="Download currently filtered stocks with all scores and indicators"
+                )
+            
+            with download_cols[1]:
+                # Download top 100
+                st.markdown("**🏆 Top 100 Stocks**")
+                st.write("Elite stocks ranked by Master Score")
+                
+                top_100 = filtered_df.nlargest(100, 'master_score')
+                csv_top100 = ExportEngine.create_csv_export(top_100)
+                st.download_button(
+                    label="📥 Download Top 100 (CSV)",
+                    data=csv_top100,
+                    file_name=f"wave_detection_top100_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    help="Download top 100 stocks by Master Score"
+                )
+            
+            with download_cols[2]:
+                # Download patterns only
+                st.markdown("**🎯 Pattern Stocks Only**")
+                pattern_stocks = filtered_df[filtered_df['patterns'] != '']
+                st.write(f"Includes {len(pattern_stocks)} stocks with patterns")
+                
+                if len(pattern_stocks) > 0:
+                    csv_patterns = ExportEngine.create_csv_export(pattern_stocks)
+                    st.download_button(
+                        label="📥 Download Pattern Stocks (CSV)",
+                        data=csv_patterns,
+                        file_name=f"wave_detection_patterns_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        help="Download only stocks showing patterns"
+                    )
+                else:
+                    st.info("No stocks with patterns in current filter")
+            
+            # 7. QUICK STATS TABLE
+            st.markdown("---")
+            st.markdown("#### 📊 Quick Statistics")
+            
+            # Create comprehensive stats
+            stats_col1, stats_col2, stats_col3, stats_col4 = st.columns(4)
+            
+            with stats_col1:
+                st.markdown("**Returns**")
+                positive_1d = len(filtered_df[filtered_df['ret_1d'] > 0])
+                positive_30d = len(filtered_df[filtered_df['ret_30d'] > 0])
+                st.write(f"1D Positive: {positive_1d}")
+                st.write(f"30D Positive: {positive_30d}")
+            
+            with stats_col2:
+                st.markdown("**Volume**")
+                avg_rvol = filtered_df['rvol'].mean()
+                high_vol = len(filtered_df[filtered_df['rvol'] > 2])
+                st.write(f"Avg RVOL: {avg_rvol:.2f}x")
+                st.write(f"High Vol (>2x): {high_vol}")
+            
+            with stats_col3:
+                st.markdown("**Categories**")
+                top_cat = filtered_df['category'].value_counts().head(2)
+                for cat, count in top_cat.items():
+                    st.write(f"{cat}: {count}")
+            
+            with stats_col4:
+                st.markdown("**Patterns**")
+                total_patterns = filtered_df['patterns'].str.count('\\|').sum() + len(filtered_df[filtered_df['patterns'] != ''])
+                avg_patterns = total_patterns / len(filtered_df) if len(filtered_df) > 0 else 0
+                st.write(f"Total: {total_patterns}")
+                st.write(f"Avg/Stock: {avg_patterns:.1f}")
+        
+        else:
+            st.warning("No data available for summary. Please adjust filters.")
+    
+    # Tab 1: Rankings
+    with tabs[1]:
         st.markdown("### 🏆 Top Ranked Stocks")
         
         # Display options
@@ -2929,7 +3415,7 @@ def main():
             st.warning("No stocks match the selected filters.")
     
     # Tab 2: Wave Radar
-    with tabs[1]:
+    with tabs[2]:
         st.markdown("### 🌊 Wave Radar - Early Momentum Detection System")
         st.markdown("*Catch waves as they form, not after they've peaked!*")
         
@@ -3698,7 +4184,7 @@ def main():
             st.warning(f"No data available for Wave Radar analysis with {wave_timeframe} timeframe.")
     
     # Tab 3: Analysis
-    with tabs[2]:
+    with tabs[3]:
         st.markdown("### 📊 Market Analysis")
         
         if not filtered_df.empty:
@@ -3810,7 +4296,7 @@ def main():
             st.info("No data available for analysis.")
     
     # Tab 4: Search
-    with tabs[3]:
+    with tabs[4]:
         st.markdown("### 🔍 Advanced Stock Search")
         
         # Search interface
@@ -4106,7 +4592,7 @@ def main():
                 st.warning("No stocks found matching your search criteria.")
     
     # Tab 5: Export
-    with tabs[4]:
+    with tabs[5]:
         st.markdown("### 📥 Export Data")
         
         # Export template selection
@@ -4219,8 +4705,8 @@ def main():
             with stat_cols[i % 3]:
                 st.metric(label, value)
     
-    # Tab 6: About
-    with tabs[5]:
+    # Tab 6: About - ENHANCED WITH COMPLETE PATTERN DOCUMENTATION
+    with tabs[6]:
         st.markdown("### ℹ️ About Wave Detection Ultimate 3.0")
         
         col1, col2 = st.columns([2, 1])
@@ -4258,12 +4744,14 @@ def main():
             
             #### 💡 How to Use
             
-            1. **Quick Actions** - Use buttons for instant insights
-            2. **Rankings Tab** - View top-ranked stocks with comprehensive metrics
-            3. **Wave Radar** - Monitor early momentum signals and market shifts
-            4. **Analysis Tab** - Deep dive into market sectors and patterns
-            5. **Search Tab** - Find specific stocks with detailed analysis
-            6. **Export Tab** - Download data for further analysis
+            1. **Data Source** - Choose between Google Sheets or upload your CSV
+            2. **Summary Tab** - Executive dashboard with market overview
+            3. **Quick Actions** - Use buttons for instant insights
+            4. **Rankings Tab** - View top-ranked stocks with comprehensive metrics
+            5. **Wave Radar** - Monitor early momentum signals and market shifts
+            6. **Analysis Tab** - Deep dive into market sectors and patterns
+            7. **Search Tab** - Find specific stocks with detailed analysis
+            8. **Export Tab** - Download data for further analysis
             
             #### 🔧 Pro Tips
             
@@ -4272,19 +4760,39 @@ def main():
             - Watch for stocks with multiple pattern detections
             - Monitor Wave Radar for early entry opportunities
             - Export data regularly for historical tracking
+            - Use CSV upload for custom data analysis
             
-            #### 📊 Pattern Legend
+            #### 📊 Complete Pattern Legend
             
-            - 🔥 **CAT LEADER** - Top 10% in category
-            - 💎 **HIDDEN GEM** - Strong in category, undervalued overall
-            - 🚀 **ACCELERATING** - Momentum building rapidly
-            - 🏦 **INSTITUTIONAL** - Smart money accumulation
-            - ⚡ **VOL EXPLOSION** - Extreme volume surge
-            - 🎯 **BREAKOUT** - Ready for technical breakout
-            - 👑 **MARKET LEADER** - Top 5% overall
+            **Technical Patterns:**
+            - 🔥 **CAT LEADER** - Top 10% in category, category outperformer
+            - 💎 **HIDDEN GEM** - Strong in category but undervalued overall
+            - 🚀 **ACCELERATING** - Momentum building rapidly (85+ acceleration)
+            - 🏦 **INSTITUTIONAL** - Smart money accumulation patterns
+            - ⚡ **VOL EXPLOSION** - Extreme volume surge (RVOL > 3x)
+            - 🎯 **BREAKOUT** - Ready for technical breakout (80+ score)
+            - 👑 **MARKET LEADER** - Top 5% overall ranking
             - 🌊 **MOMENTUM WAVE** - Sustained momentum with acceleration
-            - 💰 **LIQUID LEADER** - High liquidity with performance
-            - 💪 **LONG STRENGTH** - Strong long-term performance
+            - 💰 **LIQUID LEADER** - High liquidity with strong performance
+            - 💪 **LONG STRENGTH** - Strong long-term performance (80+ score)
+            - 📈 **QUALITY TREND** - Perfect SMA alignment or strong trend
+            
+            **Price Range Patterns:**
+            - 🎯 **52W HIGH APPROACH** - Within 5% of 52-week high with momentum
+            - 🔄 **52W LOW BOUNCE** - Bouncing from 52-week low with acceleration
+            - 👑 **GOLDEN ZONE** - Optimal position (60%+ from low, <40% from high)
+            - 🎯 **RANGE COMPRESS** - Range compression setup for breakout
+            
+            **Volume Patterns:**
+            - 📊 **VOL ACCUMULATION** - Smart money accumulation (rising volume ratios)
+            - 🔀 **MOMENTUM DIVERGE** - Acceleration divergence pattern
+            
+            **Fundamental Patterns (Hybrid Mode):**
+            - 💎 **VALUE MOMENTUM** - Low PE (<15) with high momentum
+            - 📊 **EARNINGS ROCKET** - Explosive EPS growth with acceleration
+            - 🏆 **QUALITY LEADER** - Balanced PE (10-25) with growth
+            - ⚡ **TURNAROUND** - Major EPS improvement with volume
+            - ⚠️ **HIGH PE** - Overvaluation warning (PE > 100)
             """)
         
         with col2:
@@ -4292,9 +4800,17 @@ def main():
             #### 📈 Trend Indicators
             
             - 🔥 **Strong Uptrend** (80-100)
+              - Price above all SMAs
+              - Perfect SMA alignment
             - ✅ **Good Uptrend** (60-79)
+              - Price above 2+ SMAs
+              - Positive momentum
             - ➡️ **Neutral Trend** (40-59)
+              - Mixed signals
+              - Consolidation phase
             - ⚠️ **Weak/Downtrend** (0-39)
+              - Price below most SMAs
+              - Negative momentum
             
             #### 🎨 Display Modes
             
@@ -4314,29 +4830,38 @@ def main():
             
             - Real-time data processing
             - 1-hour intelligent caching
-            - Optimized calculations
+            - Performance monitoring
             - Cloud-ready architecture
             
-            #### 🔒 Data Source
+            #### 🔒 Data Sources
             
-            - Live Google Sheets integration
+            **Google Sheets Integration**
+            - Live data connection
             - 1790+ stocks coverage
             - 41 data points per stock
             - Daily updates
             
+            **CSV Upload Support**
+            - Custom data analysis
+            - Same processing pipeline
+            - Flexible column mapping
+            - Export ready
+            
             #### 💬 Support
             
-            For questions or feedback:
+            For best results:
             - Check filters if no data shows
             - Clear cache for fresh data
             - Use search for specific stocks
             - Export data for records
+            - Enable debug mode for issues
             
             ---
             
-            **Version**: 3.0.5-PRODUCTION-BUGFREE
+            **Version**: 3.0.7-FINAL-COMPLETE
             **Last Updated**: Dec 2024
-            **Status**: Production Ready
+            **Status**: Feature Complete
+            **New**: CSV Upload + All Features
             """)
         
         # System stats
@@ -4377,8 +4902,8 @@ def main():
     st.markdown(
         """
         <div style="text-align: center; color: #666; padding: 1rem;">
-            Wave Detection Ultimate 3.0 | Professional Edition with Wave Radar™<br>
-            <small>Real-time momentum detection • Early entry signals • Smart money flow tracking</small>
+            Wave Detection Ultimate 3.0 Enhanced | Professional Edition with All Features<br>
+            <small>Real-time momentum detection • Early entry signals • Smart money flow tracking • Complete Feature Set</small>
         </div>
         """,
         unsafe_allow_html=True
