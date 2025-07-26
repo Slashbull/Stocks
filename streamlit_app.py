@@ -154,29 +154,29 @@ class Config:
     TIERS: Dict[str, Dict[str, Tuple[float, float]]] = field(default_factory=lambda: {
         "eps": {
             "Loss": (-float('inf'), 0),
-            "0-5": (0, 5],
-            "5-10": (5, 10],
-            "10-20": (10, 20],
-            "20-50": (20, 50],
-            "50-100": (50, 100],
+            "0-5": (0, 5),
+            "5-10": (5, 10),
+            "10-20": (10, 20),
+            "20-50": (20, 50),
+            "50-100": (50, 100),
             "100+": (100, float('inf'))
         },
         "pe": {
-            "Negative/NA": (-float('inf'), 0],
-            "0-10": (0, 10],
-            "10-15": (10, 15],
-            "15-20": (15, 20],
-            "20-30": (20, 30],
-            "30-50": (30, 50],
+            "Negative/NA": (-float('inf'), 0),
+            "0-10": (0, 10),
+            "10-15": (10, 15),
+            "15-20": (15, 20),
+            "20-30": (20, 30),
+            "30-50": (30, 50),
             "50+": (50, float('inf'))
         },
         "price": {
-            "0-100": (0, 100],
-            "100-250": (100, 250],
-            "250-500": (250, 500],
-            "500-1000": (500, 1000],
-            "1000-2500": (1000, 2500],
-            "2500-5000": (2500, 5000],
+            "0-100": (0, 100),
+            "100-250": (100, 250),
+            "250-500": (250, 500),
+            "500-1000": (500, 1000),
+            "1000-2500": (1000, 2500),
+            "2500-5000": (2500, 5000),
             "5000+": (5000, float('inf'))
         }
     })
@@ -540,14 +540,19 @@ class DataProcessor:
                 return "Unknown"
             
             for tier_name, (min_val, max_val) in tier_dict.items():
-                # Use < for upper bound, <= for lower bound
+                # Use < for upper bound, <= for lower bound to avoid gaps
                 if min_val < value <= max_val:
                     return tier_name
-                # Handle infinity cases
-                if max_val == float('inf') and value > min_val:
-                    return tier_name
+                # Handle edge cases for first tier (includes min_val)
                 if min_val == -float('inf') and value <= max_val:
                     return tier_name
+                # Handle edge cases for last tier (includes max_val)
+                if max_val == float('inf') and value > min_val:
+                    return tier_name
+                # Special case for zero boundaries
+                if min_val == 0 and max_val > 0 and value == 0:
+                    # Zero belongs to the tier that starts at 0
+                    continue  # Let the next tier catch it
             
             return "Unknown"
         
