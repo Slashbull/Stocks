@@ -1411,29 +1411,61 @@ class MarketIntelligence:
         return ad_metrics
     
     @staticmethod
-    def detect_sector_rotation(df: pd.DataFrame) -> pd.DataFrame:
-        """Detect sector rotation patterns"""
+    def detect_sector_rotation(df: pd.DataFrame, top_n_per_sector: int = 25) -> pd.DataFrame:
+        """Detect sector rotation patterns with normalized analysis"""
         
         if 'sector' not in df.columns or df.empty:
             return pd.DataFrame()
         
-        # Calculate sector metrics
-        sector_metrics = df.groupby('sector').agg({
-            'master_score': ['mean', 'std', 'count'],
+        # First, get top N stocks per sector by market cap or master score
+        sector_dfs = []
+        
+        for sector in df['sector'].unique():
+            if sector != 'Unknown':
+                sector_df = df[df['sector'] == sector].copy()
+                
+                # Sort by master_score (or market_cap if available) and take top N
+                if len(sector_df) > top_n_per_sector:
+                    sector_df = sector_df.nlargest(top_n_per_sector, 'master_score')
+                
+                sector_dfs.append(sector_df)
+        
+        # Combine normalized sector data
+        if sector_dfs:
+            normalized_df = pd.concat(sector_dfs, ignore_index=True)
+        else:
+            normalized_df = df
+        
+        # Calculate sector metrics on normalized data
+        sector_metrics = normalized_df.groupby('sector').agg({
+            'master_score': ['mean', 'median', 'std', 'count'],
             'momentum_score': 'mean',
             'volume_score': 'mean',
             'rvol': 'mean',
-            'ret_30d': 'mean'
+            'ret_30d': 'mean',
+            'money_flow_mm': 'sum' if 'money_flow_mm' in normalized_df.columns else 'count'
         }).round(2)
         
         # Flatten column names
-        sector_metrics.columns = ['avg_score', 'std_score', 'count', 'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d']
+        if 'money_flow_mm' in normalized_df.columns:
+            sector_metrics.columns = ['avg_score', 'median_score', 'std_score', 'count', 
+                                     'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d', 'total_money_flow']
+        else:
+            sector_metrics.columns = ['avg_score', 'median_score', 'std_score', 'count', 
+                                     'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d', 'count2']
+            sector_metrics = sector_metrics.drop('count2', axis=1)
         
-        # Calculate flow score
+        # Add original sector size for reference
+        original_counts = df.groupby('sector').size()
+        sector_metrics['total_stocks'] = original_counts
+        sector_metrics['analyzed_stocks'] = sector_metrics['count']
+        
+        # Calculate flow score with median for robustness
         sector_metrics['flow_score'] = (
-            sector_metrics['avg_score'] * 0.4 +
-            sector_metrics['avg_momentum'] * 0.3 +
-            sector_metrics['avg_volume'] * 0.3
+            sector_metrics['avg_score'] * 0.3 +
+            sector_metrics['median_score'] * 0.2 +
+            sector_metrics['avg_momentum'] * 0.25 +
+            sector_metrics['avg_volume'] * 0.25
         )
         
         # Rank sectors
@@ -1558,32 +1590,7 @@ class FilterEngine:
 # ============================================
 
 class SearchEngine:
-    """Optimized search functionality with pre-built index"""
-    
-    _search_index = None
-    _last_data_hash = None
-    
-    @staticmethod
-    def build_search_index(df: pd.DataFrame) -> Dict[str, List[int]]:
-        """Build search index for fast lookups"""
-        index = {}
-        
-        for idx, row in df.iterrows():
-            # Index by ticker
-            ticker = str(row['ticker']).upper()
-            if ticker not in index:
-                index[ticker] = []
-            index[ticker].append(idx)
-            
-            # Index by company name words
-            company = str(row['company_name']).upper()
-            for word in company.split():
-                if len(word) > 2:  # Skip short words
-                    if word not in index:
-                        index[word] = []
-                    index[word].append(idx)
-        
-        return index
+    """Optimized search functionality"""
     
     @staticmethod
     @PerformanceMonitor.timer(target_time=0.05)
@@ -1593,29 +1600,53 @@ class SearchEngine:
         if not query or df.empty:
             return pd.DataFrame()
         
-        # Check if we need to rebuild index
-        data_hash = hash(tuple(df['ticker'].values))
-        if SearchEngine._last_data_hash != data_hash:
-            SearchEngine._search_index = SearchEngine.build_search_index(df)
-            SearchEngine._last_data_hash = data_hash
-        
-        query = query.upper().strip()
-        matches = set()
-        
-        # Direct ticker match
-        if query in SearchEngine._search_index:
-            matches.update(SearchEngine._search_index[query])
-        
-        # Partial matches
-        for key in SearchEngine._search_index:
-            if query in key or key.startswith(query):
-                matches.update(SearchEngine._search_index[key])
-        
-        # Return matched rows
-        if matches:
-            return df.iloc[list(matches)].sort_values('master_score', ascending=False)
-        
-        return pd.DataFrame()
+        try:
+            query = query.upper().strip()
+            
+            # Method 1: Direct ticker match (exact)
+            ticker_exact = df[df['ticker'].str.upper() == query]
+            if not ticker_exact.empty:
+                return ticker_exact
+            
+            # Method 2: Ticker contains query
+            ticker_contains = df[df['ticker'].str.upper().str.contains(query, na=False, regex=False)]
+            
+            # Method 3: Company name contains query (case insensitive)
+            company_contains = df[df['company_name'].str.upper().str.contains(query, na=False, regex=False)]
+            
+            # Method 4: Partial match at start of words in company name
+            # Split company names into words and check if any word starts with query
+            def word_starts_with(company_name):
+                if pd.isna(company_name):
+                    return False
+                words = str(company_name).upper().split()
+                return any(word.startswith(query) for word in words)
+            
+            company_word_match = df[df['company_name'].apply(word_starts_with)]
+            
+            # Combine all results and remove duplicates
+            all_matches = pd.concat([
+                ticker_contains,
+                company_contains,
+                company_word_match
+            ]).drop_duplicates()
+            
+            # Sort by relevance: exact ticker match first, then by master score
+            if not all_matches.empty:
+                # Add relevance score
+                all_matches['relevance'] = 0
+                all_matches.loc[all_matches['ticker'].str.upper() == query, 'relevance'] = 100
+                all_matches.loc[all_matches['ticker'].str.upper().str.startswith(query), 'relevance'] += 50
+                all_matches.loc[all_matches['company_name'].str.upper().str.startswith(query), 'relevance'] += 30
+                
+                # Sort by relevance then master score
+                return all_matches.sort_values(['relevance', 'master_score'], ascending=[False, False]).drop('relevance', axis=1)
+            
+            return pd.DataFrame()
+            
+        except Exception as e:
+            logger.error(f"Search error: {str(e)}")
+            return pd.DataFrame()
 
 # ============================================
 # EXPORT ENGINE - ENHANCED
@@ -1968,12 +1999,13 @@ class UIComponents:
         
         with intel_col1:
             # Sector Rotation Map
-            sector_rotation = MarketIntelligence.detect_sector_rotation(df)
+            sector_rotation = MarketIntelligence.detect_sector_rotation(df, top_n_per_sector=25)
             
             if not sector_rotation.empty:
                 # Create rotation visualization
                 fig = go.Figure()
                 
+                # Add bar chart
                 fig.add_trace(go.Bar(
                     x=sector_rotation.index[:10],  # Top 10 sectors
                     y=sector_rotation['flow_score'][:10],
@@ -1981,12 +2013,23 @@ class UIComponents:
                     textposition='outside',
                     marker_color=['#2ecc71' if score > 60 else '#e74c3c' if score < 40 else '#f39c12' 
                                  for score in sector_rotation['flow_score'][:10]],
-                    hovertemplate='Sector: %{x}<br>Flow Score: %{y:.1f}<br>Stocks: %{customdata}<extra></extra>',
-                    customdata=sector_rotation['count'][:10]
+                    hovertemplate=(
+                        'Sector: %{x}<br>'
+                        'Flow Score: %{y:.1f}<br>'
+                        'Analyzed: %{customdata[0]} of %{customdata[1]} stocks<br>'
+                        'Avg Score: %{customdata[2]:.1f}<br>'
+                        'Median Score: %{customdata[3]:.1f}<extra></extra>'
+                    ),
+                    customdata=np.column_stack((
+                        sector_rotation['analyzed_stocks'][:10],
+                        sector_rotation['total_stocks'][:10],
+                        sector_rotation['avg_score'][:10],
+                        sector_rotation['median_score'][:10]
+                    ))
                 ))
                 
                 fig.update_layout(
-                    title="Sector Rotation Map - Smart Money Flow",
+                    title="Sector Rotation Map - Smart Money Flow (Top 25 Stocks/Sector)",
                     xaxis_title="Sector",
                     yaxis_title="Flow Score",
                     height=400,
@@ -2209,14 +2252,12 @@ def main():
         with col1:
             if st.button("🔄 Refresh Data", type="primary", use_container_width=True):
                 st.cache_data.clear()
-                SearchEngine._search_index = None  # Clear search index
                 st.session_state.last_refresh = datetime.now(timezone.utc)
                 st.rerun()
         
         with col2:
             if st.button("🧹 Clear Cache", use_container_width=True):
                 st.cache_data.clear()
-                SearchEngine._search_index = None
                 gc.collect()  # Force garbage collection
                 st.success("Cache cleared!")
                 time.sleep(0.5)
@@ -3278,10 +3319,24 @@ def main():
                 col1, col2 = st.columns([3, 2])
                 
                 with col1:
-                    # Calculate category performance
+                    # Calculate category performance with normalization
                     try:
                         if 'category' in wave_filtered_df.columns:
-                            category_flow = wave_filtered_df.groupby('category').agg({
+                            # Get top 20 stocks per category for fair comparison
+                            category_dfs = []
+                            for cat in wave_filtered_df['category'].unique():
+                                if cat != 'Unknown':
+                                    cat_df = wave_filtered_df[wave_filtered_df['category'] == cat]
+                                    if len(cat_df) > 20:
+                                        cat_df = cat_df.nlargest(20, 'master_score')
+                                    category_dfs.append(cat_df)
+                            
+                            if category_dfs:
+                                normalized_cat_df = pd.concat(category_dfs, ignore_index=True)
+                            else:
+                                normalized_cat_df = wave_filtered_df
+                            
+                            category_flow = normalized_cat_df.groupby('category').agg({
                                 'master_score': ['mean', 'count'],
                                 'momentum_score': 'mean',
                                 'volume_score': 'mean',
@@ -3323,7 +3378,7 @@ def main():
                                 ))
                                 
                                 fig_flow.update_layout(
-                                    title=f"Smart Money Flow Direction: {flow_direction}",
+                                    title=f"Smart Money Flow Direction: {flow_direction} (Top 20/Category)",
                                     xaxis_title="Market Cap Category",
                                     yaxis_title="Flow Score",
                                     height=300,
@@ -3558,19 +3613,31 @@ def main():
                     st.info("No patterns detected in current selection")
             
             # Sector performance
-            st.markdown("#### Sector Performance")
-            sector_rotation = MarketIntelligence.detect_sector_rotation(filtered_df)
+            st.markdown("#### Sector Performance (Top 25 Stocks per Sector)")
+            sector_rotation = MarketIntelligence.detect_sector_rotation(filtered_df, top_n_per_sector=25)
             
             if not sector_rotation.empty:
-                # Display sector table
-                display_cols = ['avg_score', 'count', 'avg_momentum', 'avg_rvol', 'flow_score']
+                # Display sector table with all metrics
+                display_cols = ['avg_score', 'median_score', 'analyzed_stocks', 'total_stocks', 
+                               'avg_momentum', 'avg_rvol', 'flow_score']
                 sector_display = sector_rotation[display_cols].round(2)
-                sector_display.columns = ['Avg Score', 'Count', 'Avg Momentum', 'Avg RVOL', 'Flow Score']
+                sector_display.columns = ['Avg Score', 'Median Score', 'Analyzed', 'Total', 
+                                        'Avg Momentum', 'Avg RVOL', 'Flow Score']
+                
+                # Add percentage of sector analyzed
+                sector_display['Coverage %'] = (
+                    (sector_display['Analyzed'] / sector_display['Total'] * 100)
+                    .round(1)
+                    .apply(lambda x: f"{x}%")
+                )
                 
                 st.dataframe(
-                    sector_display.style.background_gradient(subset=['Flow Score']),
+                    sector_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
                     use_container_width=True
                 )
+                
+                # Show explanation
+                st.info("📊 **Normalized Analysis**: Shows metrics for top 25 stocks per sector (by Master Score) to ensure fair comparison across sectors of different sizes.")
             else:
                 st.info("No sector data available for analysis.")
             
@@ -3762,19 +3829,87 @@ def main():
                                     st.text(f"{period}: {stock[col]:+.1f}%")
                         
                         with detail_cols[2]:
-                            st.markdown("**🔍 Advanced Metrics**")
+                            st.markdown("**🔍 Technicals**")
                             
-                            if 'vmi' in stock and pd.notna(stock['vmi']):
-                                st.text(f"VMI: {stock['vmi']:.2f}")
+                            # 52-week range details
+                            if all(col in stock.index for col in ['low_52w', 'high_52w']):
+                                st.text(f"52W Low: ₹{stock.get('low_52w', 0):,.0f}")
+                                st.text(f"52W High: ₹{stock.get('high_52w', 0):,.0f}")
                             
-                            if 'momentum_harmony' in stock:
-                                st.text(f"Harmony: {stock['momentum_harmony']}/4")
+                            st.text(f"From High: {stock.get('from_high_pct', 0):.0f}%")
+                            st.text(f"From Low: {stock.get('from_low_pct', 0):.0f}%")
                             
-                            if 'position_tension' in stock and pd.notna(stock['position_tension']):
-                                st.text(f"Tension: {stock['position_tension']:.0f}")
+                            # Trading Position with detailed SMA info
+                            st.markdown("**📊 Trading Position**")
                             
-                            if 'money_flow_mm' in stock and pd.notna(stock['money_flow_mm']):
-                                st.text(f"Money Flow: ₹{stock['money_flow_mm']:.1f}M")
+                            current_price = stock.get('price', 0)
+                            
+                            # SMA details with position
+                            sma_checks = [
+                                ('sma_20d', '20 DMA'),
+                                ('sma_50d', '50 DMA'),
+                                ('sma_200d', '200 DMA')
+                            ]
+                            
+                            trading_above = []
+                            trading_below = []
+                            
+                            for sma_col, sma_label in sma_checks:
+                                if sma_col in stock.index and pd.notna(stock[sma_col]) and stock[sma_col] > 0:
+                                    sma_value = stock[sma_col]
+                                    
+                                    if current_price > sma_value:
+                                        pct_above = ((current_price - sma_value) / sma_value) * 100
+                                        st.success(f"✅ {sma_label}: ₹{sma_value:,.0f} (↑{pct_above:.1f}%)")
+                                        trading_above.append(sma_label)
+                                    else:
+                                        pct_below = ((sma_value - current_price) / sma_value) * 100
+                                        st.error(f"❌ {sma_label}: ₹{sma_value:,.0f} (↓{pct_below:.1f}%)")
+                                        trading_below.append(sma_label)
+                            
+                            # Trend summary
+                            st.markdown("**📈 Trend Analysis**")
+                            
+                            if 'trend_quality' in stock.index:
+                                tq = stock['trend_quality']
+                                if tq >= 80:
+                                    st.success(f"🔥 Strong Uptrend ({tq:.0f})")
+                                elif tq >= 60:
+                                    st.info(f"✅ Good Uptrend ({tq:.0f})")
+                                elif tq >= 40:
+                                    st.warning(f"➡️ Neutral Trend ({tq:.0f})")
+                                else:
+                                    st.error(f"⚠️ Weak/Downtrend ({tq:.0f})")
+                            
+                            # Summary position
+                            if trading_above and not trading_below:
+                                st.success(f"💪 Above all SMAs!")
+                            elif trading_below and not trading_above:
+                                st.error(f"📉 Below all SMAs")
+                            elif trading_above:
+                                st.info(f"📊 Mixed: Above {', '.join(trading_above)}")
+                        
+                        # Add a fourth column for advanced metrics
+                        with st.container():
+                            st.markdown("**🎯 Advanced Metrics**")
+                            
+                            adv_col1, adv_col2 = st.columns(2)
+                            
+                            with adv_col1:
+                                if 'vmi' in stock and pd.notna(stock['vmi']):
+                                    st.metric("VMI", f"{stock['vmi']:.2f}")
+                                
+                                if 'momentum_harmony' in stock:
+                                    harmony_val = stock['momentum_harmony']
+                                    harmony_emoji = "🟢" if harmony_val >= 3 else "🟡" if harmony_val >= 2 else "🔴"
+                                    st.metric("Harmony", f"{harmony_emoji} {harmony_val}/4")
+                            
+                            with adv_col2:
+                                if 'position_tension' in stock and pd.notna(stock['position_tension']):
+                                    st.metric("Position Tension", f"{stock['position_tension']:.0f}")
+                                
+                                if 'money_flow_mm' in stock and pd.notna(stock['money_flow_mm']):
+                                    st.metric("Money Flow", f"₹{stock['money_flow_mm']:.1f}M")
             
             else:
                 st.warning("No stocks found matching your search criteria.")
