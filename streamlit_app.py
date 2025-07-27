@@ -1474,315 +1474,6 @@ class MarketIntelligence:
         return sector_metrics.sort_values('flow_score', ascending=False)
 
 # ============================================
-# VISUALIZATION ENGINE
-# ============================================
-
-class Visualizer:
-    """Create all visualizations with proper error handling"""
-    
-    @staticmethod
-    def create_score_distribution(df: pd.DataFrame) -> go.Figure:
-        """Create score distribution chart"""
-        fig = go.Figure()
-        
-        if df.empty:
-            fig.add_annotation(
-                text="No data available for visualization",
-                xref="paper", yref="paper",
-                x=0.5, y=0.5, showarrow=False
-            )
-            return fig
-        
-        # Score components to visualize
-        scores = [
-            ('position_score', 'Position', '#3498db'),
-            ('volume_score', 'Volume', '#e74c3c'),
-            ('momentum_score', 'Momentum', '#2ecc71'),
-            ('acceleration_score', 'Acceleration', '#f39c12'),
-            ('breakout_score', 'Breakout', '#9b59b6'),
-            ('rvol_score', 'RVOL', '#e67e22')
-        ]
-        
-        for score_col, label, color in scores:
-            if score_col in df.columns:
-                score_data = df[score_col].dropna()
-                if len(score_data) > 0:
-                    fig.add_trace(go.Box(
-                        y=score_data,
-                        name=label,
-                        marker_color=color,
-                        boxpoints='outliers',
-                        hovertemplate=f'{label}<br>Score: %{{y:.1f}}<extra></extra>'
-                    ))
-        
-        fig.update_layout(
-            title="Score Component Distribution",
-            yaxis_title="Score (0-100)",
-            template='plotly_white',
-            height=400,
-            showlegend=False
-        )
-        
-        return fig
-    
-    @staticmethod
-    def create_master_score_breakdown(df: pd.DataFrame, n: int = 20) -> go.Figure:
-        """Create master score breakdown chart showing component contributions"""
-        # Get top stocks
-        top_df = df.nlargest(min(n, len(df)), 'master_score').copy()
-        
-        if len(top_df) == 0:
-            return go.Figure()
-        
-        # Calculate weighted contributions
-        components = [
-            ('Position', 'position_score', CONFIG.POSITION_WEIGHT, '#3498db'),
-            ('Volume', 'volume_score', CONFIG.VOLUME_WEIGHT, '#e74c3c'),
-            ('Momentum', 'momentum_score', CONFIG.MOMENTUM_WEIGHT, '#2ecc71'),
-            ('Acceleration', 'acceleration_score', CONFIG.ACCELERATION_WEIGHT, '#f39c12'),
-            ('Breakout', 'breakout_score', CONFIG.BREAKOUT_WEIGHT, '#9b59b6'),
-            ('RVOL', 'rvol_score', CONFIG.RVOL_WEIGHT, '#e67e22')
-        ]
-        
-        fig = go.Figure()
-        
-        # Add bars for each component
-        for name, score_col, weight, color in components:
-            if score_col in top_df.columns:
-                # Calculate weighted contribution
-                weighted_contrib = top_df[score_col] * weight
-                
-                fig.add_trace(go.Bar(
-                    name=f'{name} ({weight:.0%})',
-                    y=top_df['ticker'],
-                    x=weighted_contrib,
-                    orientation='h',
-                    marker_color=color,
-                    text=[f"{val:.1f}" for val in top_df[score_col]],
-                    textposition='inside',
-                    hovertemplate=(
-                        f'{name}<br>'
-                        'Raw Score: %{text}<br>'
-                        'Weight: ' + f'{weight:.0%}' + '<br>'
-                        'Contribution: %{x:.1f}<extra></extra>'
-                    )
-                ))
-        
-        # Add master score annotations
-        for i, (idx, row) in enumerate(top_df.iterrows()):
-            fig.add_annotation(
-                x=row['master_score'] + 1,
-                y=i,
-                text=f"<b>{row['master_score']:.1f}</b>",
-                showarrow=False,
-                xanchor='left',
-                font=dict(size=12, color='black'),
-                bgcolor='rgba(255,255,255,0.8)',
-                bordercolor='black',
-                borderwidth=1
-            )
-        
-        fig.update_layout(
-            title=f"Top {len(top_df)} Stocks - Master Score 3.0 Component Breakdown",
-            xaxis_title="Weighted Score Contribution",
-            xaxis_range=[0, 110],
-            barmode='stack',
-            template='plotly_white',
-            height=max(400, len(top_df) * 35),
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="center",
-                x=0.5
-            ),
-            margin=dict(l=100, r=100, t=100, b=50)
-        )
-        
-        return fig
-    
-    @staticmethod
-    def create_sector_performance_scatter(df: pd.DataFrame) -> go.Figure:
-        """Create sector performance scatter plot with bubble size"""
-        try:
-            # Aggregate by sector
-            sector_stats = df.groupby('sector').agg({
-                'master_score': ['mean', 'std', 'count'],
-                'percentile': 'mean',
-                'rvol': 'mean',
-                'momentum_score': 'mean',
-                'ret_30d': 'mean'
-            }).reset_index()
-            
-            # Flatten column names
-            sector_stats.columns = ['sector', 'avg_score', 'std_score', 'count', 
-                                   'avg_percentile', 'avg_rvol', 'avg_momentum', 'avg_ret_30d']
-            
-            # Filter sectors with at least 3 stocks
-            sector_stats = sector_stats[sector_stats['count'] >= 3]
-            
-            if len(sector_stats) == 0:
-                return go.Figure()
-            
-            # Create scatter plot
-            fig = go.Figure()
-            
-            # Add scatter trace
-            fig.add_trace(go.Scatter(
-                x=sector_stats['avg_percentile'],
-                y=sector_stats['avg_score'],
-                mode='markers+text',
-                text=sector_stats['sector'],
-                textposition='top center',
-                marker=dict(
-                    size=sector_stats['count'] * 2,  # Scale bubble size
-                    sizemin=10,
-                    sizemode='diameter',
-                    sizeref=2,
-                    color=sector_stats['avg_rvol'],
-                    colorscale='Viridis',
-                    colorbar=dict(title="Avg RVOL"),
-                    line=dict(width=2, color='white'),
-                    showscale=True
-                ),
-                customdata=np.column_stack((
-                    sector_stats['count'],
-                    sector_stats['std_score'],
-                    sector_stats['avg_rvol'],
-                    sector_stats['avg_momentum'],
-                    sector_stats['avg_ret_30d']
-                )),
-                hovertemplate=(
-                    '<b>%{text}</b><br>' +
-                    'Avg Score: %{y:.1f}<br>' +
-                    'Avg Percentile: %{x:.1f}<br>' +
-                    'Stocks: %{customdata[0]}<br>' +
-                    'Std Dev: %{customdata[1]:.1f}<br>' +
-                    'Avg RVOL: %{customdata[2]:.2f}x<br>' +
-                    'Avg Momentum: %{customdata[3]:.1f}<br>' +
-                    '30D Return: %{customdata[4]:.1f}%<extra></extra>'
-                )
-            ))
-            
-            # Add quadrant lines
-            fig.add_hline(y=50, line_dash="dash", line_color="gray", opacity=0.5)
-            fig.add_vline(x=50, line_dash="dash", line_color="gray", opacity=0.5)
-            
-            # Add quadrant labels
-            fig.add_annotation(x=75, y=75, text="Leaders", showarrow=False, 
-                             font=dict(size=14, color="green"), opacity=0.7)
-            fig.add_annotation(x=25, y=75, text="Hidden Gems", showarrow=False,
-                             font=dict(size=14, color="blue"), opacity=0.7)
-            fig.add_annotation(x=75, y=25, text="Overvalued", showarrow=False,
-                             font=dict(size=14, color="orange"), opacity=0.7)
-            fig.add_annotation(x=25, y=25, text="Laggards", showarrow=False,
-                             font=dict(size=14, color="red"), opacity=0.7)
-            
-            fig.update_layout(
-                title='Sector Performance Analysis - Size = Stock Count, Color = RVOL',
-                xaxis_title='Average Percentile Rank',
-                yaxis_title='Average Master Score',
-                template='plotly_white',
-                height=500,
-                xaxis=dict(range=[0, 100]),
-                yaxis=dict(range=[0, 100])
-            )
-            
-            return fig
-            
-        except Exception as e:
-            logger.error(f"Error creating sector scatter: {str(e)}")
-            return go.Figure()
-    
-    @staticmethod
-    def create_acceleration_profiles(df: pd.DataFrame, n: int = 10) -> go.Figure:
-        """Create acceleration profiles showing momentum over time"""
-        try:
-            # Get top accelerating stocks
-            accel_df = df.nlargest(min(n, len(df)), 'acceleration_score')
-            
-            if len(accel_df) == 0:
-                return go.Figure()
-            
-            fig = go.Figure()
-            
-            # Create lines for each stock
-            for _, stock in accel_df.iterrows():
-                # Build timeline data
-                x_points = []
-                y_points = []
-                
-                # Start point
-                x_points.append('Start')
-                y_points.append(0)
-                
-                # Add available return data points
-                if 'ret_30d' in stock.index and pd.notna(stock['ret_30d']):
-                    x_points.append('30D')
-                    y_points.append(stock['ret_30d'])
-                
-                if 'ret_7d' in stock.index and pd.notna(stock['ret_7d']):
-                    x_points.append('7D')
-                    y_points.append(stock['ret_7d'])
-                
-                if 'ret_1d' in stock.index and pd.notna(stock['ret_1d']):
-                    x_points.append('Today')
-                    y_points.append(stock['ret_1d'])
-                
-                if len(x_points) > 1:  # Only plot if we have data
-                    # Determine line style based on acceleration
-                    if stock['acceleration_score'] >= 85:
-                        line_style = dict(width=3, dash='solid')
-                        marker_style = dict(size=10, symbol='star')
-                    elif stock['acceleration_score'] >= 70:
-                        line_style = dict(width=2, dash='solid')
-                        marker_style = dict(size=8)
-                    else:
-                        line_style = dict(width=2, dash='dot')
-                        marker_style = dict(size=6)
-                    
-                    fig.add_trace(go.Scatter(
-                        x=x_points,
-                        y=y_points,
-                        mode='lines+markers',
-                        name=f"{stock['ticker']} ({stock['acceleration_score']:.0f})",
-                        line=line_style,
-                        marker=marker_style,
-                        hovertemplate=(
-                            f"<b>{stock['ticker']}</b><br>" +
-                            "%{x}: %{y:.1f}%<br>" +
-                            f"Accel Score: {stock['acceleration_score']:.0f}<extra></extra>"
-                        )
-                    ))
-            
-            # Add zero line
-            fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
-            
-            fig.update_layout(
-                title=f"Acceleration Profiles - Top {len(accel_df)} Momentum Builders",
-                xaxis_title="Time Frame",
-                yaxis_title="Return %",
-                height=400,
-                template='plotly_white',
-                showlegend=True,
-                legend=dict(
-                    orientation="v",
-                    yanchor="top",
-                    y=1,
-                    xanchor="left",
-                    x=1.02
-                ),
-                hovermode='x unified'
-            )
-            
-            return fig
-            
-        except Exception as e:
-            logger.error(f"Error creating acceleration profiles: {str(e)}")
-            return go.Figure()
-
-# ============================================
 # FILTER ENGINE - OPTIMIZED
 # ============================================
 
@@ -3404,34 +3095,6 @@ def main():
         
         else:
             st.warning("No stocks match the selected filters.")
-        
-        # Master Score Breakdown Visualization
-        if not filtered_df.empty:
-            st.markdown("---")
-            st.markdown("### 📊 Master Score Component Analysis")
-            
-            # Allow user to select number of stocks to show
-            breakdown_col1, breakdown_col2 = st.columns([1, 4])
-            with breakdown_col1:
-                breakdown_count = st.selectbox(
-                    "Show breakdown for top",
-                    options=[10, 20, 30, 50],
-                    index=1,
-                    key="breakdown_count"
-                )
-            
-            # Create and display the breakdown chart
-            fig_breakdown = Visualizer.create_master_score_breakdown(filtered_df, n=breakdown_count)
-            st.plotly_chart(fig_breakdown, use_container_width=True)
-            
-            # Explanation
-            st.info(
-                "📊 **How to read this chart:**\n"
-                "- Each horizontal bar shows how a stock's Master Score is built\n"
-                "- Different colors represent different components (Position, Volume, Momentum, etc.)\n"
-                "- The length of each colored section shows its weighted contribution\n"
-                "- The total Master Score is shown at the end of each bar"
-            )
     
     # Tab 2: Wave Radar - Enhanced
     with tabs[2]:
@@ -3467,13 +3130,6 @@ def main():
                 options=["Conservative", "Balanced", "Aggressive"],
                 value="Balanced",
                 help="Conservative = Stronger signals, Aggressive = More signals"
-            )
-            
-            # Sensitivity details toggle
-            show_sensitivity_details = st.checkbox(
-                "Show thresholds",
-                value=False,
-                help="Display exact threshold values for current sensitivity"
             )
         
         with radar_col3:
@@ -3522,39 +3178,6 @@ def main():
                 except Exception as e:
                     logger.error(f"Error calculating wave strength: {str(e)}")
                     UIComponents.render_metric_card("Wave Strength", "N/A", "Error")
-        
-        # Display sensitivity thresholds if enabled
-        if show_sensitivity_details:
-            with st.expander("📊 Current Sensitivity Thresholds", expanded=True):
-                if sensitivity == "Conservative":
-                    st.markdown("""
-                    **Conservative Settings** 🛡️
-                    - **Momentum Shifts:** Score ≥ 60, Acceleration ≥ 70
-                    - **Emerging Patterns:** Within 5% of qualifying threshold
-                    - **Volume Surges:** RVOL ≥ 3.0x (extreme volumes only)
-                    - **Acceleration Alerts:** Score ≥ 85 (strongest signals)
-                    - **Pattern Distance:** 5% from qualification
-                    """)
-                elif sensitivity == "Balanced":
-                    st.markdown("""
-                    **Balanced Settings** ⚖️
-                    - **Momentum Shifts:** Score ≥ 50, Acceleration ≥ 60
-                    - **Emerging Patterns:** Within 10% of qualifying threshold
-                    - **Volume Surges:** RVOL ≥ 2.0x (standard threshold)
-                    - **Acceleration Alerts:** Score ≥ 70 (good acceleration)
-                    - **Pattern Distance:** 10% from qualification
-                    """)
-                else:  # Aggressive
-                    st.markdown("""
-                    **Aggressive Settings** 🚀
-                    - **Momentum Shifts:** Score ≥ 40, Acceleration ≥ 50
-                    - **Emerging Patterns:** Within 15% of qualifying threshold
-                    - **Volume Surges:** RVOL ≥ 1.5x (building volume)
-                    - **Acceleration Alerts:** Score ≥ 60 (early signals)
-                    - **Pattern Distance:** 15% from qualification
-                    """)
-                
-                st.info("💡 **Tip**: Start with Balanced, then adjust based on market conditions and your risk tolerance.")
         
         # Apply timeframe filtering
         if wave_timeframe != "All Waves":
@@ -3686,49 +3309,10 @@ def main():
                 multi_signal = len(top_shifts[top_shifts['signal_count'] >= 3])
                 if multi_signal > 0:
                     st.success(f"🏆 Found {multi_signal} stocks with 3+ signals (strongest momentum)")
-                
-                # Show stocks with 4+ signals separately
-                super_signals = top_shifts[top_shifts['signal_count'] >= 4]
-                if len(super_signals) > 0:
-                    st.warning(f"🔥🔥 {len(super_signals)} stocks showing EXTREME momentum (4+ signals)!")
             else:
                 st.info(f"No momentum shifts detected in {wave_timeframe} timeframe. Try 'Aggressive' sensitivity.")
             
-            # 2. ACCELERATION PROFILES
-            st.markdown("#### 🚀 Acceleration Profiles - Momentum Building Over Time")
-            
-            # Get accelerating stocks based on sensitivity
-            if sensitivity == "Conservative":
-                accel_threshold = 85
-            elif sensitivity == "Balanced":
-                accel_threshold = 70
-            else:  # Aggressive
-                accel_threshold = 60
-            
-            accelerating_stocks = wave_filtered_df[
-                wave_filtered_df['acceleration_score'] >= accel_threshold
-            ].nlargest(10, 'acceleration_score')
-            
-            if len(accelerating_stocks) > 0:
-                # Create acceleration profiles chart
-                fig_accel = Visualizer.create_acceleration_profiles(accelerating_stocks, n=10)
-                st.plotly_chart(fig_accel, use_container_width=True)
-                
-                # Summary stats
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    perfect_accel = len(accelerating_stocks[accelerating_stocks['acceleration_score'] >= 90])
-                    st.metric("Perfect Acceleration (90+)", perfect_accel)
-                with col2:
-                    strong_accel = len(accelerating_stocks[accelerating_stocks['acceleration_score'] >= 80])
-                    st.metric("Strong Acceleration (80+)", strong_accel)
-                with col3:
-                    avg_accel = accelerating_stocks['acceleration_score'].mean()
-                    st.metric("Avg Acceleration Score", f"{avg_accel:.1f}")
-            else:
-                st.info(f"No stocks meet the acceleration threshold ({accel_threshold}+) for {sensitivity} sensitivity.")
-            
-            # 3. CATEGORY ROTATION FLOW
+            # 2. CATEGORY ROTATION FLOW
             if show_market_regime:
                 st.markdown("#### 💰 Category Rotation - Smart Money Flow")
                 
@@ -3829,7 +3413,7 @@ def main():
                     else:
                         st.info("Category data not available")
             
-            # 4. EMERGING PATTERNS
+            # 3. EMERGING PATTERNS
             st.markdown("#### 🎯 Emerging Patterns - About to Qualify")
             
             # Set pattern distance based on sensitivity
@@ -3879,7 +3463,7 @@ def main():
             else:
                 st.info(f"No patterns emerging within {pattern_distance}% threshold.")
             
-            # 5. VOLUME SURGE DETECTION
+            # 4. VOLUME SURGE DETECTION
             st.markdown("#### 🌊 Volume Surges - Unusual Activity NOW")
             
             # Set RVOL threshold based on sensitivity
@@ -3941,14 +3525,6 @@ def main():
                     UIComponents.render_metric_card("Active Surges", len(volume_surges))
                     UIComponents.render_metric_card("Extreme (>5x)", len(volume_surges[volume_surges['rvol'] > 5]))
                     UIComponents.render_metric_card("High (>3x)", len(volume_surges[volume_surges['rvol'] > 3]))
-                    
-                    # Surge distribution by category
-                    if 'category' in volume_surges.columns:
-                        st.markdown("**📊 Surge by Category:**")
-                        surge_categories = volume_surges['category'].value_counts()
-                        if len(surge_categories) > 0:
-                            for cat, count in surge_categories.head(3).items():
-                                st.caption(f"• {cat}: {count} stocks")
             else:
                 st.info(f"No volume surges detected with {sensitivity} sensitivity (requires RVOL ≥ {rvol_threshold}x).")
         
@@ -4035,37 +3611,6 @@ def main():
                     st.plotly_chart(fig_patterns, use_container_width=True)
                 else:
                     st.info("No patterns detected in current selection")
-            
-            # Sector Performance Scatter Plot
-            st.markdown("---")
-            st.markdown("#### 🎯 Sector Performance Scatter Analysis")
-            
-            fig_sector_scatter = Visualizer.create_sector_performance_scatter(filtered_df)
-            if fig_sector_scatter.data:
-                st.plotly_chart(fig_sector_scatter, use_container_width=True)
-                
-                # Explanation
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.info(
-                        "**📊 How to interpret:**\n"
-                        "- **Position**: Shows sector strength vs market position\n"
-                        "- **Size**: Larger bubbles = more stocks in sector\n"
-                        "- **Color**: Darker = higher average RVOL\n"
-                        "- **Quadrants**: Leaders (top-right), Hidden Gems (top-left)"
-                    )
-                with col2:
-                    st.success(
-                        "**💡 Trading insights:**\n"
-                        "- **Leaders**: Strong sectors with high rankings\n"
-                        "- **Hidden Gems**: Strong performance, lower visibility\n"
-                        "- **Overvalued**: Popular but weak performance\n"
-                        "- **Laggards**: Weak in both dimensions"
-                    )
-            else:
-                st.info("Need more data for sector scatter analysis")
-            
-            st.markdown("---")
             
             # Sector performance
             st.markdown("#### Sector Performance (Top 25 Stocks per Sector)")
