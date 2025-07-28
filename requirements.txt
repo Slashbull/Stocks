@@ -17,9 +17,3 @@ seaborn>=0.12.2
 
 
 xlsxwriter==3.1.9
-
-openpyxl # for Excel export if not already there
-python-dateutil # for datetime operations if not implicitly covered
-dataclasses # if using Python < 3.7
-functools # if using Python < 3.2
-typing # if using Python < 3.5
