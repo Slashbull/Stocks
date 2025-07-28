@@ -1,13 +1,13 @@
 """
-Wave Detection Ultimate 3.0 - FINAL ENHANCED PRODUCTION VERSION
-===============================================================
+Wave Detection Ultimate 3.0 - FINAL PRODUCTION VERSION
+=====================================================
 Professional Stock Ranking System with Advanced Analytics
-All bugs fixed, optimized for Streamlit Community Cloud
-Enhanced with all valuable features from previous versions
+All bugs fixed, all features complete, production-ready
+Handles 1791+ stocks with 41 data columns
 
-Version: 3.0.7-FINAL-COMPLETE
-Last Updated: July 2025
-Status: PRODUCTION READY - Feature Complete
+Version: 3.0-FINAL-LOCKED
+Last Updated: December 2024
+Status: PRODUCTION READY - PERMANENTLY LOCKED
 """
 
 # ============================================
@@ -28,7 +28,7 @@ import time
 from io import BytesIO
 import warnings
 import gc
-# from decimal import Decimal, ROUND_HALF_UP # Not used, removed for final version
+from decimal import Decimal, ROUND_HALF_UP
 
 # Suppress warnings for clean output
 warnings.filterwarnings('ignore')
@@ -130,7 +130,7 @@ class Config:
     # Value bounds for data validation
     VALUE_BOUNDS: Dict[str, Tuple[float, float]] = field(default_factory=lambda: {
         'price': (0.01, 1_000_000),
-        'rvol': (0.01, 1_000_000.0),  # Allow extreme RVOL values
+        'rvol': (0.01, 100.0),  # Cap at 100x
         'pe': (-10000, 10000),
         'returns': (-99.99, 9999.99),  # Percentage bounds
         'volume': (0, 1e12)
@@ -469,7 +469,7 @@ class DataProcessor:
             if col in df.columns:
                 # Convert percentage change to ratio: (100 + change%) / 100
                 df[col] = (100 + df[col]) / 100
-                df[col] = df[col].clip(0.01, 1000.0)  # Reasonable bounds, allow high
+                df[col] = df[col].clip(0.01, 10.0)  # Reasonable bounds
                 df[col] = df[col].fillna(1.0)
         
         # Validate critical data
@@ -590,25 +590,19 @@ class AdvancedMetrics:
         if all(col in df.columns for col in ['price', 'volume_1d', 'rvol']):
             df['money_flow'] = df['price'] * df['volume_1d'] * df['rvol']
             df['money_flow_mm'] = df['money_flow'] / 1_000_000
-        else:
-            df['money_flow_mm'] = 0.0 # Default if cols are missing
         
         # Volume Momentum Index (VMI)
-        if all(col in df.columns for col in ['vol_ratio_1d_90d', 'vol_ratio_7d_90d', 'vol_ratio_30d_90d', 'vol_ratio_90d_180d']):
+        if all(col in df.columns for col in CONFIG.VOLUME_RATIO_COLUMNS[:4]):
             df['vmi'] = (
                 df['vol_ratio_1d_90d'] * 4 +
                 df['vol_ratio_7d_90d'] * 3 +
                 df['vol_ratio_30d_90d'] * 2 +
                 df['vol_ratio_90d_180d'] * 1
             ) / 10
-        else:
-            df['vmi'] = 1.0 # Default if cols are missing
         
         # Position Tension
         if all(col in df.columns for col in ['from_low_pct', 'from_high_pct']):
             df['position_tension'] = df['from_low_pct'] + abs(df['from_high_pct'])
-        else:
-            df['position_tension'] = 100.0 # Default if cols are missing
         
         # Momentum Harmony
         df['momentum_harmony'] = 0
@@ -618,33 +612,17 @@ class AdvancedMetrics:
         
         if all(col in df.columns for col in ['ret_7d', 'ret_30d']):
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_ret_7d = np.where(df['ret_7d'] != 0, df['ret_7d'] / 7, 0)
-                daily_ret_30d = np.where(df['ret_30d'] != 0, df['ret_30d'] / 30, 0)
-            
-            df['momentum_harmony'] += (daily_ret_7d > daily_ret_30d).astype(int)
+                df['momentum_harmony'] += (df['ret_7d'] / 7 > df['ret_30d'] / 30).astype(int)
         
         if all(col in df.columns for col in ['ret_30d', 'ret_3m']):
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_ret_30d_comp = np.where(df['ret_30d'] != 0, df['ret_30d'] / 30, 0)
-                daily_ret_3m_comp = np.where(df['ret_3m'] != 0, df['ret_3m'] / 90, 0)
-            df['momentum_harmony'] += (daily_ret_30d_comp > daily_ret_3m_comp).astype(int)
+                df['momentum_harmony'] += (df['ret_30d'] / 30 > df['ret_3m'] / 90).astype(int)
         
         if 'ret_3m' in df.columns:
             df['momentum_harmony'] += (df['ret_3m'] > 0).astype(int)
         
         # Wave State
         df['wave_state'] = df.apply(AdvancedMetrics._get_wave_state, axis=1)
-
-        # New: Overall Wave Strength (for filtering)
-        if all(col in df.columns for col in ['momentum_score', 'acceleration_score', 'rvol_score', 'breakout_score']):
-            df['overall_wave_strength'] = (
-                df['momentum_score'] * 0.3 +
-                df['acceleration_score'] * 0.3 +
-                df['rvol_score'] * 0.2 +
-                df['breakout_score'] * 0.2
-            )
-        else:
-            df['overall_wave_strength'] = 50.0 # Default if scores are missing
         
         return df
     
@@ -879,9 +857,9 @@ class RankingEngine:
             return acceleration_score
         
         # Get return data with defaults
-        ret_1d = df['ret_1d'].fillna(0) if 'ret_1d' in df.columns else pd.Series(0, index=df.index)
-        ret_7d = df['ret_7d'].fillna(0) if 'ret_7d' in df.columns else pd.Series(0, index=df.index)
-        ret_30d = df['ret_30d'].fillna(0) if 'ret_30d' in df.columns else pd.Series(0, index=df.index)
+        ret_1d = df['ret_1d'].fillna(0) if 'ret_1d' in df.columns else 0
+        ret_7d = df['ret_7d'].fillna(0) if 'ret_7d' in df.columns else 0
+        ret_30d = df['ret_30d'].fillna(0) if 'ret_30d' in df.columns else 0
         
         # Calculate daily averages with safe division
         with np.errstate(divide='ignore', invalid='ignore'):
@@ -1109,65 +1087,31 @@ class PatternDetector:
     @staticmethod
     @PerformanceMonitor.timer(target_time=0.5)
     def detect_all_patterns(df: pd.DataFrame) -> pd.DataFrame:
-        """Detect all 25 patterns efficiently using vectorized numpy operations."""
+        """Detect all 25 patterns efficiently"""
         
-        if df.empty:
-            df['patterns'] = [''] * len(df)
-            return df
-
-        # Get all pattern definitions as boolean masks
-        # Each tuple is (pattern_name: str, boolean_series: pd.Series)
-        patterns_with_masks_raw = PatternDetector._get_all_pattern_definitions(df)
+        # Initialize pattern list for each row
+        pattern_results = [[] for _ in range(len(df))]
         
-        # Prepare patterns with consistently structured tuples (name, mask)
-        # and extract pattern names in order
-        patterns_with_masks = []
-        pattern_names_ordered = []
-        for item in patterns_with_masks_raw:
-            if isinstance(item[0], str): # Correct format is (name, mask)
-                patterns_with_masks.append(item)
-                pattern_names_ordered.append(item[0])
-            else: # Incorrect format is (mask, name) - correcting the tuple order
-                patterns_with_masks.append((item[1], item[0]))
-                pattern_names_ordered.append(item[1])
-
-
-        # Pre-allocate a NumPy array for pattern presence
-        num_patterns = len(patterns_with_masks)
-        if num_patterns == 0: # Handle case where no patterns can be defined due to missing columns
-            df['patterns'] = [''] * len(df)
-            return df
-
-        pattern_matrix = np.zeros((len(df), num_patterns), dtype=bool)
+        # Detect each pattern type
+        patterns = PatternDetector._get_all_pattern_definitions(df)
         
-        # Populate the boolean matrix
-        for i, (pattern_name, mask) in enumerate(patterns_with_masks):
-            if mask is not None and not mask.empty and mask.any():
-                # Ensure mask index aligns with DataFrame index
-                aligned_mask = mask.reindex(df.index, fill_value=False)
-                pattern_matrix[:, i] = aligned_mask.to_numpy()
+        # Process all patterns in bulk
+        for pattern_name, mask in patterns:
+            if mask is not None and mask.any():
+                # Get indices where pattern is true
+                true_indices = np.where(mask)[0]
+                for idx in true_indices:
+                    pattern_results[idx].append(pattern_name)
         
-        # Convert the boolean matrix back to a list of pattern strings for each row
-        patterns_column = []
-        for row_idx in range(len(df)):
-            active_patterns_for_row = [
-                pattern_names_ordered[col_idx] 
-                for col_idx in range(num_patterns) 
-                if pattern_matrix[row_idx, col_idx]
-            ]
-            patterns_column.append(' | '.join(active_patterns_for_row) if active_patterns_for_row else '')
-        
-        df['patterns'] = patterns_column
+        # Join patterns efficiently
+        df['patterns'] = [' | '.join(patterns) if patterns else '' for patterns in pattern_results]
         
         return df
     
     @staticmethod
     def _get_all_pattern_definitions(df: pd.DataFrame) -> List[Tuple[str, Optional[pd.Series]]]:
-        """Get all pattern definitions with masks.
-        Returns a list of (pattern_name: str, mask: pd.Series) tuples.
-        Ensure consistency in tuple order for vectorized processing.
-        """
-        patterns = [] # List to store (name, mask) tuples
+        """Get all pattern definitions with masks"""
+        patterns = []
         
         # 1. Category Leader
         if 'category_percentile' in df.columns:
@@ -1193,22 +1137,22 @@ class PatternDetector:
                 (df['volume_score'] >= CONFIG.PATTERN_THRESHOLDS['institutional']) &
                 (df['vol_ratio_90d_180d'] > 1.1)
             )
-            patterns.append(('🏦 INSTITUTIONAL', mask)) # Corrected order
+            patterns.append(('🏦 INSTITUTIONAL', mask))
         
         # 5. Volume Explosion
         if 'rvol' in df.columns:
             mask = df['rvol'] > 3
-            patterns.append(('⚡ VOL EXPLOSION', mask)) # Corrected order
+            patterns.append(('⚡ VOL EXPLOSION', mask))
         
         # 6. Breakout Ready
         if 'breakout_score' in df.columns:
             mask = df['breakout_score'] >= CONFIG.PATTERN_THRESHOLDS['breakout_ready']
-            patterns.append(('🎯 BREAKOUT', mask)) # Corrected order
+            patterns.append(('🎯 BREAKOUT', mask))
         
         # 7. Market Leader
         if 'percentile' in df.columns:
             mask = df['percentile'] >= CONFIG.PATTERN_THRESHOLDS['market_leader']
-            patterns.append(('👑 MARKET LEADER', mask)) # Corrected order
+            patterns.append(('👑 MARKET LEADER', mask))
         
         # 8. Momentum Wave
         if 'momentum_score' in df.columns and 'acceleration_score' in df.columns:
@@ -1216,7 +1160,7 @@ class PatternDetector:
                 (df['momentum_score'] >= CONFIG.PATTERN_THRESHOLDS['momentum_wave']) &
                 (df['acceleration_score'] >= 70)
             )
-            patterns.append(('🌊 MOMENTUM WAVE', mask)) # Corrected order
+            patterns.append(('🌊 MOMENTUM WAVE', mask))
         
         # 9. Liquid Leader
         if 'liquidity_score' in df.columns and 'percentile' in df.columns:
@@ -1224,23 +1168,23 @@ class PatternDetector:
                 (df['liquidity_score'] >= CONFIG.PATTERN_THRESHOLDS['liquid_leader']) &
                 (df['percentile'] >= CONFIG.PATTERN_THRESHOLDS['liquid_leader'])
             )
-            patterns.append(('💰 LIQUID LEADER', mask)) # Corrected order
+            patterns.append(('💰 LIQUID LEADER', mask))
         
         # 10. Long-term Strength
         if 'long_term_strength' in df.columns:
             mask = df['long_term_strength'] >= CONFIG.PATTERN_THRESHOLDS['long_strength']
-            patterns.append(('💪 LONG STRENGTH', mask)) # Corrected order
+            patterns.append(('💪 LONG STRENGTH', mask))
         
         # 11. Quality Trend
         if 'trend_quality' in df.columns:
             mask = df['trend_quality'] >= 80
-            patterns.append(('📈 QUALITY TREND', mask)) # Corrected order
+            patterns.append(('📈 QUALITY TREND', mask))
         
         # 12. Value Momentum (Fundamental)
         if 'pe' in df.columns and 'percentile' in df.columns:
             has_valid_pe = (df['pe'].notna() & (df['pe'] > 0) & (df['pe'] < 10000))
             mask = has_valid_pe & (df['pe'] < 15) & (df['master_score'] >= 70)
-            patterns.append(('💎 VALUE MOMENTUM', mask)) # Corrected order
+            patterns.append(('💎 VALUE MOMENTUM', mask))
         
         # 13. Earnings Rocket
         if 'eps_change_pct' in df.columns and 'acceleration_score' in df.columns:
@@ -1252,7 +1196,7 @@ class PatternDetector:
                 (extreme_growth & (df['acceleration_score'] >= 80)) |
                 (normal_growth & (df['acceleration_score'] >= 70))
             )
-            patterns.append(('📊 EARNINGS ROCKET', mask)) # Corrected order
+            patterns.append(('📊 EARNINGS ROCKET', mask))
         
         # 14. Quality Leader
         if all(col in df.columns for col in ['pe', 'eps_change_pct', 'percentile']):
@@ -1268,7 +1212,7 @@ class PatternDetector:
                 (df['eps_change_pct'] > 20) &
                 (df['percentile'] >= 80)
             )
-            patterns.append(('🏆 QUALITY LEADER', mask)) # Corrected order
+            patterns.append(('🏆 QUALITY LEADER', mask))
         
         # 15. Turnaround Play
         if 'eps_change_pct' in df.columns and 'volume_score' in df.columns:
@@ -1277,13 +1221,13 @@ class PatternDetector:
             strong_turnaround = has_eps & (df['eps_change_pct'] > 100) & (df['eps_change_pct'] <= 500) & (df['volume_score'] >= 70)
             
             mask = mega_turnaround | strong_turnaround
-            patterns.append(('⚡ TURNAROUND', mask)) # Corrected order
+            patterns.append(('⚡ TURNAROUND', mask))
         
         # 16. High PE Warning
         if 'pe' in df.columns:
             has_valid_pe = df['pe'].notna() & (df['pe'] > 0)
             mask = has_valid_pe & (df['pe'] > 100)
-            patterns.append(('⚠️ HIGH PE', mask)) # Corrected order
+            patterns.append(('⚠️ HIGH PE', mask))
         
         # 17. 52W High Approach
         if 'from_high_pct' in df.columns and 'volume_score' in df.columns and 'momentum_score' in df.columns:
@@ -1292,7 +1236,7 @@ class PatternDetector:
                 (df['volume_score'] >= 70) & 
                 (df['momentum_score'] >= 60)
             )
-            patterns.append(('🎯 52W HIGH APPROACH', mask)) # Corrected order
+            patterns.append(('🎯 52W HIGH APPROACH', mask))
         
         # 18. 52W Low Bounce
         if all(col in df.columns for col in ['from_low_pct', 'acceleration_score', 'ret_30d']):
@@ -1301,7 +1245,7 @@ class PatternDetector:
                 (df['acceleration_score'] >= 80) & 
                 (df['ret_30d'] > 10)
             )
-            patterns.append(('🔄 52W LOW BOUNCE', mask)) # Corrected order
+            patterns.append(('🔄 52W LOW BOUNCE', mask))
         
         # 19. Golden Zone
         if all(col in df.columns for col in ['from_low_pct', 'from_high_pct', 'trend_quality']):
@@ -1310,7 +1254,7 @@ class PatternDetector:
                 (df['from_high_pct'] > -40) & 
                 (df['trend_quality'] >= 70)
             )
-            patterns.append(('👑 GOLDEN ZONE', mask)) # Corrected order
+            patterns.append(('👑 GOLDEN ZONE', mask))
         
         # 20. Volume Accumulation
         if all(col in df.columns for col in ['vol_ratio_30d_90d', 'vol_ratio_90d_180d', 'ret_30d']):
@@ -1319,7 +1263,7 @@ class PatternDetector:
                 (df['vol_ratio_90d_180d'] > 1.1) & 
                 (df['ret_30d'] > 5)
             )
-            patterns.append(('📊 VOL ACCUMULATION', mask)) # Corrected order
+            patterns.append(('📊 VOL ACCUMULATION', mask))
         
         # 21. Momentum Divergence
         if all(col in df.columns for col in ['ret_7d', 'ret_30d', 'acceleration_score', 'rvol']):
@@ -1332,7 +1276,7 @@ class PatternDetector:
                 (df['acceleration_score'] >= 85) & 
                 (df['rvol'] > 2)
             )
-            patterns.append(('🔀 MOMENTUM DIVERGE', mask)) # Corrected order
+            patterns.append(('🔀 MOMENTUM DIVERGE', mask))
         
         # 22. Range Compression
         if all(col in df.columns for col in ['high_52w', 'low_52w', 'from_low_pct']):
@@ -1344,7 +1288,7 @@ class PatternDetector:
                 )
             
             mask = (range_pct < 50) & (df['from_low_pct'] > 30)
-            patterns.append(('🎯 RANGE COMPRESS', mask)) # Corrected order
+            patterns.append(('🎯 RANGE COMPRESS', mask))
         
         # 23. Stealth Accumulator (NEW)
         if all(col in df.columns for col in ['vol_ratio_90d_180d', 'vol_ratio_30d_90d', 'from_low_pct', 'ret_7d', 'ret_30d']):
@@ -1357,7 +1301,7 @@ class PatternDetector:
                 (df['from_low_pct'] > 40) &
                 (ret_ratio > 1)
             )
-            patterns.append(('🤫 STEALTH', mask)) # Corrected order
+            patterns.append(('🤫 STEALTH', mask))
         
         # 24. Momentum Vampire (NEW)
         if all(col in df.columns for col in ['ret_1d', 'ret_7d', 'rvol', 'from_high_pct', 'category']):
@@ -1370,7 +1314,7 @@ class PatternDetector:
                 (df['from_high_pct'] > -15) &
                 (df['category'].isin(['Small Cap', 'Micro Cap']))
             )
-            patterns.append(('🧛 VAMPIRE', mask)) # Corrected order
+            patterns.append(('🧛 VAMPIRE', mask))
         
         # 25. Perfect Storm (NEW)
         if 'momentum_harmony' in df.columns and 'master_score' in df.columns:
@@ -1378,7 +1322,7 @@ class PatternDetector:
                 (df['momentum_harmony'] == 4) &
                 (df['master_score'] > 80)
             )
-            patterns.append(('⛈️ PERFECT STORM', mask)) # Corrected order
+            patterns.append(('⛈️ PERFECT STORM', mask))
         
         return patterns
 
@@ -1467,49 +1411,30 @@ class MarketIntelligence:
         return ad_metrics
     
     @staticmethod
-    def detect_sector_rotation(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Detect sector rotation patterns with normalized analysis and dynamic sampling.
-        Uses dynamic sampling based on sector size.
-        """
+    def detect_sector_rotation(df: pd.DataFrame, top_n_per_sector: int = 25) -> pd.DataFrame:
+        """Detect sector rotation patterns with normalized analysis"""
         
         if 'sector' not in df.columns or df.empty:
             return pd.DataFrame()
         
+        # First, get top N stocks per sector by market cap or master score
         sector_dfs = []
         
         for sector in df['sector'].unique():
             if sector != 'Unknown':
                 sector_df = df[df['sector'] == sector].copy()
-                sector_size = len(sector_df)
                 
-                # Dynamic sampling based on sector size
-                if 1 <= sector_size <= 5:
-                    sample_count = sector_size # Use all (100%)
-                elif 6 <= sector_size <= 20:
-                    sample_count = max(1, int(sector_size * 0.80)) # Use 80%
-                elif 21 <= sector_size <= 50:
-                    sample_count = max(1, int(sector_size * 0.60)) # Use 60%
-                elif 51 <= sector_size <= 100:
-                    sample_count = max(1, int(sector_size * 0.40)) # Use 40%
-                else: # sector_size > 100
-                    sample_count = min(50, int(sector_size * 0.25)) # Use 25%, max 50 stocks
+                # Sort by master_score (or market_cap if available) and take top N
+                if len(sector_df) > top_n_per_sector:
+                    sector_df = sector_df.nlargest(top_n_per_sector, 'master_score')
                 
-                if sample_count > 0:
-                    # Sort by master_score and take the dynamic 'N'
-                    sector_df = sector_df.nlargest(sample_count, 'master_score')
-                else:
-                    sector_df = pd.DataFrame() # No stocks selected
-                
-                if not sector_df.empty:
-                    sector_dfs.append(sector_df)
+                sector_dfs.append(sector_df)
         
         # Combine normalized sector data
         if sector_dfs:
             normalized_df = pd.concat(sector_dfs, ignore_index=True)
         else:
-            # If no valid sectors after sampling, return empty or handle gracefully
-            return pd.DataFrame()
+            normalized_df = df
         
         # Calculate sector metrics on normalized data
         sector_metrics = normalized_df.groupby('sector').agg({
@@ -1518,7 +1443,7 @@ class MarketIntelligence:
             'volume_score': 'mean',
             'rvol': 'mean',
             'ret_30d': 'mean',
-            'money_flow_mm': 'sum' if 'money_flow_mm' in normalized_df.columns else lambda x: 0 # Default to 0 if column missing
+            'money_flow_mm': 'sum' if 'money_flow_mm' in normalized_df.columns else 'count'
         }).round(2)
         
         # Flatten column names
@@ -1527,12 +1452,12 @@ class MarketIntelligence:
                                      'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d', 'total_money_flow']
         else:
             sector_metrics.columns = ['avg_score', 'median_score', 'std_score', 'count', 
-                                     'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d', 'dummy_money_flow']
-            sector_metrics = sector_metrics.drop('dummy_money_flow', axis=1) # Remove dummy column
+                                     'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d', 'count2']
+            sector_metrics = sector_metrics.drop('count2', axis=1)
         
         # Add original sector size for reference
-        original_counts = df.groupby('sector').size().rename('total_stocks')
-        sector_metrics = sector_metrics.join(original_counts, how='left')
+        original_counts = df.groupby('sector').size()
+        sector_metrics['total_stocks'] = original_counts
         sector_metrics['analyzed_stocks'] = sector_metrics['count']
         
         # Calculate flow score with median for robustness
@@ -1600,9 +1525,176 @@ class Visualizer:
         
         return fig
     
-    # Removed: create_master_score_breakdown as per requirements
-    # Removed: create_sector_performance_scatter as per requirements
-
+    @staticmethod
+    def create_master_score_breakdown(df: pd.DataFrame, n: int = 20) -> go.Figure:
+        """Create master score breakdown chart showing component contributions"""
+        # Get top stocks
+        top_df = df.nlargest(min(n, len(df)), 'master_score').copy()
+        
+        if len(top_df) == 0:
+            return go.Figure()
+        
+        # Calculate weighted contributions
+        components = [
+            ('Position', 'position_score', CONFIG.POSITION_WEIGHT, '#3498db'),
+            ('Volume', 'volume_score', CONFIG.VOLUME_WEIGHT, '#e74c3c'),
+            ('Momentum', 'momentum_score', CONFIG.MOMENTUM_WEIGHT, '#2ecc71'),
+            ('Acceleration', 'acceleration_score', CONFIG.ACCELERATION_WEIGHT, '#f39c12'),
+            ('Breakout', 'breakout_score', CONFIG.BREAKOUT_WEIGHT, '#9b59b6'),
+            ('RVOL', 'rvol_score', CONFIG.RVOL_WEIGHT, '#e67e22')
+        ]
+        
+        fig = go.Figure()
+        
+        # Add bars for each component
+        for name, score_col, weight, color in components:
+            if score_col in top_df.columns:
+                # Calculate weighted contribution
+                weighted_contrib = top_df[score_col] * weight
+                
+                fig.add_trace(go.Bar(
+                    name=f'{name} ({weight:.0%})',
+                    y=top_df['ticker'],
+                    x=weighted_contrib,
+                    orientation='h',
+                    marker_color=color,
+                    text=[f"{val:.1f}" for val in top_df[score_col]],
+                    textposition='inside',
+                    hovertemplate=(
+                        f'{name}<br>'
+                        'Raw Score: %{text}<br>'
+                        'Weight: ' + f'{weight:.0%}' + '<br>'
+                        'Contribution: %{x:.1f}<extra></extra>'
+                    )
+                ))
+        
+        # Add master score annotations
+        for i, (idx, row) in enumerate(top_df.iterrows()):
+            fig.add_annotation(
+                x=row['master_score'] + 1,
+                y=i,
+                text=f"<b>{row['master_score']:.1f}</b>",
+                showarrow=False,
+                xanchor='left',
+                font=dict(size=12, color='black'),
+                bgcolor='rgba(255,255,255,0.8)',
+                bordercolor='black',
+                borderwidth=1
+            )
+        
+        fig.update_layout(
+            title=f"Top {len(top_df)} Stocks - Master Score 3.0 Component Breakdown",
+            xaxis_title="Weighted Score Contribution",
+            xaxis_range=[0, 110],
+            barmode='stack',
+            template='plotly_white',
+            height=max(400, len(top_df) * 35),
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5
+            ),
+            margin=dict(l=100, r=100, t=100, b=50)
+        )
+        
+        return fig
+    
+    @staticmethod
+    def create_sector_performance_scatter(df: pd.DataFrame) -> go.Figure:
+        """Create sector performance scatter plot with bubble size"""
+        try:
+            # Aggregate by sector
+            sector_stats = df.groupby('sector').agg({
+                'master_score': ['mean', 'std', 'count'],
+                'percentile': 'mean',
+                'rvol': 'mean',
+                'momentum_score': 'mean',
+                'ret_30d': 'mean'
+            }).reset_index()
+            
+            # Flatten column names
+            sector_stats.columns = ['sector', 'avg_score', 'std_score', 'count', 
+                                   'avg_percentile', 'avg_rvol', 'avg_momentum', 'avg_ret_30d']
+            
+            # Filter sectors with at least 3 stocks
+            sector_stats = sector_stats[sector_stats['count'] >= 3]
+            
+            if len(sector_stats) == 0:
+                return go.Figure()
+            
+            # Create scatter plot
+            fig = go.Figure()
+            
+            # Add scatter trace
+            fig.add_trace(go.Scatter(
+                x=sector_stats['avg_percentile'],
+                y=sector_stats['avg_score'],
+                mode='markers+text',
+                text=sector_stats['sector'],
+                textposition='top center',
+                marker=dict(
+                    size=sector_stats['count'] * 2,  # Scale bubble size
+                    sizemin=10,
+                    sizemode='diameter',
+                    sizeref=2,
+                    color=sector_stats['avg_rvol'],
+                    colorscale='Viridis',
+                    colorbar=dict(title="Avg RVOL"),
+                    line=dict(width=2, color='white'),
+                    showscale=True
+                ),
+                customdata=np.column_stack((
+                    sector_stats['count'],
+                    sector_stats['std_score'],
+                    sector_stats['avg_rvol'],
+                    sector_stats['avg_momentum'],
+                    sector_stats['avg_ret_30d']
+                )),
+                hovertemplate=(
+                    '<b>%{text}</b><br>' +
+                    'Avg Score: %{y:.1f}<br>' +
+                    'Avg Percentile: %{x:.1f}<br>' +
+                    'Stocks: %{customdata[0]}<br>' +
+                    'Std Dev: %{customdata[1]:.1f}<br>' +
+                    'Avg RVOL: %{customdata[2]:.2f}x<br>' +
+                    'Avg Momentum: %{customdata[3]:.1f}<br>' +
+                    '30D Return: %{customdata[4]:.1f}%<extra></extra>'
+                )
+            ))
+            
+            # Add quadrant lines
+            fig.add_hline(y=50, line_dash="dash", line_color="gray", opacity=0.5)
+            fig.add_vline(x=50, line_dash="dash", line_color="gray", opacity=0.5)
+            
+            # Add quadrant labels
+            fig.add_annotation(x=75, y=75, text="Leaders", showarrow=False, 
+                             font=dict(size=14, color="green"), opacity=0.7)
+            fig.add_annotation(x=25, y=75, text="Hidden Gems", showarrow=False,
+                             font=dict(size=14, color="blue"), opacity=0.7)
+            fig.add_annotation(x=75, y=25, text="Overvalued", showarrow=False,
+                             font=dict(size=14, color="orange"), opacity=0.7)
+            fig.add_annotation(x=25, y=25, text="Laggards", showarrow=False,
+                             font=dict(size=14, color="red"), opacity=0.7)
+            
+            fig.update_layout(
+                title='Sector Performance Analysis - Size = Stock Count, Color = RVOL',
+                xaxis_title='Average Percentile Rank',
+                yaxis_title='Average Master Score',
+                template='plotly_white',
+                height=500,
+                xaxis=dict(range=[0, 100]),
+                yaxis=dict(range=[0, 100])
+            )
+            
+            return fig
+            
+        except Exception as e:
+            logger.error(f"Error creating sector scatter: {str(e)}")
+            return go.Figure()
+    
     @staticmethod
     def create_acceleration_profiles(df: pd.DataFrame, n: int = 10) -> go.Figure:
         """Create acceleration profiles showing momentum over time"""
@@ -1762,17 +1854,6 @@ class FilterEngine:
             if 'pe' in df.columns and 'eps_change_pct' in df.columns:
                 mask &= df['pe'].notna() & (df['pe'] > 0) & df['eps_change_pct'].notna()
         
-        # NEW: Wave State filter
-        wave_states = filters.get('wave_states', [])
-        if wave_states and 'All' not in wave_states and 'wave_state' in df.columns:
-            mask &= df['wave_state'].isin(wave_states)
-
-        # NEW: Wave Strength filter
-        wave_strength_range = filters.get('wave_strength_range')
-        if wave_strength_range and 'overall_wave_strength' in df.columns:
-            min_ws, max_ws = wave_strength_range
-            mask &= (df['overall_wave_strength'] >= min_ws) & (df['overall_wave_strength'] <= max_ws)
-
         # Apply mask efficiently
         filtered_df = df[mask].copy()
         
@@ -1796,8 +1877,7 @@ class FilterEngine:
             'sector': 'sectors',
             'eps_tier': 'eps_tiers',
             'pe_tier': 'pe_tiers',
-            'price_tier': 'price_tiers',
-            'wave_state': 'wave_states' # New
+            'price_tier': 'price_tiers'
         }
         
         if column in filter_key_map:
@@ -1844,11 +1924,11 @@ class SearchEngine:
             company_contains = df[df['company_name'].str.upper().str.contains(query, na=False, regex=False)]
             
             # Method 4: Partial match at start of words in company name
-            def word_starts_with(company_name_str):
-                """Helper to check if any word in company name starts with the query."""
-                if pd.isna(company_name_str):
+            # Split company names into words and check if any word starts with query
+            def word_starts_with(company_name):
+                if pd.isna(company_name):
                     return False
-                words = str(company_name_str).upper().split()
+                words = str(company_name).upper().split()
                 return any(word.startswith(query) for word in words)
             
             company_word_match = df[df['company_name'].apply(word_starts_with)]
@@ -2050,7 +2130,7 @@ class ExportEngine:
             'ret_1d', 'ret_7d', 'ret_30d', 'ret_3m', 'ret_6m', 'ret_1y',
             'rvol', 'vmi', 'money_flow_mm', 'position_tension',
             'momentum_harmony', 'wave_state', 'patterns', 
-            'category', 'sector', 'eps_tier', 'pe_tier', 'overall_wave_strength'
+            'category', 'sector', 'eps_tier', 'pe_tier'
         ]
         
         available_cols = [col for col in export_cols if col in df.columns]
@@ -2228,7 +2308,7 @@ class UIComponents:
         
         with intel_col1:
             # Sector Rotation Map
-            sector_rotation = MarketIntelligence.detect_sector_rotation(df)
+            sector_rotation = MarketIntelligence.detect_sector_rotation(df, top_n_per_sector=25)
             
             if not sector_rotation.empty:
                 # Create rotation visualization
@@ -2258,7 +2338,7 @@ class UIComponents:
                 ))
                 
                 fig.update_layout(
-                    title="Sector Rotation Map - Smart Money Flow (Dynamically Sampled)",
+                    title="Sector Rotation Map - Smart Money Flow (Top 25 Stocks/Sector)",
                     xaxis_title="Sector",
                     yaxis_title="Flow Score",
                     height=400,
@@ -2267,8 +2347,6 @@ class UIComponents:
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No sector rotation data available for visualization.")
         
         with intel_col2:
             # Market Regime
@@ -2355,8 +2433,7 @@ class SessionStateManager:
             'quick_filter_applied': False,
             'show_debug': False,
             'performance_metrics': {},
-            'data_quality': {},
-            'trigger_clear': False # For clear filters button sync
+            'data_quality': {}
         }
         
         for key, default_value in defaults.items():
@@ -2373,8 +2450,7 @@ class SessionStateManager:
             'pe_tier_filter', 'price_tier_filter', 'patterns',
             'min_score', 'trend_filter', 'min_eps_change',
             'min_pe', 'max_pe', 'require_fundamental_data',
-            'quick_filter', 'quick_filter_applied',
-            'wave_states_filter', 'wave_strength_range_slider' # New filter keys
+            'quick_filter', 'quick_filter_applied'
         ]
         
         for key in filter_keys:
@@ -2385,16 +2461,8 @@ class SessionStateManager:
                     st.session_state[key] = False
                 elif isinstance(st.session_state[key], str):
                     st.session_state[key] = ""
-                elif isinstance(st.session_state[key], tuple): # For sliders
-                    if key == 'wave_strength_range_slider':
-                        st.session_state[key] = (0, 100) # Default range for strength slider
-                    else: # Other tuple types if any
-                        st.session_state[key] = None
                 elif isinstance(st.session_state[key], (int, float)):
-                    if key == 'min_score':
-                        st.session_state[key] = 0
-                    else:
-                        st.session_state[key] = 0 # Default for other numeric values
+                    st.session_state[key] = 0
                 else:
                     st.session_state[key] = None
         
@@ -2504,20 +2572,18 @@ def main():
                 time.sleep(0.5)
                 st.rerun()
         
-        # Data source selection - ENHANCED: Two prominent buttons
+        # Data source selection
         st.markdown("---")
         st.markdown("### 📂 Data Source")
         
-        data_source_col1, data_source_col2 = st.columns(2)
-        with data_source_col1:
-            if st.button("📊 Google Sheets", type="primary" if st.session_state.data_source == "sheet" else "secondary", use_container_width=True, key="sheets_button"):
-                st.session_state.data_source = "sheet"
-                st.rerun()
-        with data_source_col2:
-            if st.button("📁 Upload CSV", type="primary" if st.session_state.data_source == "upload" else "secondary", use_container_width=True, key="upload_button"):
-                st.session_state.data_source = "upload"
-                st.rerun()
-
+        data_source = st.radio(
+            "Choose data source:",
+            ["Google Sheets", "Upload CSV"],
+            index=0 if st.session_state.data_source == "sheet" else 1,
+            help="Load data from Google Sheets or upload your own CSV file"
+        )
+        st.session_state.data_source = "sheet" if data_source == "Google Sheets" else "upload"
+        
         uploaded_file = None
         if st.session_state.data_source == "upload":
             uploaded_file = st.file_uploader(
@@ -2583,8 +2649,8 @@ def main():
                 if len(perf) > 0:
                     slowest = sorted(perf.items(), key=lambda x: x[1], reverse=True)[:3]
                     for func_name, elapsed in slowest:
-                        if elapsed > 0.001: # Show even very small times in debug
-                            st.caption(f"{func_name}: {elapsed:.4f}s")
+                        if elapsed > 0.5:
+                            st.caption(f"{func_name}: {elapsed:.2f}s")
         
         st.markdown("---")
         st.markdown("### 🔍 Smart Filters")
@@ -2605,12 +2671,10 @@ def main():
             ('eps_tier_filter', lambda x: x and len(x) > 0),
             ('pe_tier_filter', lambda x: x and len(x) > 0),
             ('price_tier_filter', lambda x: x and len(x) > 0),
-            ('min_eps_change', lambda x: x is not None and str(x).strip() != ''), # Check for None explicitly
-            ('min_pe', lambda x: x is not None and str(x).strip() != ''),
-            ('max_pe', lambda x: x is not None and str(x).strip() != ''),
+            ('min_eps_change', lambda x: x and x.strip() != ''),
+            ('min_pe', lambda x: x and x.strip() != ''),
+            ('max_pe', lambda x: x and x.strip() != ''),
             ('require_fundamental_data', lambda x: x),
-            ('wave_states_filter', lambda x: x and len(x) > 0), # New wave state filter
-            ('wave_strength_range_slider', lambda x: x != (0, 100)) # New wave strength filter
         ]
         
         for key, check_func in filter_checks:
@@ -2770,7 +2834,7 @@ def main():
         selected_categories = st.multiselect(
             "Market Cap Category",
             options=categories,
-            default=st.session_state.get('category_filter', []), # Persist filter state
+            default=[],
             placeholder="Select categories (empty = All)",
             key="category_filter"
         )
@@ -2783,7 +2847,7 @@ def main():
         selected_sectors = st.multiselect(
             "Sector",
             options=sectors,
-            default=st.session_state.get('sector_filter', []), # Persist filter state
+            default=[],
             placeholder="Select sectors (empty = All)",
             key="sector_filter"
         )
@@ -2830,57 +2894,10 @@ def main():
         filters['trend_filter'] = st.selectbox(
             "Trend Quality",
             options=list(trend_options.keys()),
-            index=list(trend_options.keys()).index(st.session_state.get('trend_filter', "All Trends")), # Persist filter state
-            key="trend_filter"
+            index=0,
+            help="Filter stocks by trend strength"
         )
         filters['trend_range'] = trend_options[filters['trend_filter']]
-
-        # NEW: Wave Filters
-        st.markdown("#### 🌊 Wave Filters")
-        wave_states_options = FilterEngine.get_filter_options(ranked_df_display, 'wave_state', filters)
-        filters['wave_states'] = st.multiselect(
-            "Wave State",
-            options=wave_states_options,
-            default=st.session_state.get('wave_states_filter', []),
-            placeholder="Select wave states (empty = All)",
-            help="Filter by the detected 'Wave State'",
-            key="wave_states_filter"
-        )
-
-        if 'overall_wave_strength' in ranked_df_display.columns:
-            # Ensure proper min/max for slider, handling cases of all identical values
-            min_strength = float(ranked_df_display['overall_wave_strength'].min())
-            max_strength = float(ranked_df_display['overall_wave_strength'].max())
-            
-            # Adjust default range slightly if min and max are the same to allow slider movement
-            if min_strength == max_strength:
-                slider_min_val = max(0, int(min_strength - 10))
-                slider_max_val = min(100, int(max_strength + 10))
-                default_range_value = (int(min_strength), int(max_strength))
-            else:
-                slider_min_val = 0
-                slider_max_val = 100
-                default_range_value = (int(min_strength), int(max_strength))
-
-            # Ensure the slider's value is within its min/max boundaries
-            current_slider_value = st.session_state.get('wave_strength_range_slider', default_range_value)
-            # Clip persisted value to ensure it's within new min/max for the slider
-            current_slider_value = (max(slider_min_val, min(slider_max_val, current_slider_value[0])),
-                                    max(slider_min_val, min(slider_max_val, current_slider_value[1])))
-
-            filters['wave_strength_range'] = st.slider(
-                "Overall Wave Strength",
-                min_value=slider_min_val,
-                max_value=slider_max_val,
-                value=current_slider_value,
-                step=1,
-                help="Filter by the calculated 'Overall Wave Strength' score",
-                key="wave_strength_range_slider"
-            )
-        else:
-            filters['wave_strength_range'] = (0, 100) # Default to full range if column is missing
-            st.info("Overall Wave Strength data not available.")
-
         
         # Advanced filters
         with st.expander("🔧 Advanced Filters"):
@@ -2896,7 +2913,7 @@ def main():
                     selected_tiers = st.multiselect(
                         f"{col_name.replace('_', ' ').title()}",
                         options=tier_options,
-                        default=st.session_state.get(f'{col_name}_filter', []), # Persist filter state
+                        default=[],
                         placeholder=f"Select {col_name.replace('_', ' ')}s (empty = All)",
                         key=f"{col_name}_filter"
                     )
@@ -2917,9 +2934,6 @@ def main():
                         filters['min_eps_change'] = float(eps_change_input)
                     except ValueError:
                         st.error("Please enter a valid number for EPS change")
-                        filters['min_eps_change'] = None # Ensure filter is reset if invalid input
-                else:
-                    filters['min_eps_change'] = None # Ensure empty string results in None
             
             # PE filters (only in hybrid mode)
             if show_fundamentals and 'pe' in ranked_df_display.columns:
@@ -2939,9 +2953,6 @@ def main():
                             filters['min_pe'] = float(min_pe_input)
                         except ValueError:
                             st.error("Invalid Min PE")
-                            filters['min_pe'] = None
-                    else:
-                        filters['min_pe'] = None
                 
                 with col2:
                     max_pe_input = st.text_input(
@@ -2956,14 +2967,11 @@ def main():
                             filters['max_pe'] = float(max_pe_input)
                         except ValueError:
                             st.error("Invalid Max PE")
-                            filters['max_pe'] = None
-                    else:
-                        filters['max_pe'] = None
                 
                 # Data completeness filter
                 filters['require_fundamental_data'] = st.checkbox(
                     "Only show stocks with PE and EPS data",
-                    value=st.session_state.get('require_fundamental_data', False), # Retain state
+                    value=False,
                     key="require_fundamental_data"
                 )
     
@@ -2983,9 +2991,7 @@ def main():
         with st.sidebar.expander("🐛 Debug Info", expanded=True):
             st.write("**Active Filters:**")
             for key, value in filters.items():
-                # Correctly handle None for text inputs and default slider values
-                if value is not None and value != [] and value != 0 and \
-                   (not (isinstance(value, tuple) and value == (0,100))):
+                if value and value != [] and value != 0:
                     st.write(f"• {key}: {value}")
             
             st.write(f"\n**Filter Result:**")
@@ -2995,8 +3001,8 @@ def main():
             if st.session_state.performance_metrics:
                 st.write(f"\n**Performance:**")
                 for func, time_taken in st.session_state.performance_metrics.items():
-                    if time_taken > 0.001: # Show even very small times in debug
-                        st.write(f"• {func}: {time_taken:.4f}s")
+                    if time_taken > 0.1:
+                        st.write(f"• {func}: {time_taken:.2f}s")
     
     # Main content area
     # Show filter status
@@ -3020,10 +3026,9 @@ def main():
                 st.info(f"**Filtered View:** {len(filtered_df):,} stocks match your {st.session_state.active_filter_count} active filter{'s' if st.session_state.active_filter_count > 1 else ''}")
         
         with filter_status_col2:
-            # Trigger the clear filters logic from the sidebar button
             if st.button("Clear Filters", type="secondary"):
-                st.session_state.trigger_clear = True 
-                st.rerun() 
+                SessionStateManager.clear_filters()
+                st.rerun()
     
     # Summary metrics
     col1, col2, col3, col4, col5, col6 = st.columns(6)
@@ -3125,9 +3130,8 @@ def main():
             UIComponents.render_metric_card("With Patterns", f"{with_patterns}")
     
     # Main tabs
-    # NEW: Added "📊 Sector Analysis" tab
     tabs = st.tabs([
-        "📊 Summary", "🏆 Rankings", "🌊 Wave Radar", "📊 Analysis", "🔍 Search", "📊 Sector Analysis", "📥 Export", "ℹ️ About"
+        "📊 Summary", "🏆 Rankings", "🌊 Wave Radar", "📊 Analysis", "🔍 Search", "📥 Export", "ℹ️ About"
     ])
     
     # Tab 0: Summary - Enhanced
@@ -3362,21 +3366,14 @@ def main():
                     if 'master_score' in filtered_df.columns:
                         st.text(f"Max: {filtered_df['master_score'].max():.1f}")
                         st.text(f"Min: {filtered_df['master_score'].min():.1f}")
-                        st.text(f"Mean: {filtered_df['master_score'].mean():.1f}")
-                        st.text(f"Median: {filtered_df['master_score'].median():.1f}")
-                        st.text(f"Q1: {filtered_df['master_score'].quantile(0.25):.1f}")
-                        st.text(f"Q3: {filtered_df['master_score'].quantile(0.75):.1f}")
                         st.text(f"Std: {filtered_df['master_score'].std():.1f}")
                 
                 with stat_cols[1]:
                     st.markdown("**Returns (30D)**")
                     if 'ret_30d' in filtered_df.columns:
                         st.text(f"Max: {filtered_df['ret_30d'].max():.1f}%")
-                        st.text(f"Min: {filtered_df['ret_30d'].min():.1f}%")
                         st.text(f"Avg: {filtered_df['ret_30d'].mean():.1f}%")
                         st.text(f"Positive: {(filtered_df['ret_30d'] > 0).sum()}")
-                    else:
-                        st.text("No 30D return data available")
                 
                 with stat_cols[2]:
                     if show_fundamentals:
@@ -3400,26 +3397,42 @@ def main():
                             st.text(f">2x: {(filtered_df['rvol'] > 2).sum()}")
                 
                 with stat_cols[3]:
-                    st.markdown("**Trend Distribution**") #
-                    if 'trend_quality' in filtered_df.columns:
-                        # NEW: Trend Distribution Statistics
-                        total_stocks_in_filter = len(filtered_df)
-                        avg_trend_score = filtered_df['trend_quality'].mean() if total_stocks_in_filter > 0 else 0
-                        
-                        stocks_above_all_smas = (filtered_df['trend_quality'] >= 85).sum() # Roughly 'strong trend'
-                        stocks_in_uptrend = (filtered_df['trend_quality'] >= 60).sum() # Good or Strong uptrend
-                        stocks_in_downtrend = (filtered_df['trend_quality'] < 40).sum() # Weak/Downtrend
-                        
-                        st.text(f"Avg Trend Score: {avg_trend_score:.1f}")
-                        st.text(f"Above All SMAs: {stocks_above_all_smas}")
-                        st.text(f"In Uptrend (60+): {stocks_in_uptrend}")
-                        st.text(f"In Downtrend (<40): {stocks_in_downtrend}")
-                    else:
-                        st.text("No trend data available")
+                    st.markdown("**Categories**")
+                    if 'category' in filtered_df.columns:
+                        for cat, count in filtered_df['category'].value_counts().head(3).items():
+                            st.text(f"{cat}: {count}")
         
         else:
             st.warning("No stocks match the selected filters.")
         
+        # Master Score Breakdown Visualization
+        if not filtered_df.empty:
+            st.markdown("---")
+            st.markdown("### 📊 Master Score Component Analysis")
+            
+            # Allow user to select number of stocks to show
+            breakdown_col1, breakdown_col2 = st.columns([1, 4])
+            with breakdown_col1:
+                breakdown_count = st.selectbox(
+                    "Show breakdown for top",
+                    options=[10, 20, 30, 50],
+                    index=1,
+                    key="breakdown_count"
+                )
+            
+            # Create and display the breakdown chart
+            fig_breakdown = Visualizer.create_master_score_breakdown(filtered_df, n=breakdown_count)
+            st.plotly_chart(fig_breakdown, use_container_width=True)
+            
+            # Explanation
+            st.info(
+                "📊 **How to read this chart:**\n"
+                "- Each horizontal bar shows how a stock's Master Score is built\n"
+                "- Different colors represent different components (Position, Volume, Momentum, etc.)\n"
+                "- The length of each colored section shows its weighted contribution\n"
+                "- The total Master Score is shown at the end of each bar"
+            )
+    
     # Tab 2: Wave Radar - Enhanced
     with tabs[2]:
         st.markdown("### 🌊 Wave Radar - Early Momentum Detection System")
@@ -3439,7 +3452,6 @@ def main():
                     "Monthly Trend"
                 ],
                 index=0,
-                key="wave_timeframe_select", # Added key for better state management
                 help="""
                 🌊 All Waves: Complete unfiltered view
                 ⚡ Intraday Surge: High RVOL & today's movers
@@ -3453,24 +3465,21 @@ def main():
             sensitivity = st.select_slider(
                 "Detection Sensitivity",
                 options=["Conservative", "Balanced", "Aggressive"],
-                value=st.session_state.get('wave_sensitivity', "Balanced"), # Persist sensitivity
-                key="wave_sensitivity", # Added key for better state management
+                value="Balanced",
                 help="Conservative = Stronger signals, Aggressive = More signals"
             )
             
             # Sensitivity details toggle
             show_sensitivity_details = st.checkbox(
                 "Show thresholds",
-                value=st.session_state.get('show_sensitivity_details', False), # Persist state
-                key="show_sensitivity_details", # Added key for better state management
+                value=False,
                 help="Display exact threshold values for current sensitivity"
             )
         
         with radar_col3:
             show_market_regime = st.checkbox(
                 "📊 Market Regime Analysis",
-                value=st.session_state.get('show_market_regime', True), # Persist state
-                key="show_market_regime", # Added key for better state management
+                value=True,
                 help="Show category rotation flow and market regime detection"
             )
         
@@ -3479,14 +3488,26 @@ def main():
         
         with radar_col4:
             # Calculate Wave Strength
-            if not wave_filtered_df.empty and 'overall_wave_strength' in wave_filtered_df.columns:
+            if not wave_filtered_df.empty:
                 try:
-                    wave_strength_score = wave_filtered_df['overall_wave_strength'].mean()
+                    momentum_count = len(wave_filtered_df[wave_filtered_df['momentum_score'] >= 60]) if 'momentum_score' in wave_filtered_df.columns else 0
+                    accel_count = len(wave_filtered_df[wave_filtered_df['acceleration_score'] >= 70]) if 'acceleration_score' in wave_filtered_df.columns else 0
+                    rvol_count = len(wave_filtered_df[wave_filtered_df['rvol'] >= 2]) if 'rvol' in wave_filtered_df.columns else 0
                     
-                    if wave_strength_score > 70:
+                    total_stocks = len(wave_filtered_df)
+                    if total_stocks > 0:
+                        wave_strength = (
+                            momentum_count * 0.3 +
+                            accel_count * 0.3 +
+                            rvol_count * 0.4
+                        ) / total_stocks * 100
+                    else:
+                        wave_strength = 0
+                    
+                    if wave_strength > 20:
                         wave_emoji = "🌊🔥"
                         wave_color = "🟢"
-                    elif wave_strength_score > 50:
+                    elif wave_strength > 10:
                         wave_emoji = "🌊"
                         wave_color = "🟡"
                     else:
@@ -3495,14 +3516,12 @@ def main():
                     
                     UIComponents.render_metric_card(
                         "Wave Strength",
-                        f"{wave_emoji} {wave_strength_score:.0f}%",
+                        f"{wave_emoji} {wave_strength:.0f}%",
                         f"{wave_color} Market"
                     )
                 except Exception as e:
                     logger.error(f"Error calculating wave strength: {str(e)}")
                     UIComponents.render_metric_card("Wave Strength", "N/A", "Error")
-            else:
-                UIComponents.render_metric_card("Wave Strength", "N/A", "Data not available")
         
         # Display sensitivity thresholds if enabled
         if show_sensitivity_details:
@@ -3548,7 +3567,7 @@ def main():
                             (wave_filtered_df['ret_1d'] > 2) &
                             (wave_filtered_df['price'] > wave_filtered_df['prev_close'] * 1.02)
                         ]
-                    
+                
                 elif wave_timeframe == "3-Day Buildup":
                     required_cols = ['ret_3d', 'vol_ratio_7d_90d', 'price', 'sma_20d']
                     if all(col in wave_filtered_df.columns for col in required_cols):
@@ -3611,10 +3630,8 @@ def main():
                 momentum_shifts.loc[momentum_shifts['momentum_score'] >= momentum_threshold, 'signal_count'] += 1
                 momentum_shifts.loc[momentum_shifts['acceleration_score'] >= acceleration_threshold, 'signal_count'] += 1
                 momentum_shifts.loc[momentum_shifts['rvol'] >= min_rvol, 'signal_count'] += 1
-                if 'breakout_score' in momentum_shifts.columns:
-                    momentum_shifts.loc[momentum_shifts['breakout_score'] >= 75, 'signal_count'] += 1
-                if 'vol_ratio_7d_90d' in momentum_shifts.columns:
-                    momentum_shifts.loc[momentum_shifts['vol_ratio_7d_90d'] >= 1.5, 'signal_count'] += 1
+                momentum_shifts.loc[momentum_shifts['breakout_score'] >= 75, 'signal_count'] += 1
+                momentum_shifts.loc[momentum_shifts['vol_ratio_7d_90d'] >= 1.5, 'signal_count'] += 1
                 
                 # Calculate shift strength
                 momentum_shifts['shift_strength'] = (
@@ -3635,7 +3652,7 @@ def main():
                 
                 display_columns.append('category')
                 
-                shift_display = top_shifts[[col for col in display_columns if col in top_shifts.columns]].copy() # Ensure columns exist
+                shift_display = top_shifts[display_columns].copy()
                 
                 # Add signal indicator
                 shift_display['Signals'] = shift_display['signal_count'].apply(
@@ -3644,9 +3661,9 @@ def main():
                 
                 # Format for display
                 if 'ret_7d' in shift_display.columns:
-                    shift_display['7D Return'] = shift_display['ret_7d'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else '-')
+                    shift_display['ret_7d'] = shift_display['ret_7d'].apply(lambda x: f"{x:.1f}%")
                 
-                shift_display['RVOL'] = shift_display['rvol'].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else '-')
+                shift_display['rvol'] = shift_display['rvol'].apply(lambda x: f"{x:.1f}x")
                 
                 # Rename columns
                 shift_display = shift_display.rename(columns={
@@ -3655,8 +3672,10 @@ def main():
                     'master_score': 'Score',
                     'momentum_score': 'Momentum',
                     'acceleration_score': 'Acceleration',
+                    'rvol': 'RVOL',
                     'wave_state': 'Wave',
-                    'category': 'Category'
+                    'category': 'Category',
+                    'ret_7d': '7D Return'
                 })
                 
                 shift_display = shift_display.drop('signal_count', axis=1)
@@ -3719,94 +3738,70 @@ def main():
                     # Calculate category performance with normalization
                     try:
                         if 'category' in wave_filtered_df.columns:
-                            # Get top stocks per category for fair comparison
+                            # Get top 20 stocks per category for fair comparison
                             category_dfs = []
                             for cat in wave_filtered_df['category'].unique():
                                 if cat != 'Unknown':
                                     cat_df = wave_filtered_df[wave_filtered_df['category'] == cat]
-                                    
-                                    # Use dynamic sampling logic similar to sectors, but simplified for categories
-                                    category_size = len(cat_df)
-                                    if 1 <= category_size <= 5:
-                                        sample_count = category_size # Use all (100%)
-                                    elif 6 <= category_size <= 20:
-                                        sample_count = max(1, int(category_size * 0.80)) # Use 80%
-                                    elif 21 <= category_size <= 50:
-                                        sample_count = max(1, int(category_size * 0.60)) # Use 60%
-                                    else: # category_size > 50 (e.g., 51-100 or 100+)
-                                        sample_count = min(50, int(category_size * 0.25)) # Use 25%, max 50
-                                    
-                                    if sample_count > 0:
-                                        cat_df = cat_df.nlargest(sample_count, 'master_score')
-                                    else:
-                                        cat_df = pd.DataFrame() # No stocks selected
-                                        
-                                    if not cat_df.empty: # Only append if it has stocks after sampling
-                                        category_dfs.append(cat_df)
+                                    if len(cat_df) > 20:
+                                        cat_df = cat_df.nlargest(20, 'master_score')
+                                    category_dfs.append(cat_df)
                             
                             if category_dfs:
                                 normalized_cat_df = pd.concat(category_dfs, ignore_index=True)
                             else:
-                                normalized_cat_df = pd.DataFrame() # Fallback if no valid categories after sampling
+                                normalized_cat_df = wave_filtered_df
                             
-                            if not normalized_cat_df.empty:
-                                category_flow = normalized_cat_df.groupby('category').agg({
-                                    'master_score': ['mean', 'count'],
-                                    'momentum_score': 'mean',
-                                    'volume_score': 'mean',
-                                    'rvol': 'mean'
-                                }).round(2)
+                            category_flow = normalized_cat_df.groupby('category').agg({
+                                'master_score': ['mean', 'count'],
+                                'momentum_score': 'mean',
+                                'volume_score': 'mean',
+                                'rvol': 'mean'
+                            }).round(2)
+                            
+                            if not category_flow.empty:
+                                category_flow.columns = ['Avg Score', 'Count', 'Avg Momentum', 'Avg Volume', 'Avg RVOL']
+                                category_flow['Flow Score'] = (
+                                    category_flow['Avg Score'] * 0.4 +
+                                    category_flow['Avg Momentum'] * 0.3 +
+                                    category_flow['Avg Volume'] * 0.3
+                                )
                                 
-                                if not category_flow.empty:
-                                    category_flow.columns = ['Avg Score', 'Count', 'Avg Momentum', 'Avg Volume', 'Avg RVOL']
-                                    category_flow['Flow Score'] = (
-                                        category_flow['Avg Score'] * 0.4 +
-                                        category_flow['Avg Momentum'] * 0.3 +
-                                        category_flow['Avg Volume'] * 0.3
-                                    )
-                                    
-                                    # Sort by flow score
-                                    category_flow = category_flow.sort_values('Flow Score', ascending=False)
-                                    
-                                    # Determine flow direction
-                                    top_category = category_flow.index[0] if len(category_flow) > 0 else ""
-                                    if 'Small' in top_category or 'Micro' in top_category:
-                                        flow_direction = "🔥 Risk-ON"
-                                    elif 'Large' in top_category or 'Mega' in top_category:
-                                        flow_direction = "❄️ Risk-OFF"
-                                    else:
-                                        flow_direction = "➡️ Neutral"
-                                    
-                                    # Create visualization
-                                    fig_flow = go.Figure()
-                                    
-                                    fig_flow.add_trace(go.Bar(
-                                        x=category_flow.index,
-                                        y=category_flow['Flow Score'],
-                                        text=[f"{val:.1f}" for val in category_flow['Flow Score']],
-                                        textposition='outside',
-                                        marker_color=['#2ecc71' if score > 60 else '#e74c3c' if score < 40 else '#f39c12' 
-                                                     for score in category_flow['Flow Score']],
-                                        hovertemplate='Category: %{x}<br>Flow Score: %{y:.1f}<br>Stocks: %{customdata}<extra></extra>',
-                                        customdata=category_flow['Count']
-                                    ))
-                                    
-                                    fig_flow.update_layout(
-                                        title=f"Smart Money Flow Direction: {flow_direction} (Dynamically Sampled)",
-                                        xaxis_title="Market Cap Category",
-                                        yaxis_title="Flow Score",
-                                        height=300,
-                                        template='plotly_white'
-                                    )
-                                    
-                                    st.plotly_chart(fig_flow, use_container_width=True)
+                                # Sort by flow score
+                                category_flow = category_flow.sort_values('Flow Score', ascending=False)
+                                
+                                # Determine flow direction
+                                top_category = category_flow.index[0] if len(category_flow) > 0 else ""
+                                if 'Small' in top_category or 'Micro' in top_category:
+                                    flow_direction = "🔥 Risk-ON"
+                                elif 'Large' in top_category or 'Mega' in top_category:
+                                    flow_direction = "❄️ Risk-OFF"
                                 else:
-                                    st.info("Insufficient data for category flow analysis after sampling.")
-                            else:
-                                st.info("No valid stocks found in categories for flow analysis after sampling.")
-                        else:
-                            st.info("Category data not available for flow analysis.")
-                            
+                                    flow_direction = "➡️ Neutral"
+                                
+                                # Create visualization
+                                fig_flow = go.Figure()
+                                
+                                fig_flow.add_trace(go.Bar(
+                                    x=category_flow.index,
+                                    y=category_flow['Flow Score'],
+                                    text=[f"{val:.1f}" for val in category_flow['Flow Score']],
+                                    textposition='outside',
+                                    marker_color=['#2ecc71' if score > 60 else '#e74c3c' if score < 40 else '#f39c12' 
+                                                 for score in category_flow['Flow Score']],
+                                    hovertemplate='Category: %{x}<br>Flow Score: %{y:.1f}<br>Stocks: %{customdata}<extra></extra>',
+                                    customdata=category_flow['Count']
+                                ))
+                                
+                                fig_flow.update_layout(
+                                    title=f"Smart Money Flow Direction: {flow_direction} (Top 20/Category)",
+                                    xaxis_title="Market Cap Category",
+                                    yaxis_title="Flow Score",
+                                    height=300,
+                                    template='plotly_white'
+                                )
+                                
+                                st.plotly_chart(fig_flow, use_container_width=True)
                     except Exception as e:
                         logger.error(f"Error in category flow analysis: {str(e)}")
                         st.error("Unable to analyze category flow")
@@ -3919,13 +3914,13 @@ def main():
                     
                     # Format columns
                     if 'ret_1d' in surge_display.columns:
-                        surge_display['ret_1d'] = surge_display['ret_1d'].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else '-')
+                        surge_display['ret_1d'] = surge_display['ret_1d'].apply(lambda x: f"{x:+.1f}%")
                     
                     if 'money_flow_mm' in surge_display.columns:
-                        surge_display['money_flow_mm'] = surge_display['money_flow_mm'].apply(lambda x: f"₹{x:.1f}M" if pd.notna(x) else '-')
+                        surge_display['money_flow_mm'] = surge_display['money_flow_mm'].apply(lambda x: f"₹{x:.1f}M")
                     
-                    surge_display['price'] = surge_display['price'].apply(lambda x: f"₹{x:,.0f}" if pd.notna(x) else '-')
-                    surge_display['rvol'] = surge_display['rvol'].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else '-')
+                    surge_display['price'] = surge_display['price'].apply(lambda x: f"₹{x:,.0f}")
+                    surge_display['rvol'] = surge_display['rvol'].apply(lambda x: f"{x:.1f}x")
                     
                     # Rename columns
                     rename_dict = {
@@ -3970,7 +3965,37 @@ def main():
             
             with col1:
                 # Score distribution chart
-                fig_dist = Visualizer.create_score_distribution(filtered_df)
+                scores = [
+                    ('position_score', 'Position', '#3498db'),
+                    ('volume_score', 'Volume', '#e74c3c'),
+                    ('momentum_score', 'Momentum', '#2ecc71'),
+                    ('acceleration_score', 'Acceleration', '#f39c12'),
+                    ('breakout_score', 'Breakout', '#9b59b6'),
+                    ('rvol_score', 'RVOL', '#e67e22')
+                ]
+                
+                fig_dist = go.Figure()
+                
+                for score_col, label, color in scores:
+                    if score_col in filtered_df.columns:
+                        score_data = filtered_df[score_col].dropna()
+                        if len(score_data) > 0:
+                            fig_dist.add_trace(go.Box(
+                                y=score_data,
+                                name=label,
+                                marker_color=color,
+                                boxpoints='outliers',
+                                hovertemplate=f'{label}<br>Score: %{{y:.1f}}<extra></extra>'
+                            ))
+                
+                fig_dist.update_layout(
+                    title="Score Component Distribution",
+                    yaxis_title="Score (0-100)",
+                    template='plotly_white',
+                    height=400,
+                    showlegend=False
+                )
+                
                 st.plotly_chart(fig_dist, use_container_width=True)
             
             with col2:
@@ -4011,71 +4036,63 @@ def main():
                 else:
                     st.info("No patterns detected in current selection")
             
-            # Sector Performance Scatter Plot - REMOVED AS PER REQUIREMENTS
-            # st.markdown("---")
-            # st.markdown("#### 🎯 Sector Performance Scatter Analysis")
+            # Sector Performance Scatter Plot
+            st.markdown("---")
+            st.markdown("#### 🎯 Sector Performance Scatter Analysis")
             
-            # fig_sector_scatter = Visualizer.create_sector_performance_scatter(filtered_df)
-            # if fig_sector_scatter.data:
-            #     st.plotly_chart(fig_sector_scatter, use_container_width=True)
+            fig_sector_scatter = Visualizer.create_sector_performance_scatter(filtered_df)
+            if fig_sector_scatter.data:
+                st.plotly_chart(fig_sector_scatter, use_container_width=True)
                 
-            #     # Explanation
-            #     col1, col2 = st.columns(2)
-            #     with col1:
-            #         st.info(
-            #             "**📊 How to interpret:**\n"
-            #             "- **Position**: Shows sector strength vs market position\n"
-            #             "- **Size**: Larger bubbles = more stocks in sector\n"
-            #             "- **Color**: Darker = higher average RVOL\n"
-            #             "- **Quadrants**: Leaders (top-right), Hidden Gems (top-left)"
-            #         )
-            #     with col2:
-            #         st.success(
-            #             "**💡 Trading insights:**\n"
-            #             "- **Leaders**: Strong sectors with high rankings\n"
-            #             "- **Hidden Gems**: Strong performance, lower visibility\n"
-            #             "- **Overvalued**: Popular but weak performance\n"
-            #             "- **Laggards**: Weak in both dimensions"
-            #         )
-            # else:
-            #     st.info("Need more data for sector scatter analysis")
+                # Explanation
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.info(
+                        "**📊 How to interpret:**\n"
+                        "- **Position**: Shows sector strength vs market position\n"
+                        "- **Size**: Larger bubbles = more stocks in sector\n"
+                        "- **Color**: Darker = higher average RVOL\n"
+                        "- **Quadrants**: Leaders (top-right), Hidden Gems (top-left)"
+                    )
+                with col2:
+                    st.success(
+                        "**💡 Trading insights:**\n"
+                        "- **Leaders**: Strong sectors with high rankings\n"
+                        "- **Hidden Gems**: Strong performance, lower visibility\n"
+                        "- **Overvalued**: Popular but weak performance\n"
+                        "- **Laggards**: Weak in both dimensions"
+                    )
+            else:
+                st.info("Need more data for sector scatter analysis")
             
             st.markdown("---")
             
-            # Sector performance (moved to Sector Analysis Tab now)
-            st.markdown("#### Sector Performance (Dynamically Sampled)")
-            sector_rotation_old_tab = MarketIntelligence.detect_sector_rotation(filtered_df) # No fixed N here
+            # Sector performance
+            st.markdown("#### Sector Performance (Top 25 Stocks per Sector)")
+            sector_rotation = MarketIntelligence.detect_sector_rotation(filtered_df, top_n_per_sector=25)
             
-            if not sector_rotation_old_tab.empty:
+            if not sector_rotation.empty:
                 # Display sector table with all metrics
-                display_cols_old_tab = ['avg_score', 'median_score', 'analyzed_stocks', 'total_stocks', 
+                display_cols = ['avg_score', 'median_score', 'analyzed_stocks', 'total_stocks', 
                                'avg_momentum', 'avg_rvol', 'flow_score']
-                
-                available_old_tab_cols = [col for col in display_cols_old_tab if col in sector_rotation_old_tab.columns]
-                
-                sector_display_old_tab = sector_rotation_old_tab[available_old_tab_cols].copy()
-                
-                sector_display_old_tab.columns = [
-                    'Avg Score', 'Median Score', 'Analyzed', 'Total', 
-                    'Avg Momentum', 'Avg RVOL', 'Flow Score'
-                ]
+                sector_display = sector_rotation[display_cols].round(2)
+                sector_display.columns = ['Avg Score', 'Median Score', 'Analyzed', 'Total', 
+                                        'Avg Momentum', 'Avg RVOL', 'Flow Score']
                 
                 # Add percentage of sector analyzed
-                sector_display_old_tab['Coverage %'] = (
-                    (sector_display_old_tab['Analyzed'] / sector_display_old_tab['Total'] * 100)
-                    .replace([np.inf, -np.inf], np.nan) # Handle potential inf
-                    .fillna(0) # Fill NaN from 0 total stocks
+                sector_display['Coverage %'] = (
+                    (sector_display['Analyzed'] / sector_display['Total'] * 100)
                     .round(1)
                     .apply(lambda x: f"{x}%")
                 )
                 
                 st.dataframe(
-                    sector_display_old_tab.style.background_gradient(subset=['Flow Score', 'Avg Score']),
+                    sector_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
                     use_container_width=True
                 )
                 
                 # Show explanation
-                st.info("📊 **Normalized Analysis**: Shows metrics for dynamically sampled stocks per sector (by Master Score) to ensure fair comparison across sectors of different sizes.")
+                st.info("📊 **Normalized Analysis**: Shows metrics for top 25 stocks per sector (by Master Score) to ensure fair comparison across sectors of different sizes.")
             else:
                 st.info("No sector data available for analysis.")
             
@@ -4085,14 +4102,14 @@ def main():
                 category_df = filtered_df.groupby('category').agg({
                     'master_score': ['mean', 'count'],
                     'category_percentile': 'mean',
-                    'money_flow_mm': 'sum' if 'money_flow_mm' in filtered_df.columns else lambda x: 0 # Fallback
+                    'money_flow_mm': 'sum' if 'money_flow_mm' in filtered_df.columns else 'count'
                 }).round(2)
                 
                 if 'money_flow_mm' in filtered_df.columns:
                     category_df.columns = ['Avg Score', 'Count', 'Avg Cat %ile', 'Total Money Flow']
                 else:
-                    category_df.columns = ['Avg Score', 'Count', 'Avg Cat %ile', 'Dummy Flow']
-                    category_df = category_df.drop('Dummy Flow', axis=1)
+                    category_df.columns = ['Avg Score', 'Count', 'Avg Cat %ile', 'Count2']
+                    category_df = category_df.drop('Count2', axis=1)
                 
                 category_df = category_df.sort_values('Avg Score', ascending=False)
                 
@@ -4201,22 +4218,16 @@ def main():
                         for i, (name, score, weight) in enumerate(components):
                             with score_cols[i]:
                                 # Color coding
-                                if pd.isna(score):
-                                    color = "⚪"
-                                    display_score = "N/A"
-                                elif score >= 80:
+                                if score >= 80:
                                     color = "🟢"
-                                    display_score = f"{score:.0f}"
                                 elif score >= 60:
                                     color = "🟡"
-                                    display_score = f"{score:.0f}"
                                 else:
                                     color = "🔴"
-                                    display_score = f"{score:.0f}"
                                 
                                 st.markdown(
                                     f"**{name}**<br>"
-                                    f"{color} {display_score}<br>"
+                                    f"{color} {score:.0f}<br>"
                                     f"<small>Weight: {weight:.0%}</small>",
                                     unsafe_allow_html=True
                                 )
@@ -4225,18 +4236,10 @@ def main():
                         if stock.get('patterns'):
                             st.markdown(f"**🎯 Patterns:** {stock['patterns']}")
                         
-                        # Additional details - Reorganized layout
+                        # Additional details
+                        detail_cols = st.columns(3)
                         
-                        st.markdown("---")
-                        # First row: Classification & Fundamentals (col1), Performance (col2)
-                        # Second row: Technicals + Trading Position (col3)
-                        # Third row: Advanced Metrics (col4)
-                        
-                        # Use a container for logical grouping and then columns within it
-                        st.container()
-                        detail_cols_top = st.columns([1, 1]) # Column 1 for Classification/Fundamentals, Column 2 for Performance
-                        
-                        with detail_cols_top[0]:
+                        with detail_cols[0]:
                             st.markdown("**📊 Classification**")
                             st.text(f"Sector: {stock.get('sector', 'Unknown')}")
                             st.text(f"Category: {stock.get('category', 'Unknown')}")
@@ -4255,15 +4258,7 @@ def main():
                                         st.text(f"PE Ratio: 🟡 {pe_val:.1f}x")
                                     else:
                                         st.text(f"PE Ratio: 🔴 {pe_val:.1f}x")
-                                else:
-                                    st.text("PE Ratio: N/A")
                                 
-                                # EPS Current
-                                if 'eps_current' in stock and pd.notna(stock['eps_current']):
-                                    st.text(f"EPS Current: ₹{stock['eps_current']:.2f}")
-                                else:
-                                    st.text("EPS Current: N/A")
-
                                 # EPS Change
                                 if 'eps_change_pct' in stock and pd.notna(stock['eps_change_pct']):
                                     eps_chg = stock['eps_change_pct']
@@ -4275,264 +4270,107 @@ def main():
                                         st.text(f"EPS Growth: 📈 {eps_chg:+.1f}%")
                                     else:
                                         st.text(f"EPS Growth: 📉 {eps_chg:+.1f}%")
-                                else:
-                                    st.text("EPS Growth: N/A")
                         
-                        with detail_cols_top[1]:
+                        with detail_cols[1]:
                             st.markdown("**📈 Performance**")
                             for period, col in [
                                 ("1 Day", 'ret_1d'),
                                 ("7 Days", 'ret_7d'),
                                 ("30 Days", 'ret_30d'),
                                 ("3 Months", 'ret_3m'),
-                                ("6 Months", 'ret_6m'),
-                                ("1 Year", 'ret_1y') # Added 1 year return
+                                ("6 Months", 'ret_6m')
                             ]:
                                 if col in stock.index and pd.notna(stock[col]):
                                     st.text(f"{period}: {stock[col]:+.1f}%")
-                                else:
-                                    st.text(f"{period}: N/A")
                         
-                        # Technicals and Trading Position (next row)
-                        st.markdown("---")
-                        detail_cols_tech = st.columns([1,1]) # Divide this into two sub-columns
-                        
-                        with detail_cols_tech[0]: # This will contain 52W info and Trading Position
+                        with detail_cols[2]:
                             st.markdown("**🔍 Technicals**")
                             
                             # 52-week range details
                             if all(col in stock.index for col in ['low_52w', 'high_52w']):
                                 st.text(f"52W Low: ₹{stock.get('low_52w', 0):,.0f}")
                                 st.text(f"52W High: ₹{stock.get('high_52w', 0):,.0f}")
-                            else:
-                                st.text("52W Range: N/A")
-
+                            
                             st.text(f"From High: {stock.get('from_high_pct', 0):.0f}%")
                             st.text(f"From Low: {stock.get('from_low_pct', 0):.0f}%")
                             
-                            st.markdown("**📊 Trading Position**") #
-                            # Reorganized into 4 columns for compact display
-                            tp_col1, tp_col2, tp_col3 = st.columns(3) # Only 3 SMAs
-                            # Trend Analysis will be in tp_col4 below
-
+                            # Trading Position with detailed SMA info
+                            st.markdown("**📊 Trading Position**")
+                            
                             current_price = stock.get('price', 0)
                             
+                            # SMA details with position
                             sma_checks = [
-                                ('sma_20d', '20DMA'),
-                                ('sma_50d', '50DMA'),
-                                ('sma_200d', '200DMA')
+                                ('sma_20d', '20 DMA'),
+                                ('sma_50d', '50 DMA'),
+                                ('sma_200d', '200 DMA')
                             ]
                             
-                            for i, (sma_col, sma_label) in enumerate(sma_checks):
-                                display_col = [tp_col1, tp_col2, tp_col3][i] # Distribute to 3 cols
-                                with display_col:
-                                    if sma_col in stock.index and pd.notna(stock[sma_col]) and stock[sma_col] > 0:
-                                        sma_value = stock[sma_col]
-                                        if current_price > sma_value:
-                                            pct_diff = ((current_price - sma_value) / sma_value) * 100
-                                            st.markdown(f"**{sma_label}**: <span style='color:green'>↑{pct_diff:.1f}%</span>", unsafe_allow_html=True)
-                                        else:
-                                            pct_diff = ((sma_value - current_price) / sma_value) * 100
-                                            st.markdown(f"**{sma_label}**: <span style='color:red'>↓{pct_diff:.1f}%</span>", unsafe_allow_html=True)
-                                    else:
-                                        st.markdown(f"**{sma_label}**: N/A")
+                            trading_above = []
+                            trading_below = []
                             
-                        with detail_cols_tech[1]: # This will contain Trend Analysis and Advanced Metrics
-                            st.markdown("**📈 Trend Analysis**") # Replaced "Trend" to make it more descriptive
+                            for sma_col, sma_label in sma_checks:
+                                if sma_col in stock.index and pd.notna(stock[sma_col]) and stock[sma_col] > 0:
+                                    sma_value = stock[sma_col]
+                                    
+                                    if current_price > sma_value:
+                                        pct_above = ((current_price - sma_value) / sma_value) * 100
+                                        st.success(f"✅ {sma_label}: ₹{sma_value:,.0f} (↑{pct_above:.1f}%)")
+                                        trading_above.append(sma_label)
+                                    else:
+                                        pct_below = ((sma_value - current_price) / sma_value) * 100
+                                        st.error(f"❌ {sma_label}: ₹{sma_value:,.0f} (↓{pct_below:.1f}%)")
+                                        trading_below.append(sma_label)
+                            
+                            # Trend summary
+                            st.markdown("**📈 Trend Analysis**")
+                            
                             if 'trend_quality' in stock.index:
                                 tq = stock['trend_quality']
                                 if tq >= 80:
-                                    st.markdown(f"🔥 Strong Uptrend ({tq:.0f})")
+                                    st.success(f"🔥 Strong Uptrend ({tq:.0f})")
                                 elif tq >= 60:
-                                    st.markdown(f"✅ Good Uptrend ({tq:.0f})")
+                                    st.info(f"✅ Good Uptrend ({tq:.0f})")
                                 elif tq >= 40:
-                                    st.markdown(f"➡️ Neutral Trend ({tq:.0f})")
+                                    st.warning(f"➡️ Neutral Trend ({tq:.0f})")
                                 else:
-                                    st.markdown(f"⚠️ Weak/Downtrend ({tq:.0f})")
-                            else:
-                                st.markdown("Trend: N/A")
-
-                            # NEW: Advanced Metrics - Reorganized into 4 columns
-                            st.markdown("---")
-                            st.markdown("#### 🎯 Advanced Metrics")
-                            adv_col1, adv_col2 = st.columns(2) # Two columns for advanced metrics
+                                    st.error(f"⚠️ Weak/Downtrend ({tq:.0f})")
+                            
+                            # Summary position
+                            if trading_above and not trading_below:
+                                st.success(f"💪 Above all SMAs!")
+                            elif trading_below and not trading_above:
+                                st.error(f"📉 Below all SMAs")
+                            elif trading_above:
+                                st.info(f"📊 Mixed: Above {', '.join(trading_above)}")
+                        
+                        # Add a fourth column for advanced metrics
+                        with st.container():
+                            st.markdown("**🎯 Advanced Metrics**")
+                            
+                            adv_col1, adv_col2 = st.columns(2)
                             
                             with adv_col1:
                                 if 'vmi' in stock and pd.notna(stock['vmi']):
                                     st.metric("VMI", f"{stock['vmi']:.2f}")
-                                else:
-                                    st.metric("VMI", "N/A")
                                 
-                                if 'momentum_harmony' in stock and pd.notna(stock['momentum_harmony']):
+                                if 'momentum_harmony' in stock:
                                     harmony_val = stock['momentum_harmony']
                                     harmony_emoji = "🟢" if harmony_val >= 3 else "🟡" if harmony_val >= 2 else "🔴"
-                                    st.metric("Harmony", f"{harmony_emoji} {int(harmony_val)}/4")
-                                else:
-                                    st.metric("Harmony", "N/A")
+                                    st.metric("Harmony", f"{harmony_emoji} {harmony_val}/4")
                             
                             with adv_col2:
                                 if 'position_tension' in stock and pd.notna(stock['position_tension']):
                                     st.metric("Position Tension", f"{stock['position_tension']:.0f}")
-                                else:
-                                    st.metric("Position Tension", "N/A")
                                 
                                 if 'money_flow_mm' in stock and pd.notna(stock['money_flow_mm']):
                                     st.metric("Money Flow", f"₹{stock['money_flow_mm']:.1f}M")
-                                else:
-                                    st.metric("Money Flow", "N/A")
-
+            
             else:
                 st.warning("No stocks found matching your search criteria.")
     
-    # NEW: Tab 5: Sector Analysis
+    # Tab 5: Export
     with tabs[5]:
-        st.markdown("### 📊 Sector Analysis")
-
-        if not filtered_df.empty and 'sector' in filtered_df.columns:
-            st.markdown("#### 📈 Sector Overview (Dynamically Sampled)")
-            
-            sector_overview_df = MarketIntelligence.detect_sector_rotation(filtered_df)
-
-            if not sector_overview_df.empty:
-                display_cols_overview = ['flow_score', 'avg_score', 'median_score', 'avg_momentum', 
-                                         'avg_volume', 'avg_rvol', 'avg_ret_30d', 'analyzed_stocks', 'total_stocks']
-                
-                # Filter for available columns
-                available_overview_cols = [col for col in display_cols_overview if col in sector_overview_df.columns]
-                
-                sector_overview_display = sector_overview_df[available_overview_cols].copy()
-                
-                sector_overview_display.columns = [
-                    'Flow Score', 'Avg Score', 'Median Score', 'Avg Momentum', 
-                    'Avg Volume', 'Avg RVOL', 'Avg 30D Ret', 'Analyzed Stocks', 'Total Stocks'
-                ]
-                
-                # Add percentage of sector analyzed for clarity
-                sector_overview_display['Coverage %'] = (
-                    (sector_overview_display['Analyzed Stocks'] / sector_overview_display['Total Stocks'] * 100)
-                    .replace([np.inf, -np.inf], np.nan) # Handle potential inf (division by zero)
-                    .fillna(0) # Fill NaN from 0 total stocks
-                    .round(1)
-                    .apply(lambda x: f"{x}%")
-                )
-
-                st.dataframe(
-                    sector_overview_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
-                    use_container_width=True
-                )
-                st.info("📊 **Normalized Analysis**: Shows metrics for dynamically sampled stocks per sector (by Master Score) to ensure fair comparison across sectors of different sizes.")
-
-            else:
-                st.info("No sector overview data available with current filters. Ensure 'sector' column is present and valid data exists.")
-
-            st.markdown("---")
-            st.markdown("#### 🔍 Sector Deep Dive")
-            
-            # Dropdown selector for sectors
-            available_sectors_for_deep_dive = sorted(filtered_df['sector'].dropna().unique().tolist())
-            selected_sector_for_deep_dive = st.selectbox(
-                "Select a Sector to Deep Dive",
-                options=['-- Select a Sector --'] + available_sectors_for_deep_dive,
-                key="sector_deep_dive_select"
-            )
-
-            if selected_sector_for_deep_dive != '-- Select a Sector --':
-                sector_data = filtered_df[filtered_df['sector'] == selected_sector_for_deep_dive].copy()
-                
-                if not sector_data.empty:
-                    st.markdown(f"##### Top 10 Stocks in {selected_sector_for_deep_dive}")
-                    top_10_sector_stocks = sector_data.nlargest(10, 'master_score')
-                    
-                    # Prepare display columns for top 10 stocks in deep dive
-                    display_cols_deep_dive = {
-                        'rank': 'Rank',
-                        'ticker': 'Ticker',
-                        'company_name': 'Company',
-                        'master_score': 'Score',
-                        'rvol': 'RVOL',
-                        'ret_30d': '30D Ret',
-                        'momentum_score': 'Momentum',
-                        'patterns': 'Patterns'
-                    }
-                    
-                    # Add fundamental columns if enabled and present
-                    if show_fundamentals:
-                        if 'pe' in top_10_sector_stocks.columns:
-                            display_cols_deep_dive['pe'] = 'PE'
-                        if 'eps_change_pct' in top_10_sector_stocks.columns:
-                            display_cols_deep_dive['eps_change_pct'] = 'EPS Δ%'
-
-                    available_deep_dive_cols = [col for col in display_cols_deep_dive.keys() if col in top_10_sector_stocks.columns]
-                    top_10_display = top_10_sector_stocks[available_deep_dive_cols].copy()
-
-                    # Apply formatting similar to Rankings tab for consistency
-                    def format_pe_deep_dive(value):
-                        try:
-                            if pd.isna(value) or value == 'N/A': return '-'
-                            val = float(value)
-                            if val <= 0: return 'Loss'
-                            elif val > 10000: return '>10K'
-                            elif val > 1000: return f"{val:.0f}"
-                            else: return f"{val:.1f}"
-                        except: return '-'
-
-                    def format_eps_change_deep_dive(value):
-                        try:
-                            if pd.isna(value): return '-'
-                            val = float(value)
-                            if abs(val) >= 1000: return f"{val/1000:+.1f}K%"
-                            elif abs(val) >= 100: return f"{val:+.0f}%"
-                            else: return f"{val:+.1f}%"
-                        except: return '-'
-
-                    if 'ret_30d' in top_10_display.columns:
-                        top_10_display['ret_30d'] = top_10_display['ret_30d'].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else '-')
-                    if 'rvol' in top_10_display.columns:
-                        top_10_display['rvol'] = top_10_display['rvol'].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else '-')
-                    if 'pe' in top_10_display.columns:
-                        top_10_display['pe'] = top_10_display['pe'].apply(format_pe_deep_dive)
-                    if 'eps_change_pct' in top_10_display.columns:
-                        top_10_display['eps_change_pct'] = top_10_display['eps_change_pct'].apply(format_eps_change_deep_dive)
-
-                    top_10_display.columns = [display_cols_deep_dive[c] for c in available_deep_dive_cols]
-
-                    st.dataframe(top_10_display, use_container_width=True, hide_index=True)
-
-                    st.markdown(f"##### Statistics for {selected_sector_for_deep_dive}")
-                    col1_stats, col2_stats, col3_stats = st.columns(3)
-                    
-                    with col1_stats:
-                        st.metric("Total Stocks", len(sector_data))
-                        st.metric("Avg Master Score", f"{sector_data['master_score'].mean():.1f}")
-                    with col2_stats:
-                        if 'rvol' in sector_data.columns:
-                            st.metric("Avg RVOL", f"{sector_data['rvol'].mean():.1f}x")
-                        else:
-                            st.metric("Avg RVOL", "N/A")
-                        if 'ret_30d' in sector_data.columns:
-                            st.metric("Avg 30D Return", f"{sector_data['ret_30d'].mean():.1f}%")
-                        else:
-                            st.metric("Avg 30D Return", "N/A")
-                    with col3_stats:
-                        if 'pe' in sector_data.columns and sector_data['pe'].notna().any():
-                            st.metric("Median PE", f"{sector_data[sector_data['pe'] > 0]['pe'].median():.1f}x")
-                        else:
-                            st.metric("Median PE", "N/A")
-                        if 'eps_change_pct' in sector_data.columns and sector_data['eps_change_pct'].notna().any():
-                            st.metric("Avg EPS Growth", f"{sector_data['eps_change_pct'].mean():.1f}%")
-                        else:
-                            st.metric("Avg EPS Growth", "N/A")
-
-                else:
-                    st.info(f"No data available for {selected_sector_for_deep_dive} after applying current filters.")
-            else:
-                st.info("Select a sector from the dropdown above to view its detailed performance.")
-
-        else:
-            st.warning("No sector data available in the filtered dataset for analysis. Please check your filters.")
-
-    # Tab 6: Export (moved from 5)
-    with tabs[6]:
         st.markdown("### 📥 Export Data")
         
         # Export template selection
@@ -4545,7 +4383,6 @@ def main():
                 "Swing Trader Focus",
                 "Investor Focus"
             ],
-            key="export_template_radio", # Added key for state management
             help="Select a template based on your trading style"
         )
         
@@ -4646,8 +4483,8 @@ def main():
             with stat_cols[i % 3]:
                 UIComponents.render_metric_card(label, value)
     
-    # Tab 7: About (moved from 6)
-    with tabs[7]:
+    # Tab 6: About
+    with tabs[6]:
         st.markdown("### ℹ️ About Wave Detection Ultimate 3.0 - Final Production Version")
         
         col1, col2 = st.columns([2, 1])
@@ -4676,7 +4513,6 @@ def main():
             - **Position Tension** - Range position stress indicator
             - **Momentum Harmony** - Multi-timeframe alignment (0-4)
             - **Wave State** - Real-time momentum classification
-            - **Overall Wave Strength** - Composite score for wave filter
             
             **Wave Radar™** - Enhanced detection system:
             - Momentum shift detection with signal counting
@@ -4695,11 +4531,10 @@ def main():
             
             1. **Data Source** - Google Sheets (default) or CSV upload
             2. **Quick Actions** - Instant filtering for common scenarios
-            3. **Smart Filters** - Interconnected filtering system, including new Wave filters
+            3. **Smart Filters** - Interconnected filtering system
             4. **Display Modes** - Technical or Hybrid (with fundamentals)
             5. **Wave Radar** - Monitor early momentum signals
-            6. **Sector Analysis** - Deep dive into sector performance (NEW TAB)
-            7. **Export Templates** - Customized for trading styles
+            6. **Export Templates** - Customized for trading styles
             
             #### 🔧 Production Features
             
@@ -4784,8 +4619,7 @@ def main():
             
             #### 🔒 Production Status
             
-            **Version**: 3.0.7-FINAL-COMPLETE
-            **Last Updated**: July 2025
+            **Version**: 3.0-FINAL-LOCKED
             **Status**: PRODUCTION
             **Updates**: LOCKED
             **Testing**: COMPLETE
