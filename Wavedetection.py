@@ -28,7 +28,7 @@ import time
 from io import BytesIO
 import warnings
 import gc
-# from decimal import Decimal, ROUND_HALF_UP # Not used in final version, removed
+import re # Added for re.escape in FilterEngine patterns
 
 # Suppress warnings for clean output
 warnings.filterwarnings('ignore')
@@ -2119,14 +2119,9 @@ class FilterEngine:
         # EPS change filter (Min EPS Change %)
         min_eps_change = filters.get('min_eps_change')
         if min_eps_change is not None and 'eps_change_pct' in df.columns:
-            # Exclude NaN values if a filter is set, otherwise include NaN
-            if pd.isna(min_eps_change): # If input is empty/NaN, don't filter
-                pass
-            else:
-                mask &= (df['eps_change_pct'] >= min_eps_change)
-                # If require_fundamental_data is NOT True, we explicitly exclude NaNs here
-                if not filters.get('require_fundamental_data', False):
-                     mask &= df['eps_change_pct'].notna() # Only filter non-NaN values
+            # If a filter value is provided, explicitly exclude NaN values from the filtered set
+            if not pd.isna(min_eps_change):
+                mask &= (df['eps_change_pct'] >= min_eps_change) & df['eps_change_pct'].notna() & ~np.isinf(df['eps_change_pct'])
         
         # Pattern filter
         patterns = filters.get('patterns', [])
@@ -2145,14 +2140,12 @@ class FilterEngine:
         min_pe = filters.get('min_pe')
         max_pe = filters.get('max_pe')
         if 'pe' in df.columns:
-            if min_pe is not None:
-                # Exclude NaN and non-positive PE values when a min filter is set
-                if not pd.isna(min_pe):
-                    mask &= (df['pe'] >= min_pe) & (df['pe'] > 0) & df['pe'].notna() & ~np.isinf(df['pe'])
-            if max_pe is not None:
-                # Exclude NaN and non-positive PE values when a max filter is set
-                if not pd.isna(max_pe):
-                    mask &= (df['pe'] <= max_pe) & (df['pe'] > 0) & df['pe'].notna() & ~np.isinf(df['pe'])
+            # If a min PE is set, exclude NaNs, non-positive, and infinite values
+            if min_pe is not None and not pd.isna(min_pe):
+                mask &= (df['pe'] >= min_pe) & (df['pe'] > 0) & df['pe'].notna() & ~np.isinf(df['pe'])
+            # If a max PE is set, exclude NaNs, non-positive, and infinite values
+            if max_pe is not None and not pd.isna(max_pe):
+                mask &= (df['pe'] <= max_pe) & (df['pe'] > 0) & df['pe'].notna() & ~np.isinf(df['pe'])
         
         # Apply tier filters
         for tier_type in ['eps_tiers', 'pe_tiers', 'price_tiers']:
@@ -2412,7 +2405,7 @@ class ExportEngine:
                 intel_data.append({'Metric': 'Market Regime', 'Value': regime, 'Details': f"Avg Micro/Small Score: {regime_metrics.get('micro_small_avg', np.nan):.1f}, Avg Large/Mega Score: {regime_metrics.get('large_mega_avg', np.nan):.1f}"})
                 intel_data.append({'Metric': 'Overall Breadth (%)', 'Value': f"{regime_metrics.get('breadth', 0)*100:.1f}%", 'Details': 'Percentage of stocks with positive 30D returns'})
                 intel_data.append({'Metric': 'Median RVOL (x)', 'Value': f"{regime_metrics.get('avg_rvol', np.nan):.2f}x", 'Details': 'Median Relative Volume across all stocks'})
-                intel_data.append({'Metric': 'Advance/Decline (Counts)', 'Value': f"{ad_metrics.get('advancing', 0)} Adv, {ad_metrics.get('declining', 0)} Dec", 'Details': f"Unchanged: {ad_metrics.get('unchanged', 0)}"})
+                intel_data.append({'Metric': 'Advance/Declines (Counts)', 'Value': f"{ad_metrics.get('advancing', 0)} Adv, {ad_metrics.get('declining', 0)} Dec", 'Details': f"Unchanged: {ad_metrics.get('unchanged', 0)}"})
                 intel_data.append({'Metric': 'Advance/Decline Ratio', 'Value': f"{ad_metrics.get('ad_ratio', np.nan):.2f}", 'Details': 'Advancing / Declining (higher is better)'})
                 
                 intel_df = pd.DataFrame(intel_data)
@@ -2501,7 +2494,6 @@ class ExportEngine:
                     apply_column_formats(ws_wave, wave_signals_data[available_wave_cols])
                     ws_wave.set_column('C:C', 25) # Company Name
                     ws_wave.set_column('I:I', 40) # Patterns
-
 
                 # 6. Summary Statistics Sheet
                 summary_stats = {
@@ -2630,7 +2622,7 @@ class UIComponents:
                 "A/D Ratio",
                 f"{ad_emoji} {ad_ratio:.2f}",
                 f"{ad_metrics.get('advancing', 0)}/{ad_metrics.get('declining', 0)}",
-                "Advance/Decline Ratio (Advancing stocks vs. Declining stocks over 1 day)"
+                "Advance/Declines Ratio (Advancing stocks vs. Declining stocks over 1 day)"
             )
         
         with col2:
@@ -3334,7 +3326,8 @@ def main():
     except Exception as e:
         # Catch any exceptions during initial data load and processing
         st.error(f"❌ Critical Data Initialization Error: {str(e)}")
-        logger.error(f"Application failed during data initialization: {str(e)}", exc_info=True)
+        logger.critical(f"Application crashed unexpectedly: {str(e)}", exc_info=True)
+        
         # Suggest troubleshooting steps or restart
         st.info("Please ensure your data source is accessible and correctly formatted. Try refreshing the page or clearing the cache.")
         st.stop() # Stop the execution if core data loading fails
@@ -3519,31 +3512,34 @@ def main():
             key="wave_states_filter"
         )
 
-        # Overall Wave Strength Slider
-        if 'overall_wave_strength' in ranked_df_display.columns:
-            # Ensure proper min/max for slider based on available data, while keeping range generous
+        # Overall Wave Strength Slider - FIX: Ensure value is within min_value and max_value
+        if 'overall_wave_strength' in ranked_df_display.columns and not ranked_df_display['overall_wave_strength'].empty:
             min_strength_data = ranked_df_display['overall_wave_strength'].min()
             max_strength_data = ranked_df_display['overall_wave_strength'].max()
             
-            # Set slider bounds to a practical range, e.g., 0-100, but ensure current data min/max is within.
-            # If all data is same value, set small range around it.
+            # Define slider bounds, ensuring min_value is always <= max_value
             slider_min_val = max(0, int(min_strength_data) - 10) if not pd.isna(min_strength_data) else 0
             slider_max_val = min(100, int(max_strength_data) + 10) if not pd.isna(max_strength_data) else 100
-            
-            # Ensure min_val < max_val for slider, if not, adjust slightly
-            if slider_min_val == slider_max_val:
-                if slider_min_val == 100: slider_min_val -= 10
-                else: slider_max_val += 10
-                slider_min_val = max(0, slider_min_val)
-                slider_max_val = min(100, slider_max_val)
 
+            # If all data points are the same, ensure a small valid range for the slider
+            if slider_min_val >= slider_max_val:
+                if slider_min_val == 100:
+                    slider_min_val = 90 # Adjust down if max is 100
+                else:
+                    slider_max_val = slider_min_val + 10 # Expand range upwards
+                slider_max_val = min(100, slider_max_val) # Ensure it doesn't exceed 100
+                slider_min_val = max(0, slider_min_val) # Ensure it doesn't go below 0
 
-            # Use persisted value, but clip it to the current available slider range
+            # Get persisted value, then clip it to the current dynamic slider range
             current_slider_value = st.session_state.wave_strength_range_slider
             current_slider_value = (
                 max(slider_min_val, min(slider_max_val, current_slider_value[0])),
                 max(slider_min_val, min(slider_max_val, current_slider_value[1]))
             )
+            
+            # If the clipped value results in an invalid range (e.g., (5,3)), fix it
+            if current_slider_value[0] > current_slider_value[1]:
+                current_slider_value = (slider_min_val, slider_max_val) # Reset to full current range
 
             filters_dict_for_engine['wave_strength_range'] = st.slider(
                 "Overall Wave Strength",
@@ -3555,7 +3551,7 @@ def main():
                 key="wave_strength_range_slider"
             )
         else:
-            filters_dict_for_engine['wave_strength_range'] = (0, 100) # Default to full range if column is missing
+            filters_dict_for_engine['wave_strength_range'] = (0, 100) # Default to full range if column is missing or empty
             st.info("Overall Wave Strength data not available for filtering.")
         
         # Advanced filters in an expander
@@ -3746,7 +3742,7 @@ def main():
     with col4_metrics:
         if show_fundamentals and 'eps_change_pct' in filtered_df.columns:
             valid_eps_change_mask = filtered_df['eps_change_pct'].notna() & ~np.isinf(filtered_df['eps_change_pct'])
-            positive_eps_growth_count = valid_eps_change_mask & (filtered_df['eps_change_pct'] > 0).sum()
+            positive_eps_growth_count = (valid_eps_change_mask & (filtered_df['eps_change_pct'] > 0)).sum()
             strong_growth_count = (valid_eps_change_mask & (filtered_df['eps_change_pct'] > 50)).sum()
             mega_growth_count = (valid_eps_change_mask & (filtered_df['eps_change_pct'] > 100)).sum()
             
@@ -5709,5 +5705,3 @@ if __name__ == "__main__":
                 # Attempt to read and display recent logs (if logging to a file in a real deployment)
                 # For this self-contained script, logs go to console/Streamlit's internal logs
                 st.code(f"Error Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}\nError Details: {e}\n\nCheck Streamlit console logs for full tracebacks.")
-
-# END OF WAVE DETECTION ULTIMATE 3.0 - FINAL ULTIMATE PRODUCTION VERSION
