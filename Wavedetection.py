@@ -1,15 +1,3 @@
-"""
-Wave Detection Ultimate 3.0 - FINAL ULTIMATE PRODUCTION VERSION
-===============================================================
-Professional Stock Ranking System with Advanced Analytics
-All identified bugs fixed, maximally optimized, permanently locked for production.
-Handles 1791+ stocks with 41+ data columns (as per original intent).
-
-Version: 3.0-ULTIMATE-LOCKED
-Last Updated: July 28, 2025
-Status: FINAL PRODUCTION READY - PERMANENTLY LOCKED - NO FUTURE UPGRADES
-"""
-
 # ============================================
 # IMPORTS AND SETUP
 # ============================================
@@ -28,7 +16,7 @@ import time
 from io import BytesIO
 import warnings
 import gc
-import re # Added for re.escape in FilterEngine patterns
+import re
 
 # Suppress warnings for clean output
 warnings.filterwarnings('ignore')
@@ -1437,7 +1425,7 @@ class PatternDetector:
         # 21. Momentum Divergence
         ret_7d = get_series_or_default('ret_7d', 0.0)
         mask_momentum_diverge = pd.Series(False, index=df.index) # Initialize
-        if 'ret_7d' in df.columns and 'ret_30d' in df.columns and 'acceleration_score' in df.columns and 'rvol' in df.columns:
+        if all(col in df.columns for col in ['ret_7d', 'ret_30d', 'acceleration_score', 'rvol']):
             with np.errstate(divide='ignore', invalid='ignore'):
                 daily_7d_pace = np.where(ret_7d != 0, ret_7d / 7, 0)
                 daily_30d_pace = np.where(ret_30d != 0, ret_30d / 30, 0)
@@ -1770,7 +1758,6 @@ class Visualizer:
             template='plotly_white',
             height=400,
             showlegend=False,
-            margin=dict(l=50, r=50, t=60, b=50),
             yaxis_range=[0,100] # Ensure Y-axis is always 0-100
         )
         
@@ -1986,6 +1973,63 @@ class Visualizer:
             return fig
     
     @staticmethod
+    def create_pattern_analysis(df: pd.DataFrame) -> go.Figure:
+        """Create pattern frequency analysis"""
+        # Extract all patterns
+        all_patterns = []
+        
+        if not df.empty and 'patterns' in df.columns:
+            for patterns_str in df['patterns'].dropna():
+                if patterns_str:
+                    all_patterns.extend(patterns_str.split(' | '))
+        
+        if not all_patterns:
+            fig = go.Figure()
+            fig.add_annotation(
+                text="No patterns detected in current selection",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False,
+                font=dict(size=16, color="gray")
+            )
+            fig.update_layout(
+                title="Pattern Frequency Analysis",
+                template='plotly_white',
+                height=400
+            )
+            return fig
+        
+        # Count pattern frequencies
+        pattern_counts = pd.Series(all_patterns).value_counts()
+        
+        # Take top 15 patterns for display
+        pattern_counts = pattern_counts.head(15).sort_values(ascending=True)
+        
+        # Create bar chart
+        fig = go.Figure([
+            go.Bar(
+                x=pattern_counts.values,
+                y=pattern_counts.index,
+                orientation='h',
+                marker_color='#3498db',
+                text=pattern_counts.values,
+                textposition='outside',
+                hovertemplate='Pattern: %{y}<br>Count: %{x}<extra></extra>'
+            )
+        ])
+        
+        fig.update_layout(
+            title="Top 15 Pattern Frequency Analysis",
+            xaxis_title="Number of Stocks",
+            yaxis_title="Pattern",
+            template='plotly_white',
+            height=max(400, len(pattern_counts) * 35),
+            margin=dict(l=150, r=50, t=50, b=50),
+            yaxis={'categoryorder':'total ascending'} # Ensure correct order
+        )
+        
+        return fig
+    
+    @staticmethod
     def create_acceleration_profiles(df: pd.DataFrame, n: int = 10) -> go.Figure:
         """Create acceleration profiles showing momentum over time for top N accelerating stocks."""
         try:
@@ -2000,7 +2044,7 @@ class Visualizer:
             
             if accel_df.empty:
                 fig = go.Figure()
-                fig.add_annotation(text=f"No stocks found with acceleration data to display profiles for top {n}.", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False, font=dict(size=14, color="gray"))
+                fig.add_annotation(text=f"No stocks found with acceleration data to display profiles for top {n}.", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False, font=dict(size=16, color="gray"))
                 fig.update_layout(title="Acceleration Profiles", template='plotly_white')
                 return fig
             
@@ -2504,7 +2548,7 @@ class ExportEngine:
                     'Positive 30D Returns': (df['ret_30d'] > 0).sum() if 'ret_30d' in df.columns else 0,
                     'Market Regime (Detected)': MarketIntelligence.detect_market_regime(df)[0],
                     'Template Used for Top 100': templates_config[template]['focus'],
-                    'Export Date (IST)': datetime.now(IST).strftime('%Y-%m-%d %H:%M:%S')
+                    'Export Date (IST)': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
                 }
                 
                 summary_df = pd.DataFrame(list(summary_stats.items()), columns=['Metric', 'Value'])
@@ -2890,7 +2934,7 @@ class SessionStateManager:
             'show_debug': False,
             'performance_metrics': {}, # Stores timing data
             'data_quality': {}, # Stores data quality metrics
-            'trigger_clear_filters_flag': False # Flag to signal filter clear across reruns
+            'trigger_clear': False # Flag to signal filter clear across reruns
         }
         
         for key, default_value in defaults.items():
@@ -2917,7 +2961,7 @@ class SessionStateManager:
 
 
     @staticmethod
-    def clear_all_filter_states_in_session():
+    def clear_filters():
         """Resets all filter-related session state keys to their default 'cleared' values."""
         
         # Reset multiselects to empty lists
@@ -2968,9 +3012,9 @@ def main():
     SessionStateManager.initialize()
     
     # Check if a filter clear was triggered from a different widget
-    if st.session_state.trigger_clear_filters_flag:
-        SessionStateManager.clear_all_filter_states_in_session()
-        st.session_state.trigger_clear_filters_flag = False # Reset the flag
+    if st.session_state.trigger_clear:
+        SessionStateManager.clear_filters()
+        st.session_state.trigger_clear = False # Reset the flag
         st.rerun() # Rerun to apply clear filters visually
     
     # Custom CSS for production UI
@@ -3116,7 +3160,7 @@ def main():
     ">
         <h1 style="margin: 0; font-size: 2.5rem;">🌊 Wave Detection Ultimate 3.0</h1>
         <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">
-            Professional Stock Ranking System • Final Ultimate Production Version
+            Professional Stock Ranking System • Final Production Version
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -3280,7 +3324,7 @@ def main():
                     use_container_width=True, 
                     type="primary" if st.session_state.active_filter_count > 0 else "secondary",
                     help="Resets all applied filters to their default (inactive) state."):
-            SessionStateManager.clear_all_filter_states_in_session()
+            SessionStateManager.clear_filters()
             st.success("✅ All filters cleared!")
             st.rerun() # Rerun to ensure all widgets update their display state
         
@@ -3559,8 +3603,7 @@ def main():
             # Tier filters (EPS, PE, Price)
             for tier_type_key, col_name in [
                 ('eps_tiers', 'eps_tier'),
-                ('pe_tiers', 'pe_tier'),
-                ('price_tiers', 'price_tier')
+                ('pe_tiers', 'pe_tier'),('price_tiers', 'price_tier')
             ]:
                 if col_name in ranked_df_display.columns:
                     tier_options = FilterEngine.get_filter_options(ranked_df, col_name, filters_dict_for_engine)
@@ -3683,7 +3726,7 @@ def main():
         with filter_status_col2:
             # This button will set the flag, which the initial rerun check picks up
             if st.button("Clear Filters", type="secondary", key="clear_filters_main_button"):
-                st.session_state.trigger_clear_filters_flag = True
+                st.session_state.trigger_clear = True
                 st.rerun() # Rerun to trigger the clear logic in the sidebar
 
     # Summary metrics (below filters, above tabs)
@@ -3817,7 +3860,7 @@ def main():
                 st.download_button(
                     label="📥 Download Filtered Data (CSV)",
                     data=csv_filtered,
-                    file_name=f"wave_detection_filtered_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv",
+                    file_name=f"wave_detection_filtered_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv",
                     mime="text/csv",
                     help="Download all currently displayed stocks with all scores and indicators."
                 )
@@ -3831,7 +3874,7 @@ def main():
                 st.download_button(
                     label="📥 Download Top 100 (CSV)",
                     data=csv_top100,
-                    file_name=f"wave_detection_top100_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv",
+                    file_name=f"wave_detection_top100_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv",
                     mime="text/csv",
                     help="Download the top 100 stocks by Master Score from the filtered set."
                 )
@@ -3846,7 +3889,7 @@ def main():
                     st.download_button(
                         label="📥 Download Pattern Stocks (CSV)",
                         data=csv_patterns,
-                        file_name=f"wave_detection_patterns_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv",
+                        file_name=f"wave_detection_patterns_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv",
                         mime="text/csv",
                         help="Download only stocks that have one or more patterns detected."
                     )
@@ -3928,7 +3971,6 @@ def main():
                 'ret_30d': '30D Ret',
                 'rvol': 'RVOL',
                 'vmi': 'VMI',
-                'money_flow_mm': 'Money Flow (MM)',
                 'patterns': 'Patterns',
                 'category': 'Category',
                 'sector': 'Sector'
@@ -4831,7 +4873,8 @@ def main():
                         
                         st.dataframe(
                             sector_overview_agg.style.background_gradient(subset=['Avg_Score']),
-                            use_container_width=True
+                            use_container_width=True,
+                            hide_index=False
                         )
                         st.info("This table shows aggregated metrics for ALL filtered stocks within each sector. For normalized comparison (Dynamically Sampled), see the 'Sector Analysis' tab.")
                     else:
@@ -4858,7 +4901,8 @@ def main():
                         
                         st.dataframe(
                             category_overview_agg.style.background_gradient(subset=['Avg_Score']),
-                            use_container_width=True
+                            use_container_width=True,
+                            hide_index=False
                         )
                     else:
                         st.info("No category data available for analysis in the current filtered set.")
@@ -5179,6 +5223,26 @@ def main():
                             else:
                                 st.markdown("Trend: N/A")
 
+                            # Summary trading position based on SMAs
+                            trading_above_smas = []
+                            trading_below_smas = []
+                            for sma_col_name, sma_label_name in sma_checks_detail:
+                                sma_value_detail = stock.get(sma_col_name)
+                                if pd.notna(current_price_for_tech) and pd.notna(sma_value_detail) and sma_value_detail > 0:
+                                    if current_price_for_tech > sma_value_detail:
+                                        trading_above_smas.append(sma_label_name)
+                                    else:
+                                        trading_below_smas.append(sma_label_name)
+
+                            if len(trading_above_smas) == len(sma_checks_detail) and len(trading_below_smas) == 0:
+                                st.success(f"💪 Above all {len(sma_checks_detail)} SMAs!")
+                            elif len(trading_below_smas) == len(sma_checks_detail) and len(trading_above_smas) == 0:
+                                st.error(f"📉 Below all {len(sma_checks_detail)} SMAs!")
+                            elif trading_above_smas or trading_below_smas:
+                                st.info(f"📊 Mixed: Above {', '.join(trading_above_smas) if trading_above_smas else 'None'} | Below {', '.join(trading_below_smas) if trading_below_smas else 'None'}")
+                            else:
+                                st.info("No valid SMA data for position summary.")
+
                         with detail_row2_col2:
                             st.markdown("#### 🎯 Advanced Metrics")
                             adv_metric_col1, adv_metric_col2 = st.columns(2)
@@ -5198,7 +5262,7 @@ def main():
                             with adv_metric_col2:
                                 position_tension_val = stock.get('position_tension')
                                 if pd.notna(position_tension_val):
-                                    st.metric("Position Tension", f"{position_tension_val:.0f}", help="Indicates how 'stretched' a stock's price is within its 52-week range.")
+                                    st.metric("Position Tension", f"{position_tension_val:.0f}", help="Indicates how 'stretched' a stock's price is within its 52-week range. Higher values mean more stretched/volatile.")
                                 else: st.metric("Position Tension", "N/A", help="Indicates how 'stretched' a stock's price is within its 52-week range.")
                                 
                                 money_flow_mm_val = stock.get('money_flow_mm')
@@ -5513,54 +5577,54 @@ def main():
             #### 🎯 Core Features - PERMANENTLY LOCKED
             
             **Master Score 3.0** - Our proprietary weighted ranking algorithm, optimized for precision and performance:
-            - **Position Analysis (30%)** - Evaluates stock's current price relative to its 52-week range.
-            - **Volume Dynamics (25%)** - Analyzes multi-timeframe volume patterns and anomalies.
-            - **Momentum Tracking (15%)** - Assesses short to medium-term price momentum.
-            - **Acceleration Detection (10%)** - Identifies the rate of change in momentum, highlighting accelerating trends.
-            - **Breakout Probability (10%)** - Quantifies a stock's readiness for a significant price breakout.
-            - **RVOL Integration (10%)** - Incorporates real-time Relative Volume for immediate market activity insights.
+            - **Position Analysis (30%)** - Evaluates stock's current price relative to its 52-week range[cite: 3].
+            - **Volume Dynamics (25%)** - Analyzes multi-timeframe volume patterns and anomalies[cite: 3].
+            - **Momentum Tracking (15%)** - Assesses short to medium-term price momentum[cite: 3].
+            - **Acceleration Detection (10%)** - Identifies the rate of change in momentum, highlighting accelerating trends[cite: 3].
+            - **Breakout Probability (10%)** - Quantifies a stock's readiness for a significant price breakout[cite: 3].
+            - **RVOL Integration (10%)** - Incorporates real-time Relative Volume for immediate market activity insights[cite: 3].
             
-            **25 Pattern Detection** - A comprehensive suite of patterns to identify diverse trading opportunities:
-            - **Technical Patterns**: `🔥 CAT LEADER`, `💎 HIDDEN GEM`, `🚀 ACCELERATING`, `🏦 INSTITUTIONAL`, `⚡ VOL EXPLOSION`, `🎯 BREAKOUT`, `👑 MARKET LEADER`, `🌊 MOMENTUM WAVE`, `💰 LIQUID LEADER`, `💪 LONG STRENGTH`, `📈 QUALITY TREND`.
-            - **Price Range Patterns**: `🎯 52W HIGH APPROACH`, `🔄 52W LOW BOUNCE`, `👑 GOLDEN ZONE`, `🎯 RANGE COMPRESS`.
-            - **Volume & Momentum Dynamics**: `📊 VOL ACCUMULATION`, `🔀 MOMENTUM DIVERGE`.
-            - **NEW Intelligence Patterns**: `🤫 STEALTH`, `🧛 VAMPIRE`, `⛈️ PERFECT STORM`.
+            **25 Pattern Detection** - A comprehensive suite of patterns to identify diverse trading opportunities[cite: 7]:
+            - **Technical Patterns**: `🔥 CAT LEADER` [cite: 6], `💎 HIDDEN GEM` [cite: 6], `🚀 ACCELERATING` [cite: 6], `🏦 INSTITUTIONAL` [cite: 6], `⚡ VOL EXPLOSION` [cite: 6], `🎯 BREAKOUT` [cite: 6], `👑 MARKET LEADER` [cite: 6], `🌊 MOMENTUM WAVE` [cite: 6], `💰 LIQUID LEADER` [cite: 7], `💪 LONG STRENGTH` [cite: 7], `📈 QUALITY TREND`[cite: 171].
+            - **Price Range Patterns**: `🎯 52W HIGH APPROACH` [cite: 7], `🔄 52W LOW BOUNCE` [cite: 7], `👑 GOLDEN ZONE` [cite: 7], `🎯 RANGE COMPRESS`[cite: 7].
+            - **Volume & Momentum Dynamics**: `📊 VOL ACCUMULATION` [cite: 7], `🔀 MOMENTUM DIVERGE`[cite: 7].
+            - **NEW Intelligence Patterns**: `🤫 STEALTH` [cite: 7], `🧛 VAMPIRE` [cite: 7], `⛈️ PERFECT STORM`[cite: 7].
             
-            **Advanced Metrics** - Proprietary indicators for deeper market understanding:
-            - **Money Flow (MM)** - Estimated dollar volume traded, adjusted by RVOL.
-            - **VMI (Volume Momentum Index)** - Weighted average of recent volume ratios, indicating sustained volume interest.
-            - **Position Tension** - Quantifies price "stretch" within its 52-week range.
-            - **Momentum Harmony** - Aligns short, medium, and long-term momentum (0-4 signals).
-            - **Wave State** - Categorizes current momentum phase (FORMING, BUILDING, CRESTING, BREAKING).
-            - **Overall Wave Strength** - A composite score for general market wave intensity.
+            **Advanced Metrics** - Proprietary indicators for deeper market understanding[cite: 77]:
+            - **Money Flow (MM)** - Estimated dollar volume traded, adjusted by RVOL[cite: 68].
+            - **VMI (Volume Momentum Index)** - Weighted average of recent volume ratios, indicating sustained volume interest[cite: 70].
+            - **Position Tension** - Quantifies price "stretch" within its 52-week range[cite: 71].
+            - **Momentum Harmony** - Aligns short, medium, and long-term momentum (0-4 signals)[cite: 75].
+            - **Wave State** - Categorizes current momentum phase (FORMING, BUILDING, CRESTING, BREAKING)[cite: 79].
+            - **Overall Wave Strength** - A composite score for general market wave intensity[cite: 77].
             
             **Wave Radar™** - Our advanced early detection system:
-            - **Momentum Shift Detection** with multi-signal counting.
-            - **Category Rotation Flow** to track smart money movement across market caps.
-            - **Pattern Emergence Alerts** for stocks nearing qualification.
-            - **Dynamic Sensitivity Controls** (Conservative, Balanced, Aggressive) to fine-tune signal detection.
+            - **Momentum Shift Detection** with multi-signal counting[cite: 391].
+            - **Category Rotation Flow** to track smart money movement across market caps[cite: 398].
+            - **Pattern Emergence Alerts** for stocks nearing qualification[cite: 403].
+            - **Dynamic Sensitivity Controls** (Conservative, Balanced, Aggressive) to fine-tune signal detection[cite: 409].
             
             #### 💡 How to Use
             
-            1.  **Data Source**: Select between our live Google Sheets feed or upload your own custom CSV file.
+            1.  **Data Source**: Select between our live Google Sheets feed or upload your own custom CSV file[cite: 479, 482].
             2.  **Summary Tab**: Get an executive overview of the market pulse, top opportunities, and risk indicators.
-            3.  **Quick Actions**: Apply instant, pre-defined filters for common trading scenarios.
-            4.  **Smart Filters (Sidebar)**: Utilize interconnected, multi-dimensional filters for precise stock screening, including new 'Wave' specific filters.
+            3.  **Quick Actions**: Apply instant, pre-defined filters for common trading scenarios[cite: 513].
+            4.  **Smart Filters (Sidebar)**: Utilize interconnected, multi-dimensional filters for precise stock screening, including new 'Wave' specific filters[cite: 527, 533].
             5.  **Rankings Tab**: View the top-ranked stocks based on the Master Score, with comprehensive metrics and visual breakdowns.
             6.  **Wave Radar Tab**: Dive into early momentum signals, acceleration profiles, and detailed volume surge analysis.
             7.  **Analysis Tab**: Explore market-wide score distributions, pattern frequencies, and overall trend health.
             8.  **Search Tab**: Find specific stocks by ticker or company name and view their complete detailed analysis.
             9.  **Sector Analysis Tab**: Get deep insights into sector performance with dynamic sampling and individual sector statistics.
-            10. **Export Tab**: Download filtered data in comprehensive Excel reports or flexible CSV formats for external analysis.
+            10. **Export Tab**: Download filtered data in comprehensive Excel reports or flexible CSV formats for external analysis[cite: 318].
             
             #### 🔧 Production-Ready Features
             
-            -   **Maximal Performance**: Achieved through aggressive caching, extensive NumPy/Pandas vectorization, and meticulous code optimization. Sub-second processing for core operations.
-            -   **Memory Efficiency**: Engineered to handle large datasets (1791+ stocks with 41+ data points) smoothly.
-            -   **Robust Data Handling**: Comprehensive data validation, cleaning, and sanitization at every step to ensure data integrity and prevent errors.
-            -   **Error Resilient**: Graceful handling of data loading failures, missing columns, and numerical edge cases to ensure continuous operation.
-            -   **Streamlit State Management**: Robust session state initialization and management for consistent UI behavior across reruns.
-            -   **Mobile Responsive**: Optimized UI and table displays for seamless viewing on various devices.
+            -   **Maximal Performance**: Achieved through aggressive caching , extensive NumPy/Pandas vectorization, and meticulous code optimization. Sub-second processing for core operations[cite: 9].
+            -   **Memory Efficiency**: Engineered to handle large datasets (1791+ stocks with 41+ data points) smoothly[cite: 44].
+            -   **Robust Data Handling**: Comprehensive data validation [cite: 25], cleaning [cite: 32], and sanitization [cite: 33] at every step to ensure data integrity and prevent errors.
+            -   **Error Resilient**: Graceful handling of data loading failures [cite: 39], missing columns, and numerical edge cases to ensure continuous operation[cite: 40].
+            -   **Streamlit State Management**: Robust session state initialization [cite: 423] and management [cite: 427] for consistent UI behavior across reruns.
+            -   **Mobile Responsive**: Optimized UI and table displays for seamless viewing on various devices[cite: 467].
             """)
         
         with about_col2:
@@ -5568,16 +5632,16 @@ def main():
             #### 📈 Trend Indicators
             
             -   **🔥 Strong Uptrend** (Score 80-100)
-                -   Price above all key Moving Averages (e.g., 20, 50, 200 DMA).
-                -   MAs are correctly stacked (20 DMA > 50 DMA > 200 DMA).
+                -   Price above all key Moving Averages (e.g., 20, 50, 200 DMA)[cite: 127].
+                -   MAs are correctly stacked (20 DMA > 50 DMA > 200 DMA)[cite: 127].
             -   **✅ Good Uptrend** (Score 60-79)
-                -   Price above most key Moving Averages.
+                -   Price above most key Moving Averages[cite: 131].
                 -   Positive overall momentum.
             -   **➡️ Neutral Trend** (Score 40-59)
-                -   Mixed signals from Moving Averages.
+                -   Mixed signals from Moving Averages[cite: 132].
                 -   Price possibly consolidating or ranging.
             -   **⚠️ Weak/Downtrend** (Score 0-39)
-                -   Price below most or all key Moving Averages.
+                -   Price below most or all key Moving Averages[cite: 132].
                 -   Negative momentum or bearish MA crosses.
             
             #### 🎨 Display Modes
@@ -5592,11 +5656,11 @@ def main():
             
             #### ⚡ Performance Benchmarks
             
-            -   Initial data load & full processing: Typically <2 seconds (if cached, near instant).
-            -   Filtering operations: <200 milliseconds.
-            -   Pattern detection (all 25): <500 milliseconds.
-            -   Stock Search: <50 milliseconds.
-            -   Export report generation: <1 second.
+            -   Initial data load & full processing: Typically <2 seconds (if cached, near instant)[cite: 9, 45].
+            -   Filtering operations: <200 milliseconds[cite: 9, 291].
+            -   Pattern detection (all 25): <500 milliseconds[cite: 9, 152].
+            -   Stock Search: <50 milliseconds[cite: 9, 308].
+            -   Export report generation: <1 second[cite: 9, 317].
             
             #### 🔒 Production Status
             
@@ -5613,8 +5677,8 @@ def main():
             
             **Indian Market Optimized**
             -   ₹ Currency formatting.
-            -   IST (Indian Standard Time) timezone aware for display.
-            -   NSE/BSE (National Stock Exchange/Bombay Stock Exchange) equivalent categories for market capitalization.
+            -   IST (Indian Standard Time) timezone aware for display[cite: 1].
+            -   NSE/BSE (National Stock Exchange/Bombay Stock Exchange) equivalent categories for market capitalization[cite: 10].
             -   Local number formats for readability.
             """)
         
