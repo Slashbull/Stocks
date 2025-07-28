@@ -2102,7 +2102,7 @@ class UIComponents:
 
         with col2:
             # Momentum Health
-            high_momentum = len(df[df.get('momentum_score', -1) >= 70])
+            high_momentum = len(df[df.get('momentum_score', pd.Series(-1, index=df.index)) >= 70])
             momentum_pct = (high_momentum / len(df) * 100) if len(df) > 0 else 0
 
             UIComponents.render_metric_card(
@@ -2114,8 +2114,8 @@ class UIComponents:
         with col3:
             # Volume State
             # Corrected: pass 0 as scalar to pd.Series, not a list [0]
-            avg_rvol = df.get('rvol', pd.Series(0, index=df.index)).median()
-            high_vol_count = len(df[df.get('rvol', pd.Series(0, index=df.index)) > 2])
+            avg_rvol = df.get('rvol', pd.Series(0.0, index=df.index)).median() # Ensure float default for median
+            high_vol_count = len(df[df.get('rvol', pd.Series(0.0, index=df.index)) > 2])
 
             if avg_rvol > 1.5:
                 vol_emoji = "🌊"
@@ -2169,9 +2169,9 @@ class UIComponents:
         with opp_col1:
             # Ready to Run
             ready_to_run = df[
-                (df.get('momentum_score', -1) >= 70) &
-                (df.get('acceleration_score', -1) >= 70) &
-                (df.get('rvol', -1) >= 2)
+                (df.get('momentum_score', pd.Series(-1, index=df.index)) >= 70) &
+                (df.get('acceleration_score', pd.Series(-1, index=df.index)) >= 70) &
+                (df.get('rvol', pd.Series(-1, index=df.index)) >= 2)
             ].nlargest(5, 'master_score')
 
             st.markdown("**🚀 Ready to Run**")
@@ -2196,7 +2196,7 @@ class UIComponents:
 
         with opp_col3:
             # Volume Alerts
-            volume_alerts = df[df.get('rvol', 0) > 3].nlargest(5, 'master_score')
+            volume_alerts = df[df.get('rvol', pd.Series(0, index=df.index)) > 3].nlargest(5, 'master_score')
 
             st.markdown("**⚡ Volume Alerts**")
             if len(volume_alerts) > 0:
@@ -2331,8 +2331,8 @@ class UIComponents:
 
         with stats_col2:
             st.markdown("**Volume**")
-            avg_rvol = df.get('rvol', pd.Series(0, index=df.index)).mean()
-            high_vol = len(df[df.get('rvol', pd.Series(0, index=df.index)) > 2])
+            avg_rvol = df.get('rvol', pd.Series(0.0, index=df.index)).mean()
+            high_vol = len(df[df.get('rvol', pd.Series(0.0, index=df.index)) > 2])
             st.text(f"Avg RVOL: {avg_rvol:.2f}x")
             st.text(f"High Vol (>2x): {high_vol}")
 
@@ -2610,7 +2610,7 @@ class UIComponents:
                         for cat, count in filtered_df['category'].value_counts().head(3).items():
                             st.text(f"{cat}: {count}")
                     else:
-                        st.text("No category data available")
+                        st.text("N/A")
 
         else:
             st.warning("No stocks match the selected filters.")
@@ -2679,9 +2679,9 @@ class UIComponents:
             # Calculate Wave Strength
             if not wave_filtered_df.empty:
                 try:
-                    momentum_count = len(wave_filtered_df[wave_filtered_df.get('momentum_score', -1) >= 60])
-                    accel_count = len(wave_filtered_df[wave_filtered_df.get('acceleration_score', -1) >= 70])
-                    rvol_count = len(wave_filtered_df[wave_filtered_df.get('rvol', -1) >= 2])
+                    momentum_count = len(wave_filtered_df[wave_filtered_df.get('momentum_score', pd.Series(-1, index=wave_filtered_df.index)) >= 60])
+                    accel_count = len(wave_filtered_df[wave_filtered_df.get('acceleration_score', pd.Series(-1, index=wave_filtered_df.index)) >= 70])
+                    rvol_count = len(wave_filtered_df[wave_filtered_df.get('rvol', pd.Series(-1, index=wave_filtered_df.index)) >= 2])
 
                     total_stocks = len(wave_filtered_df)
                     if total_stocks > 0:
@@ -2752,9 +2752,9 @@ class UIComponents:
                     required_cols = ['rvol', 'ret_1d', 'price', 'prev_close']
                     if all(col in wave_filtered_df.columns for col in required_cols):
                         wave_filtered_df = wave_filtered_df[
-                            (wave_filtered_df.get('rvol', 0) >= 2.5) &
-                            (wave_filtered_df.get('ret_1d', 0) > 2) &
-                            (wave_filtered_df.get('price', 0) > wave_filtered_df.get('prev_close', 0) * 1.02)
+                            (wave_filtered_df.get('rvol', pd.Series(0, index=wave_filtered_df.index)) >= 2.5) &
+                            (wave_filtered_df.get('ret_1d', pd.Series(0, index=wave_filtered_df.index)) > 2) &
+                            (wave_filtered_df.get('price', pd.Series(0, index=wave_filtered_df.index)) > wave_filtered_df.get('prev_close', pd.Series(0, index=wave_filtered_df.index)) * 1.02)
                         ]
                     else:
                         st.warning(f"Missing data for {wave_timeframe} filter. Showing all relevant stocks.")
@@ -2764,9 +2764,9 @@ class UIComponents:
                     required_cols = ['ret_3d', 'vol_ratio_7d_90d', 'price', 'sma_20d']
                     if all(col in wave_filtered_df.columns for col in required_cols):
                         wave_filtered_df = wave_filtered_df[
-                            (wave_filtered_df.get('ret_3d', 0) > 5) &
-                            (wave_filtered_df.get('vol_ratio_7d_90d', 0) > 1.5) &
-                            (wave_filtered_df.get('price', 0) > wave_filtered_df.get('sma_20d', 0))
+                            (wave_filtered_df.get('ret_3d', pd.Series(0, index=wave_filtered_df.index)) > 5) &
+                            (wave_filtered_df.get('vol_ratio_7d_90d', pd.Series(0, index=wave_filtered_df.index)) > 1.5) &
+                            (wave_filtered_df.get('price', pd.Series(0, index=wave_filtered_df.index)) > wave_filtered_df.get('sma_20d', pd.Series(0, index=wave_filtered_df.index)))
                         ]
                     else:
                         st.warning(f"Missing data for {wave_timeframe} filter. Showing all relevant stocks.")
@@ -2776,9 +2776,9 @@ class UIComponents:
                     required_cols = ['ret_7d', 'vol_ratio_7d_90d', 'from_high_pct']
                     if all(col in wave_filtered_df.columns for col in required_cols):
                         wave_filtered_df = wave_filtered_df[
-                            (wave_filtered_df.get('ret_7d', 0) > 8) &
-                            (wave_filtered_df.get('vol_ratio_7d_90d', 0) > 2.0) &
-                            (wave_filtered_df.get('from_high_pct', 0) > -10)
+                            (wave_filtered_df.get('ret_7d', pd.Series(0, index=wave_filtered_df.index)) > 8) &
+                            (wave_filtered_df.get('vol_ratio_7d_90d', pd.Series(0, index=wave_filtered_df.index)) > 2.0) &
+                            (wave_filtered_df.get('from_high_pct', pd.Series(0, index=wave_filtered_df.index)) > -10)
                         ]
                     else:
                         st.warning(f"Missing data for {wave_timeframe} filter. Showing all relevant stocks.")
@@ -2788,11 +2788,11 @@ class UIComponents:
                     required_cols = ['ret_30d', 'price', 'sma_20d', 'sma_50d', 'vol_ratio_30d_180d', 'from_low_pct']
                     if all(col in wave_filtered_df.columns for col in required_cols):
                         wave_filtered_df = wave_filtered_df[
-                            (wave_filtered_df.get('ret_30d', 0) > 15) &
-                            (wave_filtered_df.get('price', 0) > wave_filtered_df.get('sma_20d', 0)) &
-                            (wave_filtered_df.get('sma_20d', 0) > wave_filtered_df.get('sma_50d', 0)) &
-                            (wave_filtered_df.get('vol_ratio_30d_180d', 0) > 1.2) &
-                            (wave_filtered_df.get('from_low_pct', 0) > 30)
+                            (wave_filtered_df.get('ret_30d', pd.Series(0, index=wave_filtered_df.index)) > 15) &
+                            (wave_filtered_df.get('price', pd.Series(0, index=wave_filtered_df.index)) > wave_filtered_df.get('sma_20d', pd.Series(0, index=wave_filtered_df.index))) &
+                            (wave_filtered_df.get('sma_20d', pd.Series(0, index=wave_filtered_df.index)) > wave_filtered_df.get('sma_50d', pd.Series(0, index=wave_filtered_df.index))) &
+                            (wave_filtered_df.get('vol_ratio_30d_180d', pd.Series(0, index=wave_filtered_df.index)) > 1.2) &
+                            (wave_filtered_df.get('from_low_pct', pd.Series(0, index=wave_filtered_df.index)) > 30)
                         ]
                     else:
                         st.warning(f"Missing data for {wave_timeframe} filter. Showing all relevant stocks.")
@@ -2830,8 +2830,8 @@ class UIComponents:
 
             # Identify crossing points based on strength metrics
             momentum_shifts['momentum_shift'] = (
-                (momentum_shifts.get('momentum_score', -1) >= momentum_threshold) &
-                (momentum_shifts.get('acceleration_score', -1) >= acceleration_threshold)
+                (momentum_shifts.get('momentum_score', pd.Series(-1, index=momentum_shifts.index)) >= momentum_threshold) &
+                (momentum_shifts.get('acceleration_score', pd.Series(-1, index=momentum_shifts.index)) >= acceleration_threshold)
             )
 
             # Calculate multi-signal count for each stock
@@ -2845,7 +2845,7 @@ class UIComponents:
                 momentum_shifts.loc[momentum_shifts['rvol'] >= min_rvol, 'signal_count'] += 1
 
             # Signal 3: Strong acceleration
-            momentum_shifts.loc[momentum_shifts.get('acceleration_score', -1) >= acceleration_alert_threshold, 'signal_count'] += 1
+            momentum_shifts.loc[momentum_shifts.get('acceleration_score', pd.Series(-1, index=momentum_shifts.index)) >= acceleration_alert_threshold, 'signal_count'] += 1
 
             # Signal 4: Volume surge (vol_ratio_7d_90d > 1.5)
             if 'vol_ratio_7d_90d' in momentum_shifts.columns:
@@ -2934,7 +2934,7 @@ class UIComponents:
                 accel_threshold = 60
 
             accelerating_stocks = wave_filtered_df[
-                wave_filtered_df.get('acceleration_score', -1) >= accel_threshold
+                wave_filtered_df.get('acceleration_score', pd.Series(-1, index=wave_filtered_df.index)) >= accel_threshold
             ].nlargest(10, 'acceleration_score')
 
             if len(accelerating_stocks) > 0:
@@ -2945,13 +2945,13 @@ class UIComponents:
                 # Summary stats
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    perfect_accel = len(accelerating_stocks[accelerating_stocks.get('acceleration_score', -1) >= 90])
+                    perfect_accel = len(accelerating_stocks[accelerating_stocks.get('acceleration_score', pd.Series(-1, index=accelerating_stocks.index)) >= 90])
                     UIComponents.render_metric_card("Perfect Acceleration (90+)", perfect_accel)
                 with col2:
-                    strong_accel = len(accelerating_stocks[accelerating_stocks.get('acceleration_score', -1) >= 80])
+                    strong_accel = len(accelerating_stocks[accelerating_stocks.get('acceleration_score', pd.Series(-1, index=accelerating_stocks.index)) >= 80])
                     UIComponents.render_metric_card("Strong Acceleration (80+)", strong_accel)
                 with col3:
-                    avg_accel = accelerating_stocks.get('acceleration_score', pd.Series([50], index=accelerating_stocks.index)).mean()
+                    avg_accel = accelerating_stocks.get('acceleration_score', pd.Series(50, index=accelerating_stocks.index)).mean()
                     UIComponents.render_metric_card("Avg Acceleration Score", f"{avg_accel:.1f}")
             else:
                 st.info(f"No stocks meet the acceleration threshold ({accel_threshold}+) for {sensitivity} sensitivity.")
@@ -3092,8 +3092,8 @@ class UIComponents:
             # Check patterns about to emerge
             if 'category_percentile' in wave_filtered_df.columns:
                 close_to_leader = wave_filtered_df[
-                    (wave_filtered_df.get('category_percentile', -np.inf) >= (90 - pattern_distance)) &
-                    (wave_filtered_df.get('category_percentile', -np.inf) < 90)
+                    (wave_filtered_df.get('category_percentile', pd.Series(-np.inf, index=wave_filtered_df.index)) >= (90 - pattern_distance)) &
+                    (wave_filtered_df.get('category_percentile', pd.Series(-np.inf, index=wave_filtered_df.index)) < 90)
                 ]
                 for _, stock in close_to_leader.iterrows():
                     emergence_data.append({
@@ -3107,8 +3107,8 @@ class UIComponents:
 
             if 'breakout_score' in wave_filtered_df.columns:
                 close_to_breakout = wave_filtered_df[
-                    (wave_filtered_df.get('breakout_score', -np.inf) >= (80 - pattern_distance)) &
-                    (wave_filtered_df.get('breakout_score', -np.inf) < 80)
+                    (wave_filtered_df.get('breakout_score', pd.Series(-np.inf, index=wave_filtered_df.index)) >= (80 - pattern_distance)) &
+                    (wave_filtered_df.get('breakout_score', pd.Series(-np.inf, index=wave_filtered_df.index)) < 80)
                 ]
                 for _, stock in close_to_breakout.iterrows():
                     emergence_data.append({
@@ -3137,14 +3137,14 @@ class UIComponents:
             # Set RVOL threshold based on sensitivity
             rvol_threshold = {"Conservative": 3.0, "Balanced": 2.0, "Aggressive": 1.5}[sensitivity]
 
-            volume_surges = wave_filtered_df[wave_filtered_df.get('rvol', 0) >= rvol_threshold].copy()
+            volume_surges = wave_filtered_df[wave_filtered_df.get('rvol', pd.Series(0, index=wave_filtered_df.index)) >= rvol_threshold].copy()
 
             if len(volume_surges) > 0:
                 # Calculate surge score
                 volume_surges['surge_score'] = (
-                    volume_surges.get('rvol_score', 50) * 0.5 +
-                    volume_surges.get('volume_score', 50) * 0.3 +
-                    volume_surges.get('momentum_score', 50) * 0.2
+                    volume_surges.get('rvol_score', pd.Series(50, index=volume_surges.index)) * 0.5 +
+                    volume_surges.get('volume_score', pd.Series(50, index=volume_surges.index)) * 0.3 +
+                    volume_surges.get('momentum_score', pd.Series(50, index=volume_surges.index)) * 0.2
                 )
 
                 top_surges = volume_surges.nlargest(15, 'surge_score')
@@ -3194,8 +3194,8 @@ class UIComponents:
 
                 with col2:
                     UIComponents.render_metric_card("Active Surges", len(volume_surges))
-                    UIComponents.render_metric_card("Extreme (>5x)", len(volume_surges[volume_surges.get('rvol', 0) > 5]))
-                    UIComponents.render_metric_card("High (>3x)", len(volume_surges[volume_surges.get('rvol', 0) > 3]))
+                    UIComponents.render_metric_card("Extreme (>5x)", len(volume_surges[volume_surges.get('rvol', pd.Series(0, index=volume_surges.index)) > 5]))
+                    UIComponents.render_metric_card("High (>3x)", len(volume_surges[volume_surges.get('rvol', pd.Series(0, index=volume_surges.index)) > 3]))
 
                     # Surge distribution by category
                     if 'category' in volume_surges.columns:
@@ -3217,16 +3217,16 @@ class UIComponents:
         summary_cols = st.columns(5)
 
         with summary_cols[0]:
-            # Recalculate top_shifts if not available in this scope
+            # Recalculate top_shifts for summary if not available in this scope
             temp_momentum_shifts = wave_filtered_df[
-                (wave_filtered_df.get('momentum_score', -1) >= 50) &
-                (wave_filtered_df.get('acceleration_score', -1) >= 60)
+                (wave_filtered_df.get('momentum_score', pd.Series(-1, index=wave_filtered_df.index)) >= 50) &
+                (wave_filtered_df.get('acceleration_score', pd.Series(-1, index=wave_filtered_df.index)) >= 60)
             ].copy()
             temp_momentum_shifts['signal_count'] = 0
             if 'rvol' in temp_momentum_shifts.columns:
                 temp_momentum_shifts.loc[temp_momentum_shifts['rvol'] >= 2.0, 'signal_count'] += 1
             if 'breakout_score' in temp_momentum_shifts.columns:
-                temp_momentum_shifts.loc[temp_momentum_shifts.get('breakout_score', -1) >= 75, 'signal_count'] += 1
+                temp_momentum_shifts.loc[temp_momentum_shifts.get('breakout_score', pd.Series(-1, index=temp_momentum_shifts.index)) >= 75, 'signal_count'] += 1
             if 'vol_ratio_7d_90d' in temp_momentum_shifts.columns:
                 temp_momentum_shifts.loc[temp_momentum_shifts['vol_ratio_7d_90d'] >= 1.5, 'signal_count'] += 1
             temp_momentum_shifts['shift_strength'] = (
@@ -3234,7 +3234,7 @@ class UIComponents:
                 temp_momentum_shifts.get('acceleration_score', 50) * 0.4 +
                 temp_momentum_shifts.get('rvol_score', 50) * 0.2
             )
-            top_shifts_for_summary = temp_momentum_shifts[temp_momentum_shifts.get('momentum_score', -1) >= 50].nlargest(20, 'shift_strength') # Filter based on momentum threshold
+            top_shifts_for_summary = temp_momentum_shifts[temp_momentum_shifts.get('momentum_score', pd.Series(-1, index=temp_momentum_shifts.index)) >= 50].nlargest(20, 'shift_strength') # Filter based on momentum threshold
             momentum_count = len(top_shifts_for_summary)
 
             UIComponents.render_metric_card("Momentum Shifts", momentum_count)
@@ -3248,15 +3248,15 @@ class UIComponents:
             temp_emergence_data = []
             if 'category_percentile' in wave_filtered_df.columns:
                 close_to_leader = wave_filtered_df[
-                    (wave_filtered_df.get('category_percentile', -np.inf) >= (90 - 10)) & # Using Balanced default distance
-                    (wave_filtered_df.get('category_percentile', -np.inf) < 90)
+                    (wave_filtered_df.get('category_percentile', pd.Series(-np.inf, index=wave_filtered_df.index)) >= (90 - 10)) & # Using Balanced default distance
+                    (wave_filtered_df.get('category_percentile', pd.Series(-np.inf, index=wave_filtered_df.index)) < 90)
                 ]
                 for _, stock in close_to_leader.iterrows():
                     temp_emergence_data.append({}) # Dummy append
             if 'breakout_score' in wave_filtered_df.columns:
                 close_to_breakout = wave_filtered_df[
-                    (wave_filtered_df.get('breakout_score', -np.inf) >= (80 - 10)) &
-                    (wave_filtered_df.get('breakout_score', -np.inf) < 80)
+                    (wave_filtered_df.get('breakout_score', pd.Series(-np.inf, index=wave_filtered_df.index)) >= (80 - 10)) &
+                    (wave_filtered_df.get('breakout_score', pd.Series(-np.inf, index=wave_filtered_df.index)) < 80)
                 ]
                 for _, stock in close_to_breakout.iterrows():
                     temp_emergence_data.append({}) # Dummy append
@@ -3266,14 +3266,14 @@ class UIComponents:
 
         with summary_cols[3]:
             if 'acceleration_score' in wave_filtered_df.columns:
-                accel_count = len(wave_filtered_df[wave_filtered_df.get('acceleration_score', -1) >= 70]) # Using Balanced accel threshold
+                accel_count = len(wave_filtered_df[wave_filtered_df.get('acceleration_score', pd.Series(-1, index=wave_filtered_df.index)) >= 70]) # Using Balanced accel threshold
             else:
                 accel_count = 0
             UIComponents.render_metric_card("Accelerating", accel_count)
 
         with summary_cols[4]:
             if 'rvol' in wave_filtered_df.columns:
-                surge_count = len(wave_filtered_df[wave_filtered_df.get('rvol', 0) >= 2.0]) # Using Balanced rvol threshold
+                surge_count = len(wave_filtered_df[wave_filtered_df.get('rvol', pd.Series(0, index=wave_filtered_df.index)) >= 2.0]) # Using Balanced rvol threshold
             else:
                 surge_count = 0
             UIComponents.render_metric_card("Volume Surges", surge_count)
@@ -3363,7 +3363,7 @@ class UIComponents:
                 category_df = filtered_df.groupby('category').agg({
                     'master_score': ['mean', 'count'],
                     'category_percentile': 'mean',
-                    'money_flow_mm': 'sum' if 'money_flow_mm' in filtered_df.columns else 'count'
+                    'money_flow_mm': 'sum' if 'money_flow_mm' in filtered_df.columns else lambda x: x.count() # Use count if money_flow_mm not available
                 }).round(2)
 
                 if 'money_flow_mm' in filtered_df.columns:
@@ -4211,6 +4211,9 @@ def main():
     # Initialize session state
     SessionStateManager.initialize()
 
+    # Initialize filters dictionary at the top of main()
+    filters = {} # FIX: Initialize filters here to ensure it's always defined
+
     # Custom CSS for production UI
     st.markdown("""
     <style>
@@ -4549,7 +4552,8 @@ def main():
         ranked_df_display = ranked_df
 
     # Sidebar filters (continue from sidebar section in main)
-    # Re-using the sidebar definitions as they are part of main()'s flow
+    # The filter collection logic is already in the sidebar block, it modifies the `filters` dict
+    # filters = {} # This was moved to the top of main()
 
     # Apply filters (to filtered_df)
     if quick_filter_applied:
