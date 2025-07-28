@@ -172,7 +172,7 @@ class Config:
         }
     })
 
-    # Quick Filter Thresholds (FIXED: Added missing constants)
+    # Quick Filter Thresholds (FIXED: Added missing constants from V3)
     TOP_GAINER_MOMENTUM: float = 80.0
     VOLUME_SURGE_RVOL: float = 3.0
     BREAKOUT_READY_SCORE: float = 80.0
@@ -560,10 +560,16 @@ class DataProcessor:
                 if (tier_name == "Negative/NA" or tier_name == "Loss") and value <= 0:
                     return tier_name
                 
-                # Standard interval: [min_val, max_val)
-                # This ensures values like 5 fall into '5-10', not '0-5'
+                # Standard interval: (min_val, max_val] to match V3's behavior for positive ranges
+                # For example, if tier is (0,5), it matches 0 < value <= 5
+                # This ensures that a value exactly at the upper boundary falls into that tier.
                 if min_val < value <= max_val: # This logic is consistent with V3 for positive ranges
                     return tier_name
+                # Special case for the first tier if it includes its lower boundary
+                # e.g., price '0-100' should include 0
+                if min_val == 0 and value == 0:
+                     return tier_name
+                
                 # Special case for the last tier being inclusive of min_val and extending to infinity
                 if max_val == float('inf') and value >= min_val:
                     return tier_name
@@ -1281,13 +1287,38 @@ class PatternDetector:
         def get_series_or_default(col_name: str, default_val: Any) -> pd.Series:
             return df[col_name].fillna(default_val) if col_name in df.columns else pd.Series(default_val, index=df.index)
 
-        # 1. Category Leader
+        # Retrieve common scores/data once to avoid redundant calls
         category_percentile = get_series_or_default('category_percentile', 0.0)
+        percentile = get_series_or_default('percentile', 0.0)
+        acceleration_score = get_series_or_default('acceleration_score', 50.0)
+        volume_score = get_series_or_default('volume_score', 50.0)
+        rvol = get_series_or_default('rvol', 1.0)
+        breakout_score = get_series_or_default('breakout_score', 50.0)
+        momentum_score = get_series_or_default('momentum_score', 50.0)
+        liquidity_score = get_series_or_default('liquidity_score', 50.0)
+        long_term_strength = get_series_or_default('long_term_strength', 50.0)
+        trend_quality = get_series_or_default('trend_quality', 50.0)
+        pe = get_series_or_default('pe', np.nan)
+        eps_change_pct = get_series_or_default('eps_change_pct', np.nan)
+        master_score = get_series_or_default('master_score', 50.0)
+        vol_ratio_90d_180d = get_series_or_default('vol_ratio_90d_180d', 1.0)
+        vol_ratio_30d_90d = get_series_or_default('vol_ratio_30d_90d', 1.0)
+        ret_1d = get_series_or_default('ret_1d', 0.0)
+        ret_7d = get_series_or_default('ret_7d', 0.0)
+        ret_30d = get_series_or_default('ret_30d', 0.0)
+        from_high_pct = get_series_or_default('from_high_pct', -50.0)
+        from_low_pct = get_series_or_default('from_low_pct', 50.0)
+        high_52w = get_series_or_default('high_52w', np.nan)
+        low_52w = get_series_or_default('low_52w', np.nan)
+        momentum_harmony = get_series_or_default('momentum_harmony', 0)
+        category = get_series_or_default('category', 'Unknown')
+
+
+        # 1. Category Leader
         mask_cat_leader = (category_percentile >= CONFIG.PATTERN_THRESHOLDS['category_leader'])
         patterns.append(('🔥 CAT LEADER', mask_cat_leader))
         
         # 2. Hidden Gem
-        percentile = get_series_or_default('percentile', 0.0)
         mask_hidden_gem = (
             (category_percentile >= CONFIG.PATTERN_THRESHOLDS['hidden_gem']) & 
             (percentile < 70)
@@ -1295,13 +1326,10 @@ class PatternDetector:
         patterns.append(('💎 HIDDEN GEM', mask_hidden_gem))
         
         # 3. Accelerating
-        acceleration_score = get_series_or_default('acceleration_score', 50.0)
         mask_accelerating = (acceleration_score >= CONFIG.PATTERN_THRESHOLDS['acceleration'])
         patterns.append(('🚀 ACCELERATING', mask_accelerating))
         
         # 4. Institutional
-        volume_score = get_series_or_default('volume_score', 50.0)
-        vol_ratio_90d_180d = get_series_or_default('vol_ratio_90d_180d', 1.0)
         mask_institutional = (
             (volume_score >= CONFIG.PATTERN_THRESHOLDS['institutional']) &
             (vol_ratio_90d_180d > 1.1)
@@ -1309,12 +1337,10 @@ class PatternDetector:
         patterns.append(('🏦 INSTITUTIONAL', mask_institutional))
         
         # 5. Volume Explosion
-        rvol = get_series_or_default('rvol', 1.0)
         mask_vol_explosion = (rvol > 3)
         patterns.append(('⚡ VOL EXPLOSION', mask_vol_explosion))
         
         # 6. Breakout Ready
-        breakout_score = get_series_or_default('breakout_score', 50.0)
         mask_breakout = (breakout_score >= CONFIG.PATTERN_THRESHOLDS['breakout_ready'])
         patterns.append(('🎯 BREAKOUT', mask_breakout))
         
@@ -1323,7 +1349,6 @@ class PatternDetector:
         patterns.append(('👑 MARKET LEADER', mask_market_leader))
         
         # 8. Momentum Wave
-        momentum_score = get_series_or_default('momentum_score', 50.0)
         mask_momentum_wave = (
             (momentum_score >= CONFIG.PATTERN_THRESHOLDS['momentum_wave']) &
             (acceleration_score >= 70)
@@ -1331,7 +1356,6 @@ class PatternDetector:
         patterns.append(('🌊 MOMENTUM WAVE', mask_momentum_wave))
         
         # 9. Liquid Leader
-        liquidity_score = get_series_or_default('liquidity_score', 50.0)
         mask_liquid_leader = (
             (liquidity_score >= CONFIG.PATTERN_THRESHOLDS['liquid_leader']) &
             (percentile >= CONFIG.PATTERN_THRESHOLDS['liquid_leader'])
@@ -1339,24 +1363,19 @@ class PatternDetector:
         patterns.append(('💰 LIQUID LEADER', mask_liquid_leader))
         
         # 10. Long-term Strength
-        long_term_strength = get_series_or_default('long_term_strength', 50.0)
         mask_long_strength = (long_term_strength >= CONFIG.PATTERN_THRESHOLDS['long_strength'])
         patterns.append(('💪 LONG STRENGTH', mask_long_strength))
         
         # 11. Quality Trend
-        trend_quality = get_series_or_default('trend_quality', 50.0)
         mask_quality_trend = (trend_quality >= 80)
         patterns.append(('📈 QUALITY TREND', mask_quality_trend))
         
         # 12. Value Momentum (Fundamental)
-        pe = get_series_or_default('pe', np.nan)
-        master_score = get_series_or_default('master_score', 50.0)
         has_valid_pe = (pe.notna() & (pe > 0) & (pe < 10000) & ~np.isinf(pe))
         mask_value_momentum = has_valid_pe & (pe < 15) & (master_score >= 70)
         patterns.append(('💎 VALUE MOMENTUM', mask_value_momentum))
         
         # 13. Earnings Rocket
-        eps_change_pct = get_series_or_default('eps_change_pct', np.nan)
         has_eps_growth = (eps_change_pct.notna() & ~np.isinf(eps_change_pct))
         extreme_growth = has_eps_growth & (eps_change_pct > 1000) # >1000% growth
         normal_growth = has_eps_growth & (eps_change_pct > 50) & (eps_change_pct <= 1000) # 50-1000% growth
@@ -1378,10 +1397,11 @@ class PatternDetector:
         
         # 15. Turnaround Play
         mask_turnaround = pd.Series(False, index=df.index) # Initialize to False
+        # Ensure 'volume_score' is not directly used for NaN checks on 'eps_change_pct' data
         if 'eps_change_pct' in df.columns and 'volume_score' in df.columns:
-            has_eps = df['eps_change_pct'].notna() & ~np.isinf(df['eps_change_pct'])
-            mega_turnaround = has_eps & (df['eps_change_pct'] > 500) & (df['volume_score'] >= 60)
-            strong_turnaround = has_eps & (df['eps_change_pct'] > 100) & (df['eps_change_pct'] <= 500) & (df['volume_score'] >= 70)
+            has_eps = eps_change_pct.notna() & ~np.isinf(eps_change_pct)
+            mega_turnaround = has_eps & (eps_change_pct > 500) & (volume_score >= 60)
+            strong_turnaround = has_eps & (eps_change_pct > 100) & (eps_change_pct <= 500) & (volume_score >= 70)
             mask_turnaround = mega_turnaround | strong_turnaround
         patterns.append(('⚡ TURNAROUND', mask_turnaround))
         
@@ -1390,7 +1410,6 @@ class PatternDetector:
         patterns.append(('⚠️ HIGH PE', mask_high_pe))
         
         # 17. 52W High Approach
-        from_high_pct = get_series_or_default('from_high_pct', -50.0)
         mask_52w_high_approach = (
             (from_high_pct > -5) & 
             (volume_score >= 70) & 
@@ -1399,8 +1418,6 @@ class PatternDetector:
         patterns.append(('🎯 52W HIGH APPROACH', mask_52w_high_approach))
         
         # 18. 52W Low Bounce
-        from_low_pct = get_series_or_default('from_low_pct', 50.0)
-        ret_30d = get_series_or_default('ret_30d', 0.0)
         mask_52w_low_bounce = (
             (from_low_pct < 20) & 
             (acceleration_score >= 80) & 
@@ -1417,9 +1434,6 @@ class PatternDetector:
         patterns.append(('👑 GOLDEN ZONE', mask_golden_zone))
         
         # 20. Volume Accumulation
-        vol_ratio_30d_90d = get_series_or_default('vol_ratio_30d_90d', 1.0)
-        vol_ratio_90d_180d = get_series_or_default('vol_ratio_90d_180d', 1.0)
-        ret_30d = get_series_or_default('ret_30d', 0.0) # Ensure ret_30d is loaded/defaulted
         mask_vol_accumulation = (
             (vol_ratio_30d_90d > 1.2) & 
             (vol_ratio_90d_180d > 1.1) & 
@@ -1428,13 +1442,12 @@ class PatternDetector:
         patterns.append(('📊 VOL ACCUMULATION', mask_vol_accumulation))
         
         # 21. Momentum Divergence
-        ret_7d = get_series_or_default('ret_7d', 0.0)
-        ret_30d = get_series_or_default('ret_30d', 0.0) # Ensure ret_30d is loaded/defaulted
         mask_momentum_diverge = pd.Series(False, index=df.index) # Initialize
+        # Ensure ret_7d and ret_30d are numeric and notna before calculations
         if all(col in df.columns for col in ['ret_7d', 'ret_30d', 'acceleration_score', 'rvol']):
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_7d_pace = np.where(ret_7d != 0, ret_7d / 7, 0)
-                daily_30d_pace = np.where(ret_30d != 0, ret_30d / 30, 0)
+                daily_7d_pace = np.where(ret_7d.notna() & (ret_7d != 0), ret_7d / 7, 0)
+                daily_30d_pace = np.where(ret_30d.notna() & (ret_30d != 0), ret_30d / 30, 0)
             
             mask_momentum_diverge = (
                 (daily_7d_pace > daily_30d_pace * 1.5) & 
@@ -1444,63 +1457,58 @@ class PatternDetector:
         patterns.append(('🔀 MOMENTUM DIVERGE', mask_momentum_diverge))
         
         # 22. Range Compression
-        high_52w = get_series_or_default('high_52w', np.nan)
-        low_52w = get_series_or_default('low_52w', np.nan)
         mask_range_compress = pd.Series(False, index=df.index)
         if all(col in df.columns for col in ['high_52w', 'low_52w', 'from_low_pct']):
             with np.errstate(divide='ignore', invalid='ignore'):
                 # Calculate 52-week range as a percentage of the low
                 range_pct = np.where(
-                    low_52w > 0,
+                    low_52w.notna() & (low_52w > 0), # Ensure low_52w is valid and positive
                     ((high_52w - low_52w) / low_52w) * 100,
-                    100
+                    100 # Default to high range if low is zero/negative/nan
                 )
             # Compression if range is relatively narrow (<50%) AND it's not near its lows (already bounced or mid-range)
             mask_range_compress = (range_pct < 50) & (from_low_pct > 30)
         patterns.append(('🎯 RANGE COMPRESS', mask_range_compress))
         
         # 23. Stealth Accumulator (NEW)
-        ret_7d = get_series_or_default('ret_7d', 0.0)
-        ret_30d = get_series_or_default('ret_30d', 0.0)
         mask_stealth = pd.Series(False, index=df.index)
         if all(col in df.columns for col in ['vol_ratio_90d_180d', 'vol_ratio_30d_90d', 'from_low_pct', 'ret_7d', 'ret_30d']):
             with np.errstate(divide='ignore', invalid='ignore'):
-                ret_ratio = np.where(ret_30d != 0, ret_7d / (ret_30d / 4), 0)
+                # Check if recent returns are outperforming longer-term average implicitly
+                ret_ratio = np.where(ret_30d.notna() & (ret_30d != 0), ret_7d / (ret_30d / 4), 0)
             
             mask_stealth = (
-                (vol_ratio_90d_180d > 1.1) &
-                (vol_ratio_30d_90d.between(0.9, 1.1)) &
-                (from_low_pct > 40) &
-                (ret_ratio > 1)
+                (vol_ratio_90d_180d > 1.1) & # Long-term accumulation
+                (vol_ratio_30d_90d.between(0.9, 1.1)) & # Recent volume near average (not obvious surge)
+                (from_low_pct > 40) & # Stock has already moved up from lows
+                (ret_ratio > 1) # Recent returns are stronger than past returns on a comparative basis
             )
         patterns.append(('🤫 STEALTH', mask_stealth))
         
         # 24. Momentum Vampire (NEW)
-        ret_1d = get_series_or_default('ret_1d', 0.0)
-        ret_7d = get_series_or_default('ret_7d', 0.0)
-        category = get_series_or_default('category', 'Unknown')
         mask_vampire = pd.Series(False, index=df.index)
         if all(col in df.columns for col in ['ret_1d', 'ret_7d', 'rvol', 'from_high_pct', 'category']):
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_pace_ratio = np.where(ret_7d != 0, ret_1d / (ret_7d / 7), 0)
+                # Strong daily surge relative to week (sucking momentum from week)
+                daily_pace_ratio = np.where(ret_7d.notna() & (ret_7d != 0), ret_1d / (ret_7d / 7), 0)
             
             mask_vampire = (
-                (daily_pace_ratio > 2) &
-                (rvol > 3) &
-                (from_high_pct > -15) &
-                (category.isin(['Small Cap', 'Micro Cap']))
+                (daily_pace_ratio > 2) & # Today's action is twice the daily average of the last 7 days
+                (rvol > 3) & # High current volume
+                (from_high_pct > -15) & # Not too far from 52-week high
+                (category.isin(['Small Cap', 'Micro Cap'])) # Often seen in smaller caps
             )
         patterns.append(('🧛 VAMPIRE', mask_vampire))
         
         # 25. Perfect Storm (NEW)
-        momentum_harmony = get_series_or_default('momentum_harmony', 0)
         mask_perfect_storm = (
-            (momentum_harmony == 4) &
-            (master_score > CONFIG.PATTERN_THRESHOLDS['perfect_storm'])
+            (momentum_harmony == 4) & # All 4 harmony signals active
+            (master_score > CONFIG.PATTERN_THRESHOLDS['perfect_storm']) # Strong overall score
         )
         patterns.append(('⛈️ PERFECT STORM', mask_perfect_storm))
         
         return patterns
+
 # ============================================
 # MARKET INTELLIGENCE
 # ============================================
@@ -3293,7 +3301,7 @@ class UIComponents:
                 
                 st.info("💡 **Tip**: Adjust sensitivity based on market conditions (Aggressive for strong bull, Conservative for uncertain).")
         
-        # Apply intelligent timeframe filtering to the `wave_filtered_df`
+        # Apply intelligent timeframe filtering to the already initialized wave_filtered_df
         if wave_timeframe != "All Waves":
             original_wave_df_count = len(wave_filtered_df)
             temp_wave_df = wave_filtered_df.copy() # Work on a temporary copy for timeframe filtering
@@ -3558,6 +3566,7 @@ class UIComponents:
                                 
                                 # Create bar chart for category flow
                                 fig_category_flow = go.Figure()
+                                
                                 fig_category_flow.add_trace(go.Bar(
                                     x=category_flow_df.index,
                                     y=category_flow_df['Flow Score'],
@@ -3817,12 +3826,32 @@ class UIComponents:
                 st.metric("Emerging Patterns", emergence_count_summary, help="Stocks close to triggering a pattern alert.")
             
             with summary_radar_cols[3]:
-                accel_count_summary = len(plot_candidates) if 'plot_candidates' in locals() else 0
-                st.metric("Accelerating", accel_count_summary, help=f"Top stocks with high acceleration score (≥ {accel_plot_threshold}).")
+                if 'acceleration_score' in wave_filtered_df.columns:
+                    # Use appropriate threshold based on sensitivity
+                    if sensitivity == "Conservative":
+                        accel_threshold = 85
+                    elif sensitivity == "Balanced":
+                        accel_threshold = 70
+                    else:  # Aggressive
+                        accel_threshold = 60
+                    accel_count = len(wave_filtered_df[wave_filtered_df['acceleration_score'] >= accel_threshold])
+                else:
+                    accel_count = 0
+                st.metric("Accelerating", accel_count, help=f"Top stocks with high acceleration score (≥ {accel_threshold}).")
             
             with summary_radar_cols[4]:
-                surge_count_summary = len(volume_surges_df) if 'volume_surges_df' in locals() else 0
-                st.metric("Volume Surges", surge_count_summary, help=f"Stocks with significant recent RVOL or volume ratio (≥ {rvol_surge_threshold_current}x).")
+                if 'rvol' in wave_filtered_df.columns:
+                    # Use appropriate threshold based on sensitivity
+                    if sensitivity == "Conservative":
+                        surge_threshold = 3.0
+                    elif sensitivity == "Balanced":
+                        surge_threshold = 2.0
+                    else:  # Aggressive
+                        surge_threshold = 1.5
+                    surge_count = len(wave_filtered_df[wave_filtered_df['rvol'] >= surge_threshold])
+                else:
+                    surge_count = 0
+                st.metric("Volume Surges", surge_count, help=f"Stocks with significant recent RVOL or volume ratio (≥ {surge_threshold}x).")
         
         else:
             st.warning(f"No data available for Wave Radar analysis with the current filters and selected timeframe: '{wave_timeframe}'. Please adjust your filters or timeframe selection.")
@@ -3886,10 +3915,11 @@ class UIComponents:
                     ).round(2)
                     
                     if not category_overview_agg.empty:
-                        category_overview_agg = category_overview_agg.sort_values('Avg_Score', ascending=False)
+                        category_overview_agg.columns = ['Avg Score', 'Count', 'Avg Cat %ile']
+                        category_overview_agg = category_overview_agg.sort_values('Avg Score', ascending=False)
                         
                         st.dataframe(
-                            category_overview_agg.style.background_gradient(subset=['Avg_Score']),
+                            category_overview_agg.style.background_gradient(subset=['Avg Score']),
                             use_container_width=True,
                             hide_index=False
                         )
@@ -4028,7 +4058,7 @@ class UIComponents:
                         
                         with metric_cols_stock_detail[3]:
                             ret_30d_val = stock.get('ret_30d')
-                            ret_30d_display = f"{ret_30d_val:+.1f}%" if pd.notna(ret_30d_val) else "N/A"
+                            ret_30d_display = f"{ret_30d_val:+.1f}%" if pd.notna(ret_30d_val) and not np.isinf(ret_30d_val) else "N/A"
                             ret_30d_delta = "↑" if pd.notna(ret_30d_val) and ret_30d_val > 0 else ("↓" if pd.notna(ret_30d_val) and ret_30d_val < 0 else None)
                             UIComponents.render_metric_card(
                                 "30D Return",
