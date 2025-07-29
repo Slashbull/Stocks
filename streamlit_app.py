@@ -2521,9 +2521,8 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # Login
-    # Check if user has provided Sheet ID
-if 'sheet_id' not in st.session_state or not st.session_state.sheet_id:
+    # Check if user has provided Sheet Id
+    if 'sheet_id' not in st.session_state or not st.session_state.sheet_id:
     # Show login form
     st.markdown("### 🔐 Access Your Trading Dashboard")
     
@@ -2553,7 +2552,7 @@ if 'sheet_id' not in st.session_state or not st.session_state.sheet_id:
 
 # If we reach here, user has logged in
 sheet_url = st.session_state.sheet_url
-    
+
     # Sidebar configuration
     with st.sidebar:
         st.markdown("### 🎯 Quick Actions")
