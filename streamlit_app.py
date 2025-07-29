@@ -347,12 +347,18 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
             logger.info("Loading data from uploaded CSV")
             df = pd.read_csv(file_data, low_memory=False)
             metadata['source'] = "User Upload"
+            
         else:
-            # Use defaults if not provided
-            if not sheet_url:
-                sheet_url = CONFIG.DEFAULT_SHEET_URL
-            if not gid:
-                gid = CONFIG.DEFAULT_GID
+    # Use defaults if not provided
+    if not sheet_url:
+        # Should not happen since we require login
+        if 'sheet_url' in st.session_state:
+            sheet_url = st.session_state.sheet_url
+        else:
+            st.error("No sheet URL available. Please restart the app.")
+            st.stop()
+    if not gid:
+        gid = CONFIG.DEFAULT_GID
             
             # Construct CSV URL
             base_url = sheet_url.split('/edit')[0]
@@ -2727,11 +2733,11 @@ def main():
                         "upload", file_data=uploaded_file
                     )
                 else:
-                    ranked_df, data_timestamp, metadata = load_and_process_data(
-                        "sheet", 
-                        sheet_url=CONFIG.DEFAULT_SHEET_URL, 
-                        gid=CONFIG.DEFAULT_GID
-                    )
+    ranked_df, data_timestamp, metadata = load_and_process_data(
+        "sheet", 
+        sheet_url=sheet_url,  # Using the URL from session state
+        gid=CONFIG.DEFAULT_GID
+    )
                 
                 st.session_state.ranked_df = ranked_df
                 st.session_state.data_timestamp = data_timestamp
