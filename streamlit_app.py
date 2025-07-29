@@ -59,7 +59,7 @@ class Config:
     """System configuration with validated weights and thresholds"""
     
     # Data source - HARDCODED for production (DO NOT CHANGE)
-    DEFAULT_SHEET_URL: str = "https://docs.google.com/spreadsheets/d/1OEQ_qxL4lXbO9LlKWDGlDju2yQC1iYvOYeXF3mTQuJM/edit?usp=sharing"
+    DEFAULT_SHEET_URL_TEMPLATE: str = "https://docs.google.com/spreadsheets/d/{}/edit?usp=sharing"
     DEFAULT_GID: str = "1823439984"
     
     # Cache settings optimized for Streamlit Community Cloud
@@ -2520,6 +2520,39 @@ def main():
         </p>
     </div>
     """, unsafe_allow_html=True)
+
+    # Login
+    # Check if user has provided Sheet ID
+if 'sheet_id' not in st.session_state or not st.session_state.sheet_id:
+    # Show login form
+    st.markdown("### 🔐 Access Your Trading Dashboard")
+    
+    col1, col2, col3 = st.columns([1, 3, 1])
+    with col2:
+        sheet_id = st.text_input(
+            "Enter Google Sheets ID",
+            placeholder="Example: 1OEQ_qxL4lXbO9LlKWDGlDju2yQC1iYvOYeXF3mTQuJM",
+            help="Find this ID in your Google Sheets URL between /d/ and /edit"
+        )
+        
+        if st.button("🚀 Start Trading", type="primary", use_container_width=True):
+            if sheet_id and len(sheet_id) > 40:
+                st.session_state.sheet_id = sheet_id
+                st.session_state.sheet_url = CONFIG.DEFAULT_SHEET_URL_TEMPLATE.format(sheet_id)
+                st.rerun()
+            else:
+                st.error("Please enter a valid Google Sheets ID")
+        
+        # Show time
+        import pytz
+        ist = pytz.timezone('Asia/Kolkata')
+        current_time = datetime.now(ist).strftime('%I:%M %p IST')
+        st.markdown(f"<p style='text-align:center; color:#666; margin-top:2rem;'>{current_time}</p>", unsafe_allow_html=True)
+    
+    st.stop()  # Don't load rest of the app
+
+# If we reach here, user has logged in
+sheet_url = st.session_state.sheet_url
     
     # Sidebar configuration
     with st.sidebar:
@@ -2540,6 +2573,12 @@ def main():
                 st.success("Cache cleared!")
                 time.sleep(0.5)
                 st.rerun()
+
+        # Change Sheet ID button
+       if st.button("🔄 Change Sheet ID", use_container_width=True):
+       del st.session_state.sheet_id
+       del st.session_state.sheet_url
+       st.rerun()
         
         # Data source selection - ENHANCED: Two prominent buttons
         st.markdown("---")
