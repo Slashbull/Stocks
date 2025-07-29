@@ -2510,73 +2510,127 @@ def main():
     
     # Check if user has provided Sheet ID
     if 'sheet_id' not in st.session_state or not st.session_state.sheet_id:
-        # Simple header matching your existing style
-        st.markdown("""
-        <div style="
-            text-align: center;
-            padding: 2rem 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 10px;
-            margin-bottom: 2rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        ">
-            <h1 style="margin: 0; font-size: 2.5rem;">🌊 Wave Detection Ultimate 3.0</h1>
-            <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">
-                Professional Stock Ranking System • Enter Your Sheet ID
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+        # Create visual hierarchy with spacing
+        st.markdown("<br><br>", unsafe_allow_html=True)
         
-        # Simple quote
-        import random
-        quotes = [
-            "The trend is your friend until the end",
-            "Trade what you see, not what you think",
-            "Discipline is the bridge between goals and accomplishment"
-        ]
-        st.info(f"💡 {random.choice(quotes)}")
+        # Centered container for better visual balance
+        col1, col2, col3 = st.columns([1, 3, 1])
         
-        # Simple input and button
-        st.markdown("### 🔐 Access Your Dashboard")
-        
-        col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            sheet_id = st.text_input(
-                "Google Sheets ID",
-                placeholder="1OEQ_qxL4lXbO9LlKWDGlDju2yQC1iYvOYeXF3mTQuJM",
-                help="Find this in your Google Sheets URL between /d/ and /edit"
+            # Big, welcoming wave emoji - creates emotional connection
+            st.markdown(
+                "<h1 style='text-align: center; font-size: 5rem;'>🌊</h1>", 
+                unsafe_allow_html=True
             )
             
-            if st.button("Start Trading", type="primary", use_container_width=True):
-                if sheet_id and len(sheet_id) > 40:
+            # Clean, professional title
+            st.markdown(
+                "<h1 style='text-align: center; color: #667eea;'>Wave Detection</h1>", 
+                unsafe_allow_html=True
+            )
+            
+            # Subtle tagline for context
+            st.markdown(
+                "<p style='text-align: center; color: #888; margin-bottom: 2rem;'>Your Professional Trading Companion</p>", 
+                unsafe_allow_html=True
+            )
+            
+            # White space for breathing room
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Motivational quote in an elegant card
+            import random
+            quotes = [
+                "Every expert was once a beginner.",
+                "The journey of a thousand profits begins with a single trade.",
+                "Success is not final, failure is not fatal: it's the courage to continue that counts.",
+                "The best time to plant a tree was 20 years ago. The second best time is now.",
+                "Your only limit is your mind."
+            ]
+            
+            # Quote in a beautiful info box - creates positive emotion
+            quote = random.choice(quotes)
+            st.info(f"✨ *{quote}*")
+            
+            # Clean white space
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Simple, focused input
+            sheet_id = st.text_input(
+                "",  # No label - cleaner
+                placeholder="Enter your Google Sheets ID",
+                help="Your 44-character key to trading success"
+            )
+            
+            # Prominent action button - creates anticipation
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            ready = st.button(
+                "🚀 I'm Ready to Trade",
+                type="primary",
+                use_container_width=True
+            )
+            
+            if ready:
+                if sheet_id and len(sheet_id) >= 44:
+                    # Success feedback - dopamine hit
+                    placeholder = st.empty()
+                    placeholder.success("🎉 Welcome back, Trader!")
+                    
                     st.session_state.sheet_id = sheet_id
                     st.session_state.sheet_url = CONFIG.DEFAULT_SHEET_URL_TEMPLATE.format(sheet_id)
-                    st.success("✅ Loading your dashboard...")
-                    time.sleep(1)
+                    
+                    # Brief pause to enjoy the moment
+                    time.sleep(1.5)
                     st.rerun()
                 else:
-                    st.error("Please enter a valid Sheet ID")
+                    st.error("🤔 That doesn't look right. Check your Sheet ID.")
+            
+            # Trust builders - subtle but important
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            
+            # Three pillars of trust
+            trust_col1, trust_col2, trust_col3 = st.columns(3)
+            
+            with trust_col1:
+                st.markdown(
+                    "<div style='text-align: center;'>"
+                    "<p style='font-size: 2rem; margin: 0;'>🛡️</p>"
+                    "<p style='color: #888; font-size: 0.9rem;'>Secure</p>"
+                    "</div>",
+                    unsafe_allow_html=True
+                )
+            
+            with trust_col2:
+                st.markdown(
+                    "<div style='text-align: center;'>"
+                    "<p style='font-size: 2rem; margin: 0;'>⚡</p>"
+                    "<p style='color: #888; font-size: 0.9rem;'>Real-time</p>"
+                    "</div>",
+                    unsafe_allow_html=True
+                )
+            
+            with trust_col3:
+                st.markdown(
+                    "<div style='text-align: center;'>"
+                    "<p style='font-size: 2rem; margin: 0;'>🎯</p>"
+                    "<p style='color: #888; font-size: 0.9rem;'>Accurate</p>"
+                    "</div>",
+                    unsafe_allow_html=True
+                )
+            
+            # Gentle nudge to user guide
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            st.markdown(
+                "<p style='text-align: center;'>"
+                "<a href='#' style='color: #667eea; text-decoration: none;'>"
+                "First time? Read the guide →"
+                "</a></p>",
+                unsafe_allow_html=True
+            )
         
-        # Simple info
-        st.markdown("---")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Stocks", "1,791")
-        with col2:
-            st.metric("Patterns", "25")
-        with col3:
-            st.metric("Updates", "Live")
-        
-        # User guide link - simple
-        st.markdown("---")
-        st.markdown("[📚 Read User Guide](wave-detection-manual.md)")
-        
-        # Time - simple
-        import pytz
-        ist = pytz.timezone('Asia/Kolkata')
-        current_time = datetime.now(ist).strftime('%I:%M %p IST')
-        st.caption(f"Current Time: {current_time}")
+        # Bottom spacing
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
         
         st.stop()
     
