@@ -2505,50 +2505,205 @@ def main():
         border-color: #3498db;
     }
     </style>
-    """, unsafe_allow_html=True)
-
-    # Check if user has provided Sheet ID
-    if 'sheet_id' not in st.session_state or not st.session_state.sheet_id:
-        st.markdown("### 🔐 Enter Your Google Sheets ID")
-        
-        sheet_id = st.text_input(
-            "",
-            placeholder="Example: 1OEQ_qxL4lXbO9LlKWDGlDju2yQC1iYvOYeXF3mTQuJM"
-        )
-        
-        if st.button("Start Trading", type="primary"):
-            if sheet_id and len(sheet_id) > 40:
-                st.session_state.sheet_id = sheet_id
-                st.session_state.sheet_url = CONFIG.DEFAULT_SHEET_URL_TEMPLATE.format(sheet_id)
-                st.rerun()
-            else:
-                st.error("Please enter a valid Sheet ID")
-        
-        st.stop()
-    
-    # User has logged in
-    sheet_url = st.session_state.sheet_url
-    
-    # Header
-    st.markdown("""
-    <div style="
-        text-align: center;
-        padding: 2rem 0;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 10px;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    ">
-        <h1 style="margin: 0; font-size: 2.5rem;">🌊 Wave Detection Ultimate 3.0</h1>
-        <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">
-            Professional Stock Ranking System • Final Production Version
-        </p>
     </div>
     """, unsafe_allow_html=True)
     
+    # Check if user has provided Sheet ID
+    if 'sheet_id' not in st.session_state or not st.session_state.sheet_id:
+        # Custom CSS for login page
+        st.markdown("""
+        <style>
+        /* Login container styling */
+        .login-container {
+            background: white;
+            padding: 3rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            margin: 2rem auto;
+            max-width: 500px;
+        }
+        
+        /* Quote styling */
+        .quote-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 1.2rem;
+            font-weight: 500;
+            text-align: center;
+            margin: 2rem 0;
+            line-height: 1.6;
+        }
+        
+        /* Input field custom styling */
+        .stTextInput > div > div > input {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 1rem;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .stTextInput > div > div > input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        /* Wave animation */
+        @keyframes wave {
+            0% { transform: translateX(0); }
+            50% { transform: translateX(-20px); }
+            100% { transform: translateX(0); }
+        }
+        
+        .wave-emoji {
+            display: inline-block;
+            animation: wave 3s ease-in-out infinite;
+            font-size: 4rem;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Centered wave emoji with animation
+        st.markdown('<div style="text-align: center;"><span class="wave-emoji">🌊</span></div>', unsafe_allow_html=True)
+        
+        # Premium gradient header
+        st.markdown("""
+        <div style="
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            border-radius: 15px;
+            margin-bottom: 2rem;
+        ">
+            <h2 style="margin: 0; font-size: 2rem;">Wave Detection Ultimate 3.0</h2>
+            <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Professional Stock Ranking System</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Random quote with gradient text
+        import random
+        quotes = [
+            "The trend is your friend until the end",
+            "Discipline is the bridge between goals and accomplishment",
+            "In trading, patience is not just a virtue, it's a profit strategy",
+            "The market rewards the prepared mind",
+            "Success in trading comes from process, not prediction"
+        ]
+        selected_quote = random.choice(quotes)
+        st.markdown(f'<div class="quote-text">"{selected_quote}"</div>', unsafe_allow_html=True)
+        
+        # Login form in a container
+        with st.container():
+            st.markdown('<div class="login-container">', unsafe_allow_html=True)
+            
+            # Sheet ID input with custom placeholder
+            sheet_id = st.text_input(
+                "🔑 Google Sheets ID",
+                placeholder="Paste your Sheet ID here...",
+                help="Find this in your Google Sheets URL between /d/ and /edit",
+                label_visibility="visible"
+            )
+            
+            # Beautiful button with full width
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            if st.button("🚀 Launch Wave Detection", type="primary", use_container_width=True):
+                if sheet_id and len(sheet_id) > 40:
+                    # Success animation
+                    st.balloons()
+                    st.session_state.sheet_id = sheet_id
+                    st.session_state.sheet_url = CONFIG.DEFAULT_SHEET_URL_TEMPLATE.format(sheet_id)
+                    st.success("✅ Access granted! Launching your trading dashboard...")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Please enter a valid Google Sheets ID (44 characters)")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Info columns
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("""
+            <div style="text-align: center; padding: 1rem;">
+                <h3 style="color: #667eea;">📊</h3>
+                <p style="font-weight: 600;">1,791 Stocks</p>
+                <p style="color: #666; font-size: 0.9rem;">Real-time analysis</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown("""
+            <div style="text-align: center; padding: 1rem;">
+                <h3 style="color: #764ba2;">🎯</h3>
+                <p style="font-weight: 600;">25 Patterns</p>
+                <p style="color: #666; font-size: 0.9rem;">AI-detected signals</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown("""
+            <div style="text-align: center; padding: 1rem;">
+                <h3 style="color: #667eea;">⚡</h3>
+                <p style="font-weight: 600;">Real-time</p>
+                <p style="color: #666; font-size: 0.9rem;">Live market data</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # User Guide link with hover effect
+        st.markdown("""
+        <div style="text-align: center; margin-top: 2rem;">
+            <a href="wave-detection-manual.md" target="_blank" style="
+                color: #667eea;
+                text-decoration: none;
+                font-weight: 500;
+                padding: 0.5rem 1rem;
+                border: 2px solid #667eea;
+                border-radius: 5px;
+                display: inline-block;
+                transition: all 0.3s ease;
+            " onmouseover="this.style.backgroundColor='#667eea'; this.style.color='white';" 
+               onmouseout="this.style.backgroundColor='transparent'; this.style.color='#667eea';">
+                📚 Read Complete User Guide
+            </a>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Time and market status
+        import pytz
+        ist = pytz.timezone('Asia/Kolkata')
+        current_time = datetime.now(ist)
+        time_str = current_time.strftime('%I:%M %p IST')
+        
+        if 9 <= current_time.hour < 15:
+            market_emoji = "🟢"
+            market_status = "Market Open"
+        elif 15 <= current_time.hour < 16:
+            market_emoji = "🟡" 
+            market_status = "Market Closing"
+        else:
+            market_emoji = "🔴"
+            market_status = "Market Closed"
+        
+        st.markdown(f"""
+        <div style="text-align: center; margin-top: 3rem; padding: 1rem; background: #f5f5f5; border-radius: 10px;">
+            <p style="margin: 0; font-size: 1.1rem;">
+                {market_emoji} {market_status} • {time_str}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.stop()
+    
+    # If we reach here, user has logged in
+    sheet_url = st.session_state.sheet_url
+    
     # Sidebar configuration
     with st.sidebar:
+    
         st.markdown("### 🎯 Quick Actions")
         
         # Control buttons
