@@ -2507,130 +2507,231 @@ def main():
     </style>
     </div>
     """, unsafe_allow_html=True)
-    
+
     # Check if user has provided Sheet ID
     if 'sheet_id' not in st.session_state or not st.session_state.sheet_id:
-        # Create visual hierarchy with spacing
-        st.markdown("<br><br>", unsafe_allow_html=True)
+        # Custom CSS for perfect one-page layout
+        st.markdown("""
+        <style>
+        /* Remove default Streamlit padding */
+        .main {
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }
         
-        # Centered container for better visual balance
-        col1, col2, col3 = st.columns([1, 3, 1])
+        /* Full height container */
+        .stApp {
+            background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+        }
         
-        with col2:
-            # Big, welcoming wave emoji - creates emotional connection
-            st.markdown(
-                "<h1 style='text-align: center; font-size: 5rem;'>🌊</h1>", 
-                unsafe_allow_html=True
-            )
-            
-            # Clean, professional title
-            st.markdown(
-                "<h1 style='text-align: center; color: #667eea;'>Wave Detection</h1>", 
-                unsafe_allow_html=True
-            )
-            
-            # Subtle tagline for context
-            st.markdown(
-                "<p style='text-align: center; color: #888; margin-bottom: 2rem;'>Your Professional Trading Companion</p>", 
-                unsafe_allow_html=True
-            )
-            
-            # White space for breathing room
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Motivational quote in an elegant card
+        /* Center everything vertically */
+        .block-container {
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            max-width: 100% !important;
+        }
+        
+        /* Login container */
+        .login-wrapper {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        
+        .login-box {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+            padding: 3rem 2rem;
+            max-width: 450px;
+            width: 100%;
+        }
+        
+        /* Wave emoji pulse */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .wave-icon {
+            animation: pulse 2s ease-in-out infinite;
+            display: inline-block;
+        }
+        
+        /* Input styling matching main app */
+        .stTextInput > div > div > input {
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+        }
+        
+        .stTextInput > div > div > input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        /* Button matching main app style */
+        .stButton > button {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .stButton > button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        /* Hide Streamlit elements */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Create the perfect one-page layout
+        st.markdown("""
+        <div class="login-wrapper">
+            <div class="login-box">
+                <!-- Wave Icon -->
+                <div style="text-align: center; margin-bottom: 1.5rem;">
+                    <span class="wave-icon" style="font-size: 4rem;">🌊</span>
+                </div>
+                
+                <!-- Title -->
+                <h2 style="
+                    text-align: center;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    margin: 0 0 0.5rem 0;
+                    font-size: 2rem;
+                    font-weight: 700;
+                ">Wave Detection</h2>
+                
+                <!-- Subtitle -->
+                <p style="
+                    text-align: center;
+                    color: #6c757d;
+                    margin-bottom: 2rem;
+                    font-size: 1rem;
+                ">Professional Stock Ranking System</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Create centered container for Streamlit elements
+        _, center_col, _ = st.columns([1, 6, 1])
+        
+        with center_col:
+            # Motivational quote in elegant style
             import random
             quotes = [
-                "Every expert was once a beginner.",
-                "The journey of a thousand profits begins with a single trade.",
-                "Success is not final, failure is not fatal: it's the courage to continue that counts.",
-                "The best time to plant a tree was 20 years ago. The second best time is now.",
-                "Your only limit is your mind."
+                "The best traders are simply students who never stop learning.",
+                "Patience and discipline are a trader's best friends.",
+                "Every master was once a beginner who never gave up.",
+                "Success in trading comes from controlling emotions, not predicting markets.",
+                "The market rewards consistency, not perfection."
             ]
             
-            # Quote in a beautiful info box - creates positive emotion
-            quote = random.choice(quotes)
-            st.info(f"✨ *{quote}*")
+            quote_container = st.container()
+            with quote_container:
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+                    border-left: 3px solid #667eea;
+                    padding: 1rem 1.5rem;
+                    margin: 2rem 0;
+                    border-radius: 0 8px 8px 0;
+                ">
+                    <p style="
+                        margin: 0;
+                        color: #495057;
+                        font-style: italic;
+                        line-height: 1.6;
+                    ">✨ {random.choice(quotes)}</p>
+                </div>
+                """, unsafe_allow_html=True)
             
-            # Clean white space
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Simple, focused input
+            # Clean input field
             sheet_id = st.text_input(
-                "",  # No label - cleaner
-                placeholder="Enter your Google Sheets ID",
-                help="Your 44-character key to trading success"
+                "Enter your trading key",
+                placeholder="Your 44-character Google Sheets ID",
+                label_visibility="collapsed",
+                help="Find this in your Google Sheets URL between /d/ and /edit"
             )
             
-            # Prominent action button - creates anticipation
-            st.markdown("<br>", unsafe_allow_html=True)
+            # Spacer
+            st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
             
-            ready = st.button(
-                "🚀 I'm Ready to Trade",
-                type="primary",
-                use_container_width=True
-            )
-            
-            if ready:
+            # Action button
+            if st.button("🚀 Start Trading", type="primary", use_container_width=True):
                 if sheet_id and len(sheet_id) >= 44:
-                    # Success feedback - dopamine hit
-                    placeholder = st.empty()
-                    placeholder.success("🎉 Welcome back, Trader!")
-                    
-                    st.session_state.sheet_id = sheet_id
-                    st.session_state.sheet_url = CONFIG.DEFAULT_SHEET_URL_TEMPLATE.format(sheet_id)
-                    
-                    # Brief pause to enjoy the moment
-                    time.sleep(1.5)
+                    with st.spinner("Setting up your dashboard..."):
+                        st.session_state.sheet_id = sheet_id
+                        st.session_state.sheet_url = CONFIG.DEFAULT_SHEET_URL_TEMPLATE.format(sheet_id)
+                        time.sleep(1)
+                    st.success("✅ Welcome! Loading Wave Detection...")
+                    time.sleep(0.5)
                     st.rerun()
                 else:
-                    st.error("🤔 That doesn't look right. Check your Sheet ID.")
+                    st.error("Please enter a valid 44-character Sheet ID")
             
-            # Trust builders - subtle but important
-            st.markdown("<br><br>", unsafe_allow_html=True)
+            # Trust indicators
+            st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
             
-            # Three pillars of trust
-            trust_col1, trust_col2, trust_col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.markdown("""
+                <div style="text-align: center;">
+                    <div style="color: #667eea; font-size: 1.8rem;">📊</div>
+                    <div style="color: #6c757d; font-size: 0.75rem; margin-top: 0.25rem;">1,791 Stocks</div>
+                </div>
+                """, unsafe_allow_html=True)
             
-            with trust_col1:
-                st.markdown(
-                    "<div style='text-align: center;'>"
-                    "<p style='font-size: 2rem; margin: 0;'>🛡️</p>"
-                    "<p style='color: #888; font-size: 0.9rem;'>Secure</p>"
-                    "</div>",
-                    unsafe_allow_html=True
-                )
+            with col2:
+                st.markdown("""
+                <div style="text-align: center;">
+                    <div style="color: #667eea; font-size: 1.8rem;">🎯</div>
+                    <div style="color: #6c757d; font-size: 0.75rem; margin-top: 0.25rem;">25 Patterns</div>
+                </div>
+                """, unsafe_allow_html=True)
             
-            with trust_col2:
-                st.markdown(
-                    "<div style='text-align: center;'>"
-                    "<p style='font-size: 2rem; margin: 0;'>⚡</p>"
-                    "<p style='color: #888; font-size: 0.9rem;'>Real-time</p>"
-                    "</div>",
-                    unsafe_allow_html=True
-                )
+            with col3:
+                st.markdown("""
+                <div style="text-align: center;">
+                    <div style="color: #667eea; font-size: 1.8rem;">⚡</div>
+                    <div style="color: #6c757d; font-size: 0.75rem; margin-top: 0.25rem;">Real-time</div>
+                </div>
+                """, unsafe_allow_html=True)
             
-            with trust_col3:
-                st.markdown(
-                    "<div style='text-align: center;'>"
-                    "<p style='font-size: 2rem; margin: 0;'>🎯</p>"
-                    "<p style='color: #888; font-size: 0.9rem;'>Accurate</p>"
-                    "</div>",
-                    unsafe_allow_html=True
-                )
+            with col4:
+                st.markdown("""
+                <div style="text-align: center;">
+                    <div style="color: #667eea; font-size: 1.8rem;">🛡️</div>
+                    <div style="color: #6c757d; font-size: 0.75rem; margin-top: 0.25rem;">Secure</div>
+                </div>
+                """, unsafe_allow_html=True)
             
-            # Gentle nudge to user guide
-            st.markdown("<br><br>", unsafe_allow_html=True)
-            st.markdown(
-                "<p style='text-align: center;'>"
-                "<a href='#' style='color: #667eea; text-decoration: none;'>"
-                "First time? Read the guide →"
-                "</a></p>",
-                unsafe_allow_html=True
-            )
-        
-        # Bottom spacing
-        st.markdown("<br><br><br>", unsafe_allow_html=True)
+            # Guide link
+            st.markdown("""
+            <div style="text-align: center; margin-top: 2rem;">
+                <a href="#" style="color: #667eea; text-decoration: none; font-size: 0.9rem;">
+                    Need help? Read the guide →
+                </a>
+            </div>
+            """, unsafe_allow_html=True)
         
         st.stop()
     
