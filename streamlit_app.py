@@ -2574,10 +2574,10 @@ sheet_url = st.session_state.sheet_url
                 st.rerun()
 
         # Change Sheet ID button
-       if st.button("🔄 Change Sheet ID", use_container_width=True):
-       del st.session_state.sheet_id
-       del st.session_state.sheet_url
-       st.rerun()
+        if st.button("🔄 Change Sheet ID", use_container_width=True):
+            del st.session_state.sheet_id
+            del st.session_state.sheet_url
+            st.rerun()
         
         # Data source selection - ENHANCED: Two prominent buttons
         st.markdown("---")
