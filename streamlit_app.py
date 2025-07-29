@@ -350,11 +350,10 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
         else:
             # Use defaults if not provided
             if not sheet_url:
-                # Should not happen since we require login
                 if 'sheet_url' in st.session_state:
                     sheet_url = st.session_state.sheet_url
                 else:
-                    st.error("No sheet URL available. Please restart the app.")
+                    st.error("No sheet URL available")
                     st.stop()
             if not gid:
                 gid = CONFIG.DEFAULT_GID
@@ -2507,6 +2506,28 @@ def main():
     }
     </style>
     """, unsafe_allow_html=True)
+
+    # Check if user has provided Sheet ID
+    if 'sheet_id' not in st.session_state or not st.session_state.sheet_id:
+        st.markdown("### 🔐 Enter Your Google Sheets ID")
+        
+        sheet_id = st.text_input(
+            "",
+            placeholder="Example: 1OEQ_qxL4lXbO9LlKWDGlDju2yQC1iYvOYeXF3mTQuJM"
+        )
+        
+        if st.button("Start Trading", type="primary"):
+            if sheet_id and len(sheet_id) > 40:
+                st.session_state.sheet_id = sheet_id
+                st.session_state.sheet_url = CONFIG.DEFAULT_SHEET_URL_TEMPLATE.format(sheet_id)
+                st.rerun()
+            else:
+                st.error("Please enter a valid Sheet ID")
+        
+        st.stop()
+    
+    # User has logged in
+    sheet_url = st.session_state.sheet_url
     
     # Header
     st.markdown("""
@@ -2525,38 +2546,6 @@ def main():
         </p>
     </div>
     """, unsafe_allow_html=True)
-
-  # Check if user has provided Sheet ID
-    if 'sheet_id' not in st.session_state or not st.session_state.sheet_id:
-        # Show login form
-        st.markdown("### 🔐 Access Your Trading Dashboard")
-        
-        col1, col2, col3 = st.columns([1, 3, 1])
-        with col2:
-            sheet_id = st.text_input(
-                "Enter Google Sheets ID",
-                placeholder="Example: 1OEQ_qxL4lXbO9LlKWDGlDju2yQC1iYvOYeXF3mTQuJM",
-                help="Find this ID in your Google Sheets URL between /d/ and /edit"
-            )
-            
-            if st.button("🚀 Start Trading", type="primary", use_container_width=True):
-                if sheet_id and len(sheet_id) > 40:
-                    st.session_state.sheet_id = sheet_id
-                    st.session_state.sheet_url = CONFIG.DEFAULT_SHEET_URL_TEMPLATE.format(sheet_id)
-                    st.rerun()
-                else:
-                    st.error("Please enter a valid Google Sheets ID")
-            
-            # Show time
-            import pytz
-            ist = pytz.timezone('Asia/Kolkata')
-            current_time = datetime.now(ist).strftime('%I:%M %p IST')
-            st.markdown(f"<p style='text-align:center; color:#666; margin-top:2rem;'>{current_time}</p>", unsafe_allow_html=True)
-        
-        st.stop()  # Don't load rest of the app
-    
-    # If we reach here, user has logged in
-    sheet_url = st.session_state.sheet_url
     
     # Sidebar configuration
     with st.sidebar:
@@ -2732,11 +2721,11 @@ def main():
                         "upload", file_data=uploaded_file
                     )
                 else:
-    ranked_df, data_timestamp, metadata = load_and_process_data(
-        "sheet", 
-        sheet_url=sheet_url,  # Using the URL from session state
-        gid=CONFIG.DEFAULT_GID
-    )
+                    ranked_df, data_timestamp, metadata = load_and_process_data(
+                        "sheet", 
+                        sheet_url=sheet_url, 
+                        gid=CONFIG.DEFAULT_GID
+                    )
                 
                 st.session_state.ranked_df = ranked_df
                 st.session_state.data_timestamp = data_timestamp
