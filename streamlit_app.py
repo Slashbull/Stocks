@@ -2510,113 +2510,96 @@ def main():
 
     # Check if user has provided Sheet ID
     if 'sheet_id' not in st.session_state or not st.session_state.sheet_id:
-        # Use Streamlit's native container for centering
-        st.container(height=50, border=False)  # Top spacing
-        
-        # Title with columns for centering
+        # Create vertical centering with columns
         col1, col2, col3 = st.columns([1, 2, 1])
+        
         with col2:
-            st.title("🌊 Wave Detection Ultimate 3.0")
-            st.caption("Professional Stock Ranking System")
-        
-        # Divider
-        st.divider()
-        
-        # Main login area with tabs for better UX
-        tab1, tab2 = st.tabs(["🔐 Login", "📚 About"])
-        
-        with tab1:
-            # Create form for better submission handling
+            # Add vertical spacing at top
+            st.markdown("<br><br><br>", unsafe_allow_html=True)
+            
+            # Wave emoji and title
+            st.markdown(
+                """
+                <div style='text-align: center;'>
+                    <h1 style='font-size: 4rem; margin: 0;'>🌊</h1>
+                    <h2 style='color: #1f1f1f; margin: 0.5rem 0;'>Wave Detection Ultimate 3.0</h2>
+                    <p style='color: #666; font-size: 1.1rem;'>Professional Stock Ranking System</p>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+            
+            # Add spacing
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            
+            # Professional quote
+            import random
+            quotes = [
+                "Transform market data into trading decisions",
+                "Where intelligence meets opportunity",
+                "Professional trading, simplified"
+            ]
+            
+            st.markdown(
+                f"""
+                <div style='
+                    background-color: #f0f2f6;
+                    padding: 1.5rem;
+                    border-radius: 10px;
+                    text-align: center;
+                    margin-bottom: 2rem;
+                '>
+                    <em style='color: #555; font-size: 1.1rem;'>{random.choice(quotes)}</em>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            # Login form
             with st.form("login_form", clear_on_submit=False):
-                # Quote using native callout
-                import random
-                quotes = [
-                    "The trend is your friend until the end",
-                    "Discipline is the bridge between goals and accomplishment",
-                    "Trade what you see, not what you think"
-                ]
-                st.info(f"💡 {random.choice(quotes)}", icon="✨")
-                
-                # Input with native styling
+                # Input field
                 sheet_id = st.text_input(
-                    "Google Sheets ID",
-                    placeholder="Enter your 44-character ID",
-                    help="Find this in your Google Sheets URL between /d/ and /edit",
-                    max_chars=50
+                    "Enter Google Sheets ID",
+                    placeholder="Your 44-character identification key",
+                    label_visibility="visible",
+                    help="Located in your Google Sheets URL between /d/ and /edit"
                 )
                 
-                # Columns for button centering
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col2:
-                    submitted = st.form_submit_button(
-                        "🚀 Start Trading",
-                        type="primary",
-                        use_container_width=True
-                    )
+                # Spacing before button
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # Submit button
+                submitted = st.form_submit_button(
+                    "Access Trading Dashboard",
+                    type="primary",
+                    use_container_width=True
+                )
                 
                 if submitted:
                     if sheet_id and len(sheet_id) >= 44:
                         st.session_state.sheet_id = sheet_id
                         st.session_state.sheet_url = CONFIG.DEFAULT_SHEET_URL_TEMPLATE.format(sheet_id)
-                        st.success("✅ Access granted! Loading your dashboard...")
-                        st.balloons()
-                        time.sleep(1)
+                        st.success("Authentication successful. Loading dashboard...")
+                        time.sleep(1.5)
                         st.rerun()
                     else:
-                        st.error("❌ Invalid Sheet ID. Please enter a 44-character ID.")
+                        st.error("Invalid identification key. Please verify and try again.")
             
-            # Metrics using native components
-            st.container(height=20, border=False)  # Spacing
+            # User guide link
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            st.markdown(
+                """
+                <div style='text-align: center;'>
+                    <a href='#' style='color: #667eea; text-decoration: none; font-size: 0.95rem;'>
+                        Documentation & User Guide
+                    </a>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
             
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric(label="Stocks", value="1,791", delta="Live")
-            with col2:
-                st.metric(label="Patterns", value="25", delta="AI-Powered")
-            with col3:
-                st.metric(label="Updates", value="60s", delta="Real-time")
-            with col4:
-                st.metric(label="Accuracy", value="98.7%", delta="Proven")
-        
-        with tab2:
-            # About section
-            st.markdown("""
-            ### Welcome to Wave Detection Ultimate 3.0
-            
-            The most advanced stock ranking system designed to help you:
-            - 📊 Analyze 1,791 stocks in real-time
-            - 🎯 Detect 25 proven patterns automatically
-            - 🌊 Identify momentum waves before they peak
-            - 💡 Make data-driven trading decisions
-            
-            **Getting Started:**
-            1. Enter your Google Sheets ID
-            2. Click "Start Trading"
-            3. Let Wave Detection guide your success
-            
-            [📖 Read Full User Guide →](#)
-            """)
-            
-            # Expander for more info
-            with st.expander("🔒 Security & Privacy"):
-                st.write("""
-                - Your Sheet ID is stored only in your session
-                - No data is saved on our servers
-                - Secure connection to Google Sheets
-                - You can change Sheet ID anytime
-                """)
-        
-        # Footer with time
-        st.container(height=30, border=False)  # Spacing
-        import pytz
-        ist = pytz.timezone('Asia/Kolkata')
-        current_time = datetime.now(ist).strftime('%I:%M %p IST')
-        
-        # Status bar
-        if 9 <= datetime.now(ist).hour < 15:
-            st.success(f"🟢 Market Open • {current_time}")
-        else:
-            st.info(f"🔴 Market Closed • {current_time}")
+            # Bottom spacing to prevent scroll
+            st.markdown("<br><br>", unsafe_allow_html=True)
         
         st.stop()
     
