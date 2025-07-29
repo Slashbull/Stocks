@@ -2650,9 +2650,6 @@ def main():
 
     st.stop()
     
-    # User has logged in
-    sheet_url = st.session_state.sheet_url
-    
     # Sidebar configuration
     with st.sidebar:
     
