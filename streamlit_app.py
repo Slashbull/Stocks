@@ -347,8 +347,7 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
             logger.info("Loading data from uploaded CSV")
             df = pd.read_csv(file_data, low_memory=False)
             metadata['source'] = "User Upload"
-            
-       else:
+        else:
             # Use defaults if not provided
             if not sheet_url:
                 # Should not happen since we require login
@@ -359,7 +358,7 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
                     st.stop()
             if not gid:
                 gid = CONFIG.DEFAULT_GID
-
+            
             # Construct CSV URL
             base_url = sheet_url.split('/edit')[0]
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
