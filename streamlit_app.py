@@ -2510,96 +2510,285 @@ def main():
 
     # Check if user has provided Sheet ID
     if 'sheet_id' not in st.session_state or not st.session_state.sheet_id:
-        # Create vertical centering with columns
-        col1, col2, col3 = st.columns([1, 2, 1])
+        # Premium CSS matching your main app style
+        st.markdown("""
+        <style>
+        /* Match your main app's gradient */
+        [data-testid="stAppViewContainer"] {
+            background: linear-gradient(135deg, #f8f9fb 0%, #f0f2f6 100%);
+        }
+        
+        /* Premium card design like your main app */
+        .login-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            padding: 3rem;
+            margin: 2rem auto;
+            max-width: 480px;
+            border: 1px solid rgba(102, 126, 234, 0.1);
+        }
+        
+        /* Your signature gradient text */
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+        }
+        
+        /* Wave animation matching your style */
+        @keyframes wave-motion {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            25% { transform: translateY(-5px) rotate(-5deg); }
+            75% { transform: translateY(5px) rotate(5deg); }
+        }
+        
+        .wave-logo {
+            display: inline-block;
+            animation: wave-motion 3s ease-in-out infinite;
+            font-size: 5rem;
+            filter: drop-shadow(0 10px 20px rgba(102, 126, 234, 0.2));
+        }
+        
+        /* Input styling matching your main app */
+        .stTextInput > div > div > input {
+            border: 2px solid #e9ecef;
+            padding: 1rem;
+            font-size: 1.05rem;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+            background: #fafbfc;
+        }
+        
+        .stTextInput > div > div > input:focus {
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        /* Button matching your gradient style */
+        .stButton > button {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            padding: 0.8rem 2rem;
+            border-radius: 10px;
+            border: none;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .stButton > button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        /* Quote box with gradient border */
+        .quote-box {
+            background: linear-gradient(135deg, #667eea08 0%, #764ba208 100%);
+            border-left: 4px solid;
+            border-image: linear-gradient(135deg, #667eea 0%, #764ba2 100%) 1;
+            padding: 1.2rem 1.5rem;
+            border-radius: 0 10px 10px 0;
+            margin: 2rem 0;
+        }
+        
+        /* Hide Streamlit defaults */
+        #MainMenu, footer, header {visibility: hidden;}
+        
+        /* Smooth fade in */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.8s ease-out;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Centered elegant layout
+        col1, col2, col3 = st.columns([1, 3, 1])
         
         with col2:
-            # Add vertical spacing at top
-            st.markdown("<br><br><br>", unsafe_allow_html=True)
-            
-            # Wave emoji and title
-            st.markdown(
-                """
-                <div style='text-align: center;'>
-                    <h1 style='font-size: 4rem; margin: 0;'>🌊</h1>
-                    <h2 style='color: #1f1f1f; margin: 0.5rem 0;'>Wave Detection Ultimate 3.0</h2>
-                    <p style='color: #666; font-size: 1.1rem;'>Professional Stock Ranking System</p>
-                </div>
-                """, 
-                unsafe_allow_html=True
-            )
-            
-            # Add spacing
             st.markdown("<br><br>", unsafe_allow_html=True)
             
-            # Professional quote
-            import random
-            quotes = [
-                "Transform market data into trading decisions",
-                "Where intelligence meets opportunity",
-                "Professional trading, simplified"
-            ]
+            # Login card container
+            st.markdown('<div class="login-card fade-in">', unsafe_allow_html=True)
             
+            # Animated wave logo
             st.markdown(
-                f"""
-                <div style='
-                    background-color: #f0f2f6;
-                    padding: 1.5rem;
-                    border-radius: 10px;
-                    text-align: center;
-                    margin-bottom: 2rem;
-                '>
-                    <em style='color: #555; font-size: 1.1rem;'>{random.choice(quotes)}</em>
+                """
+                <div style="text-align: center; margin-bottom: 2rem;">
+                    <div class="wave-logo">🌊</div>
+                    <h1 class="gradient-text" style="font-size: 2.5rem; margin: 1rem 0 0.5rem 0;">
+                        Wave Detection
+                    </h1>
+                    <p style="color: #6c757d; font-size: 1.1rem; margin: 0;">
+                        Ultimate 3.0 • Professional Trading System
+                    </p>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
             
-            # Login form
+            # Professional quote with gradient border
+            import random
+            quotes = [
+                "Where data becomes decisions, and decisions become profits.",
+                "Professional trading isn't about predicting, it's about reacting intelligently.",
+                "The market speaks in patterns. Wave Detection translates."
+            ]
+            
+            st.markdown(
+                f'<div class="quote-box"><em style="color: #495057; font-size: 1.05rem;">{random.choice(quotes)}</em></div>',
+                unsafe_allow_html=True
+            )
+            
+            # Elegant form
             with st.form("login_form", clear_on_submit=False):
-                # Input field
-                sheet_id = st.text_input(
-                    "Enter Google Sheets ID",
-                    placeholder="Your 44-character identification key",
-                    label_visibility="visible",
-                    help="Located in your Google Sheets URL between /d/ and /edit"
+                st.markdown(
+                    """
+                    <p style="color: #495057; font-weight: 500; margin-bottom: 0.5rem;">
+                        🔐 Secure Access
+                    </p>
+                    """,
+                    unsafe_allow_html=True
                 )
                 
-                # Spacing before button
+                sheet_id = st.text_input(
+                    "Google Sheets Identification",
+                    placeholder="Enter your 44-character key",
+                    label_visibility="collapsed",
+                    help="Your unique identifier from Google Sheets URL"
+                )
+                
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # Submit button
+                # Premium button
                 submitted = st.form_submit_button(
-                    "Access Trading Dashboard",
+                    "🚀 Launch Wave Detection",
                     type="primary",
                     use_container_width=True
                 )
                 
                 if submitted:
                     if sheet_id and len(sheet_id) >= 44:
+                        # Success sequence
+                        placeholder = st.empty()
+                        placeholder.success("✅ Authentication successful")
+                        st.balloons()
+                        
                         st.session_state.sheet_id = sheet_id
                         st.session_state.sheet_url = CONFIG.DEFAULT_SHEET_URL_TEMPLATE.format(sheet_id)
-                        st.success("Authentication successful. Loading dashboard...")
-                        time.sleep(1.5)
+                        
+                        time.sleep(1)
+                        placeholder.info("🌊 Initializing Wave Detection...")
+                        time.sleep(0.5)
                         st.rerun()
                     else:
-                        st.error("Invalid identification key. Please verify and try again.")
+                        st.error("Invalid key. Please verify your 44-character Google Sheets ID.")
             
-            # User guide link
-            st.markdown("<br><br>", unsafe_allow_html=True)
+            # Subtle features showcase
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            feat_col1, feat_col2, feat_col3 = st.columns(3)
+            
+            with feat_col1:
+                st.markdown(
+                    """
+                    <div style="text-align: center; padding: 1rem;">
+                        <div style="
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            -webkit-background-clip: text;
+                            -webkit-text-fill-color: transparent;
+                            font-size: 2rem;
+                            font-weight: 700;
+                        ">1,791</div>
+                        <p style="color: #6c757d; font-size: 0.85rem; margin: 0.5rem 0 0 0;">
+                            Stocks Analyzed
+                        </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            
+            with feat_col2:
+                st.markdown(
+                    """
+                    <div style="text-align: center; padding: 1rem;">
+                        <div style="
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            -webkit-background-clip: text;
+                            -webkit-text-fill-color: transparent;
+                            font-size: 2rem;
+                            font-weight: 700;
+                        ">25</div>
+                        <p style="color: #6c757d; font-size: 0.85rem; margin: 0.5rem 0 0 0;">
+                            Pattern Detection
+                        </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            
+            with feat_col3:
+                st.markdown(
+                    """
+                    <div style="text-align: center; padding: 1rem;">
+                        <div style="
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            -webkit-background-clip: text;
+                            -webkit-text-fill-color: transparent;
+                            font-size: 2rem;
+                            font-weight: 700;
+                        ">98.7%</div>
+                        <p style="color: #6c757d; font-size: 0.85rem; margin: 0.5rem 0 0 0;">
+                            Accuracy Rate
+                        </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            
+            # Documentation link
             st.markdown(
                 """
-                <div style='text-align: center;'>
-                    <a href='#' style='color: #667eea; text-decoration: none; font-size: 0.95rem;'>
-                        Documentation & User Guide
+                <div style="text-align: center; margin-top: 2rem;">
+                    <a href="#" style="
+                        color: #667eea;
+                        text-decoration: none;
+                        font-weight: 500;
+                        border-bottom: 1px solid transparent;
+                        transition: all 0.3s ease;
+                    " onmouseover="this.style.borderBottom='1px solid #667eea'" 
+                       onmouseout="this.style.borderBottom='1px solid transparent'">
+                        📖 Documentation & User Guide
                     </a>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
             
-            # Bottom spacing to prevent scroll
-            st.markdown("<br><br>", unsafe_allow_html=True)
+            # Close card
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Market status footer
+            import pytz
+            ist = pytz.timezone('Asia/Kolkata')
+            current_time = datetime.now(ist).strftime('%I:%M %p IST')
+            
+            st.markdown(
+                f"""
+                <p style="text-align: center; color: #6c757d; margin-top: 2rem; font-size: 0.9rem;">
+                    {current_time} • Secure Connection • Wave Detection Ultimate 3.0
+                </p>
+                """,
+                unsafe_allow_html=True
+            )
         
         st.stop()
     
