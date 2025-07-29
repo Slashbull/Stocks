@@ -348,18 +348,18 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
             df = pd.read_csv(file_data, low_memory=False)
             metadata['source'] = "User Upload"
             
-        else:
-    # Use defaults if not provided
-    if not sheet_url:
-        # Should not happen since we require login
-        if 'sheet_url' in st.session_state:
-            sheet_url = st.session_state.sheet_url
-        else:
-            st.error("No sheet URL available. Please restart the app.")
-            st.stop()
-    if not gid:
-        gid = CONFIG.DEFAULT_GID
-            
+       else:
+            # Use defaults if not provided
+            if not sheet_url:
+                # Should not happen since we require login
+                if 'sheet_url' in st.session_state:
+                    sheet_url = st.session_state.sheet_url
+                else:
+                    st.error("No sheet URL available. Please restart the app.")
+                    st.stop()
+            if not gid:
+                gid = CONFIG.DEFAULT_GID
+
             # Construct CSV URL
             base_url = sheet_url.split('/edit')[0]
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
