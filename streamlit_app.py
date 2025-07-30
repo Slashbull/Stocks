@@ -28,6 +28,8 @@ import time
 from io import BytesIO
 import warnings
 import gc
+import requests # Import requests for more granular error handling
+from urllib.error import HTTPError # Import HTTPError for network errors
 
 # Suppress warnings for clean output
 warnings.filterwarnings('ignore')
@@ -324,6 +326,8 @@ class DataValidator:
 # SMART CACHING WITH VERSIONING
 # ============================================
 
+# The sheet_id parameter is crucial for cache invalidation when the source changes.
+# Any change in sheet_id will trigger a fresh download and processing.
 @st.cache_data(ttl=CONFIG.CACHE_TTL, persist="disk", show_spinner=False)
 def load_and_process_data(source_type: str = "sheet", file_data=None, 
                           sheet_id: Optional[str] = None, gid: str = CONFIG.DEFAULT_GID, # gid now defaults to CONFIG.DEFAULT_GID
@@ -340,6 +344,8 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
     }
     
     try:
+        df = pd.DataFrame() # Initialize df to an empty DataFrame
+        
         # Load data based on source
         if source_type == "upload" and file_data is not None:
             logger.info("Loading data from uploaded CSV")
@@ -347,29 +353,56 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
             metadata['source'] = "User Upload"
         elif source_type == "sheet":
             # Ensure Sheet ID is provided for Google Sheets
-            if not sheet_id:
-                raise ValueError("Google Sheet ID is required for data loading.")
+            if not sheet_id or not sheet_id.strip():
+                # Don't raise ValueError here directly, let the UI handle the missing input
+                logger.error("Attempted to load from Google Sheets with empty Sheet ID.")
+                return pd.DataFrame(), datetime.now(timezone.utc), {'errors': ["Google Sheet ID is required for data loading."]}
             
             # Construct CSV URL using the provided Sheet ID
             csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
             
-            logger.info(f"Loading data from Google Sheets (ID: {sheet_id})")
+            logger.info(f"Attempting to load data from Google Sheets (ID: {sheet_id})")
             
             try:
-                df = pd.read_csv(csv_url, low_memory=False)
+                # Use requests for better error handling visibility
+                response = requests.get(csv_url, timeout=10) # 10 second timeout
+                response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+                df = pd.read_csv(BytesIO(response.content), low_memory=False)
                 metadata['source'] = f"Google Sheets (ID: {sheet_id})"
+            except requests.exceptions.ConnectionError:
+                error_msg = "Network connection issue. Could not reach Google Sheets. Please check your internet."
+                logger.error(error_msg)
+                metadata['errors'].append(error_msg)
+                raise ConnectionError(error_msg) from None
+            except requests.exceptions.Timeout:
+                error_msg = "Request to Google Sheets timed out. Please check your network or try again later."
+                logger.error(error_msg)
+                metadata['errors'].append(error_msg)
+                raise TimeoutError(error_msg) from None
+            except HTTPError as e:
+                status_code = e.response.status_code
+                if status_code == 400: # Bad Request
+                    error_msg = "Invalid Google Sheet ID or GID. Please verify the ID in your URL and ensure the GID (worksheet ID) is correct."
+                elif status_code == 401 or status_code == 403: # Unauthorized or Forbidden
+                    error_msg = "Access Denied to Google Sheet. Please ensure the Google Sheet is shared as 'Anyone with the link can view'."
+                elif status_code == 404: # Not Found
+                    error_msg = "Google Sheet not found. Please verify the Sheet ID and GID are correct."
+                else:
+                    error_msg = f"HTTP Error {status_code} loading Google Sheet: {e.response.reason}. Check the Sheet ID and permissions."
+                logger.error(error_msg)
+                metadata['errors'].append(error_msg)
+                raise ValueError(error_msg) from None
+            except pd.errors.EmptyDataError:
+                error_msg = "The Google Sheet is empty or contains no valid data."
+                logger.error(error_msg)
+                metadata['errors'].append(error_msg)
+                raise ValueError(error_msg) from None
             except Exception as e:
-                logger.error(f"Failed to load from Google Sheets (ID: {sheet_id}): {str(e)}")
-                metadata['errors'].append(f"Google Sheets load error: {str(e)}. Please check the Sheet ID and permissions.")
-                
-                # Try to use cached data as fallback
-                if 'last_good_data' in st.session_state:
-                    logger.info("Using cached data as fallback")
-                    df, timestamp, old_metadata = st.session_state.last_good_data
-                    metadata['warnings'].append("Using cached data due to fresh data load failure.")
-                    metadata['cache_used'] = True
-                    return df, timestamp, metadata
-                raise # Re-raise if no cached data available or if critical error
+                error_msg = f"An unexpected error occurred loading from Google Sheets: {str(e)}. Check your Sheet ID and permissions."
+                logger.error(error_msg)
+                metadata['errors'].append(error_msg)
+                raise # Re-raise other unexpected exceptions
+
         else:
             raise ValueError("Invalid data source type specified.")
             
@@ -398,6 +431,7 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
         # Store as last good data
         timestamp = datetime.now(timezone.utc)
         st.session_state.last_good_data = (df.copy(), timestamp, metadata)
+        st.session_state.data_load_successful = True # Indicate successful load
         
         # Record processing time
         processing_time = time.perf_counter() - start_time
@@ -414,6 +448,7 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
     except Exception as e:
         logger.error(f"Failed to load and process data: {str(e)}")
         metadata['errors'].append(str(e))
+        st.session_state.data_load_successful = False # Indicate load failure
         raise
 
 # ============================================
@@ -1743,11 +1778,14 @@ class FilterEngine:
         # PE filters
         min_pe = filters.get('min_pe')
         if min_pe is not None and 'pe' in df.columns:
-            mask &= df['pe'].isna() | ((df['pe'] > 0) & (df['pe'] >= min_pe))
+            # Only apply if value is valid (not NaN, not negative/zero for PE bounds)
+            valid_pe_check = df['pe'].notna() & (df['pe'] > 0)
+            mask &= (~valid_pe_check) | (df['pe'] >= min_pe) # Keep NaNs, non-positive, or within range
         
         max_pe = filters.get('max_pe')
         if max_pe is not None and 'pe' in df.columns:
-            mask &= df['pe'].isna() | ((df['pe'] > 0) & (df['pe'] <= max_pe))
+            valid_pe_check = df['pe'].notna() & (df['pe'] > 0)
+            mask &= (~valid_pe_check) | (df['pe'] <= max_pe) # Keep NaNs, non-positive, or within range
         
         # Apply tier filters
         for tier_type in ['eps_tiers', 'pe_tiers', 'price_tiers']:
@@ -1781,36 +1819,63 @@ class FilterEngine:
         return filtered_df
     
     @staticmethod
-    def get_filter_options(df: pd.DataFrame, column: str, current_filters: Dict[str, Any]) -> List[str]:
-        """Get available filter options with smart interconnection"""
+    @lru_cache(maxsize=128) # Cache filter options for performance
+    def get_filter_options(base_df: pd.DataFrame, column: str, current_filter_states: Dict[str, Any]) -> List[str]:
+        """
+        Get available filter options for a given column, dynamically adjusted by other active filters.
+        Takes the full original DataFrame and the complete current filter states.
+        """
         
-        if df.empty or column not in df.columns:
+        if base_df.empty or column not in base_df.columns:
             return []
         
-        # Apply other filters first for interconnected filtering
-        temp_filters = current_filters.copy()
+        # Create a temporary filter dictionary by removing the current column's filter
+        # This allows other filters to apply and narrow down the options for 'column'
+        temp_filters = current_filter_states.copy()
         
-        # Remove the current column's filter to see all its options
+        # Map session state keys to filter function keys
         filter_key_map = {
             'category': 'categories',
             'sector': 'sectors',
-            'industry': 'industries', # NEW: Added for industry filter
+            'industry': 'industries',
             'eps_tier': 'eps_tiers',
             'pe_tier': 'pe_tiers',
             'price_tier': 'price_tiers',
-            'wave_state': 'wave_states'
+            'wave_state': 'wave_states',
+            'patterns': 'patterns', # Ensure patterns is also cleared for its own options
+            'min_score': 'min_score',
+            'trend_filter': 'trend_filter', # and related 'trend_range'
+            'min_eps_change': 'min_eps_change',
+            'min_pe': 'min_pe',
+            'max_pe': 'max_pe',
+            'require_fundamental_data': 'require_fundamental_data',
+            'wave_strength_range_slider': 'wave_strength_range',
         }
+
+        # Remove the current column's filter value from temp_filters to get its full potential options
+        filter_func_key = filter_key_map.get(column)
+        if filter_func_key:
+            if filter_func_key in temp_filters:
+                temp_filters.pop(filter_func_key)
+            # Special handling for trend_filter which uses 'trend_range' in apply_filters
+            if column == 'trend_filter' and 'trend_range' in temp_filters:
+                temp_filters.pop('trend_range')
+            
+            # For numerical ranges, ensure both min/max are removed if they exist
+            if column == 'min_pe' and 'min_pe' in temp_filters:
+                temp_filters.pop('min_pe')
+            if column == 'max_pe' and 'max_pe' in temp_filters:
+                temp_filters.pop('max_pe')
+            if column == 'min_eps_change' and 'min_eps_change' in temp_filters:
+                temp_filters.pop('min_eps_change')
+            
+        # Apply *all other* filters to the base_df (full dataset)
+        filtered_for_options = FilterEngine.apply_filters(base_df, temp_filters)
         
-        if column in filter_key_map:
-            temp_filters.pop(filter_key_map[column], None)
+        # Get unique values from this conditionally filtered DataFrame
+        values = filtered_for_options[column].dropna().unique()
         
-        # Apply remaining filters
-        filtered_df = FilterEngine.apply_filters(df, temp_filters)
-        
-        # Get unique values
-        values = filtered_df[column].dropna().unique()
-        
-        # Exclude Unknown and empty values
+        # Exclude 'Unknown' and empty string values
         values = [v for v in values if str(v).strip() not in ['Unknown', 'unknown', '', 'nan', 'NaN']]
         
         return sorted(values)
@@ -2126,7 +2191,7 @@ class UIComponents:
         with col2:
             # Momentum Health
             high_momentum = len(df[df['momentum_score'] >= 70])
-            momentum_pct = (high_momentum / len(df) * 100)
+            momentum_pct = (high_momentum / len(df) * 100) if len(df) > 0 else 0
             
             UIComponents.render_metric_card(
                 "Momentum Health",
@@ -2364,9 +2429,15 @@ class SessionStateManager:
             'performance_metrics': {},
             'data_quality': {},
             'trigger_clear': False, # For clear filters button sync
+            'data_load_error': None, # To store specific load errors for display
+            'data_load_successful': False, # Track if data loaded successfully at least once
 
             # Explicit Initialization for all filter-related keys (NEW/IMPROVED)
             'user_sheet_id': "", # NEW: Store user provided sheet ID
+            # IMPORTANT: Store a full copy of the original processed DataFrame
+            # This is critical for FilterEngine.get_filter_options to work correctly
+            # by providing options based on the full dataset, then applying other filters.
+            'ranked_df_full_copy': pd.DataFrame(), 
             'category_filter': [],
             'sector_filter': [],
             'industry_filter': [], # NEW: Industry filter state
@@ -2507,6 +2578,11 @@ def main():
     .stSpinner > div {
         border-color: #3498db;
     }
+    .stTextInput label > div {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
     </style>
     """, unsafe_allow_html=True)
     
@@ -2536,15 +2612,19 @@ def main():
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🔄 Refresh Data", type="primary", use_container_width=True):
-                st.cache_data.clear()
+                # Clear all data-related cache to force a fresh load
+                st.cache_data.clear() 
                 st.session_state.last_refresh = datetime.now(timezone.utc)
+                # Keep user_sheet_id in session state, so it's not forgotten on refresh
                 st.rerun()
         
         with col2:
             if st.button("🧹 Clear Cache", use_container_width=True):
                 st.cache_data.clear()
+                # Clear user_sheet_id from session state when cache is cleared
+                st.session_state.user_sheet_id = "" 
                 gc.collect()  # Force garbage collection
-                st.success("Cache cleared!")
+                st.success("Cache cleared! Please re-enter Google Sheet ID if using.")
                 time.sleep(0.5)
                 st.rerun()
         
@@ -2569,13 +2649,13 @@ def main():
                 type="csv",
                 help="Upload a CSV file with stock data. Must contain 'ticker' and 'price' columns."
             )
-            if uploaded_file is None:
-                st.info("Please upload a CSV file to continue")
-                st.stop() # Stop execution if CSV upload is selected but no file is provided
+            # No st.stop() here. Let the rest of the app render,
+            # but data processing will handle missing file.
         else: # Google Sheets selected
             st.markdown("---")
             st.markdown("#### 🔗 Google Sheet Configuration")
-            # User input for Google Sheet ID
+            
+            # User input for Google Sheet ID - Value defaults to session state
             user_sheet_id_input = st.text_input(
                 "Enter Google Sheet ID (from URL)",
                 value=st.session_state.get('user_sheet_id', ''),
@@ -2583,14 +2663,21 @@ def main():
                 help="The ID is the long string of characters in your Google Sheet URL after '/d/' and before '/edit' or '/view'."
             )
             
-            # Store the input in session state
-            if user_sheet_id_input:
+            # Update session state only if input has changed
+            if user_sheet_id_input != st.session_state.get('user_sheet_id', ''):
                 st.session_state.user_sheet_id = user_sheet_id_input
+                # Invalidate existing data if the Sheet ID changes
+                st.cache_data.clear() 
+                st.session_state.data_load_successful = False
+                st.rerun() # Trigger rerun to load new data
             
-            # If Google Sheets is selected and no sheet ID is provided, halt execution
-            if not st.session_state.user_sheet_id.strip():
-                st.warning("Please enter a Google Sheet ID to load data. The app will load once you provide it.")
-                st.stop() # Stop the app until a Sheet ID is provided
+            # Add a button to clear the stored Sheet ID
+            if st.button("Clear Stored Sheet ID", use_container_width=True):
+                st.session_state.user_sheet_id = ""
+                st.cache_data.clear()
+                st.session_state.data_load_successful = False
+                st.success("Stored Sheet ID cleared. Please enter a new one.")
+                st.rerun()
 
         # Data quality indicator
         if st.session_state.data_quality:
@@ -2659,27 +2746,27 @@ def main():
         if st.session_state.get('quick_filter_applied', False):
             active_filter_count += 1
         
-        # Check all filter states
-        filter_checks = [
-            ('category_filter', lambda x: x and len(x) > 0),
-            ('sector_filter', lambda x: x and len(x) > 0),
-            ('industry_filter', lambda x: x and len(x) > 0), # NEW: Added industry filter to count
-            ('min_score', lambda x: x > 0),
-            ('patterns', lambda x: x and len(x) > 0),
-            ('trend_filter', lambda x: x != 'All Trends'),
-            ('eps_tier_filter', lambda x: x and len(x) > 0),
-            ('pe_tier_filter', lambda x: x and len(x) > 0),
-            ('price_tier_filter', lambda x: x and len(x) > 0),
-            ('min_eps_change', lambda x: x is not None and str(x).strip() != ''),
-            ('min_pe', lambda x: x is not None and str(x).strip() != ''),
-            ('max_pe', lambda x: x is not None and str(x).strip() != ''),
-            ('require_fundamental_data', lambda x: x),
-            ('wave_states_filter', lambda x: x and len(x) > 0),
-            ('wave_strength_range_slider', lambda x: x != (0, 100))
-        ]
+        # Check all filter states (re-checking values from session state for consistency)
+        filter_checks_for_count = {
+            'category_filter': lambda x: bool(x),
+            'sector_filter': lambda x: bool(x),
+            'industry_filter': lambda x: bool(x),
+            'min_score': lambda x: x > 0,
+            'patterns': lambda x: bool(x),
+            'trend_filter': lambda x: x != 'All Trends',
+            'eps_tier_filter': lambda x: bool(x),
+            'pe_tier_filter': lambda x: bool(x),
+            'price_tier_filter': lambda x: bool(x),
+            'min_eps_change': lambda x: x is not None and str(x).strip() != '',
+            'min_pe': lambda x: x is not None and str(x).strip() != '',
+            'max_pe': lambda x: x is not None and str(x).strip() != '',
+            'require_fundamental_data': lambda x: x,
+            'wave_states_filter': lambda x: bool(x),
+            'wave_strength_range_slider': lambda x: x != (0, 100)
+        }
         
-        for key, check_func in filter_checks:
-            if key in st.session_state and check_func(st.session_state[key]):
+        for key, check_func in filter_checks_for_count.items():
+            if check_func(st.session_state.get(key)): # Use .get to safely retrieve state
                 active_filter_count += 1
         
         st.session_state.active_filter_count = active_filter_count
@@ -2698,22 +2785,33 @@ def main():
         
         # Debug mode
         st.markdown("---")
-        show_debug = st.checkbox("🐛 Show Debug Info", 
+        st.session_state.show_debug = st.checkbox("🐛 Show Debug Info", 
                                  value=st.session_state.get('show_debug', False),
-                                 key="show_debug")
-    
+                                 key="show_debug_checkbox") # Use a different key for debug checkbox
+
+
     # Data loading and processing
     ranked_df = pd.DataFrame() # Initialize empty DataFrame
     data_timestamp = datetime.now(timezone.utc)
     metadata = {}
     
-    try:
-        # Load and process data
+    # Only attempt to load data if a source is selected and
+    # for sheets, an ID is provided, or for upload, a file is present.
+    can_attempt_load = False
+    if st.session_state.data_source == "upload" and uploaded_file is not None:
+        can_attempt_load = True
+    elif st.session_state.data_source == "sheet" and st.session_state.user_sheet_id.strip():
+        can_attempt_load = True
+    elif st.session_state.data_load_successful: # If data was loaded successfully before, use cached data
+        can_attempt_load = True
+
+    if can_attempt_load:
         with st.spinner("📥 Loading and processing data..."):
             try:
                 if st.session_state.data_source == "upload" and uploaded_file is not None:
+                    # Pass the file_data as BytesIO to load_and_process_data
                     ranked_df, data_timestamp, metadata = load_and_process_data(
-                        "upload", file_data=uploaded_file
+                        "upload", file_data=uploaded_file.getvalue()
                     )
                 elif st.session_state.data_source == "sheet" and st.session_state.user_sheet_id.strip():
                     ranked_df, data_timestamp, metadata = load_and_process_data(
@@ -2721,46 +2819,48 @@ def main():
                         sheet_id=st.session_state.user_sheet_id, 
                         gid=CONFIG.DEFAULT_GID # GID remains fixed as per requirement
                     )
-                else: # This branch should theoretically not be reached due to st.stop() above, but for safety
-                    st.warning("Please select a data source and provide necessary details.")
-                    st.stop()
+                elif st.session_state.data_load_successful: # Fallback to cached data if no new input but previous load was good
+                    ranked_df, data_timestamp, metadata = st.session_state.last_good_data
+                    st.info("Using previously loaded data.")
+                else: # This block handles cases where no valid input is given yet
+                    st.warning("Please select a data source and provide necessary details to load data.")
+                    st.stop() # Stop only if no data at all can be loaded
                 
-                st.session_state.ranked_df = ranked_df
+                # Store the full, processed DataFrame for dynamic filter options
+                st.session_state.ranked_df_full_copy = ranked_df.copy() 
+                st.session_state.ranked_df = ranked_df # Keep this for main display logic too
                 st.session_state.data_timestamp = data_timestamp
                 st.session_state.last_refresh = datetime.now(timezone.utc)
-                
-                # Show any warnings or errors
+                st.session_state.data_load_error = None # Clear any previous errors
+
+                # Display any warnings from data processing
                 if metadata.get('warnings'):
                     for warning in metadata['warnings']:
                         st.warning(warning)
                 
-                if metadata.get('errors'):
-                    for error in metadata['errors']:
-                        st.error(error)
-                
             except Exception as e:
                 logger.error(f"Failed to load data: {str(e)}")
-                
-                # Try to use last good data
-                if 'last_good_data' in st.session_state:
+                st.session_state.data_load_error = str(e) # Store error for display
+
+                # Try to use last good data as fallback
+                if 'last_good_data' in st.session_state and not st.session_state.last_good_data[0].empty:
                     ranked_df, data_timestamp, metadata = st.session_state.last_good_data
-                    st.warning(f"Failed to load fresh data: {str(e)}. Using cached version.")
+                    st.warning(f"Failed to load fresh data: **{st.session_state.data_load_error}**. Using cached version.")
+                    st.session_state.data_load_error = None # Clear error if fallback is used successfully
                 else:
-                    st.error(f"❌ Error loading data: {str(e)}")
-                    st.info("Common issues:\n- Network connectivity\n- Invalid Google Sheet ID/permissions\n- Invalid CSV format\n\n**Please check your input and try refreshing.**")
-                    st.stop() # Stop if no data can be loaded
-        
-    except Exception as e:
-        st.error(f"❌ Critical Error during application setup: {str(e)}")
-        with st.expander("🔍 Error Details"):
-            st.code(str(e))
-        st.stop()
-    
-    # If ranked_df is still empty after loading and potential fallback, stop.
+                    st.error(f"❌ Error loading data: **{st.session_state.data_load_error}**")
+                    st.info("Common issues:\n- Network connectivity\n- Invalid Google Sheet ID or permissions\n- Invalid CSV format\n\n**Please check your input and try refreshing.**")
+                    st.session_state.ranked_df = pd.DataFrame() # Ensure empty dataframe if no fallback
+
+    if st.session_state.get('data_load_error') and st.session_state.ranked_df.empty:
+        st.stop() # Stop only if there's an unrecoverable error and no data
+
+    # Use the loaded or cached DataFrame. If still empty, halt.
+    ranked_df = st.session_state.get('ranked_df', pd.DataFrame())
     if ranked_df.empty:
-        st.error("No data loaded. Please check your data source and filters.")
-        st.stop()
-    
+        st.warning("No data available. Please load data from the sidebar.")
+        st.stop() # Stop if no data can be loaded after all attempts.
+
     # Quick Action Buttons
     st.markdown("### ⚡ Quick Actions")
     qa_col1, qa_col2, qa_col3, qa_col4, qa_col5 = st.columns(5)
@@ -2800,26 +2900,28 @@ def main():
             st.rerun()
     
     # Apply quick filters
+    # Create a copy of the ranked_df for display, ensuring original is untouched
+    ranked_df_for_quick_filter = ranked_df.copy() 
     if quick_filter:
         if quick_filter == 'top_gainers':
-            ranked_df_display = ranked_df[ranked_df['momentum_score'] >= 80]
+            ranked_df_display = ranked_df_for_quick_filter[ranked_df_for_quick_filter['momentum_score'] >= 80]
             st.info(f"Showing {len(ranked_df_display)} stocks with momentum score ≥ 80")
         elif quick_filter == 'volume_surges':
-            ranked_df_display = ranked_df[ranked_df['rvol'] >= 3]
+            ranked_df_display = ranked_df_for_quick_filter[ranked_df_for_quick_filter['rvol'] >= 3]
             st.info(f"Showing {len(ranked_df_display)} stocks with RVOL ≥ 3x")
         elif quick_filter == 'breakout_ready':
-            ranked_df_display = ranked_df[ranked_df['breakout_score'] >= 80]
+            ranked_df_display = ranked_df_for_quick_filter[ranked_df_for_quick_filter['breakout_score'] >= 80]
             st.info(f"Showing {len(ranked_df_display)} stocks with breakout score ≥ 80")
         elif quick_filter == 'hidden_gems':
-            ranked_df_display = ranked_df[ranked_df['patterns'].str.contains('HIDDEN GEM', na=False)]
+            ranked_df_display = ranked_df_for_quick_filter[ranked_df_for_quick_filter['patterns'].str.contains('HIDDEN GEM', na=False)]
             st.info(f"Showing {len(ranked_df_display)} hidden gem stocks")
     else:
-        ranked_df_display = ranked_df
-    
+        ranked_df_display = ranked_df_for_quick_filter # No quick filter applied
+
     # Sidebar filters
     with st.sidebar:
-        # Initialize filters dict
-        filters = {}
+        # Initialize filters dict from session state to ensure persistence
+        filters = st.session_state.filters.copy() 
         
         # Display Mode
         st.markdown("### 📊 Display Mode")
@@ -2836,45 +2938,44 @@ def main():
         
         st.markdown("---")
         
-        # Category filter
-        categories = FilterEngine.get_filter_options(ranked_df_display, 'category', filters)
+        # --- Smart Filter Implementations ---
+        # Get filter options using the full dataset from session state, passing current filter states
         
+        # Category filter
+        # Pass st.session_state.ranked_df_full_copy as base_df
+        categories_options = FilterEngine.get_filter_options(st.session_state.ranked_df_full_copy, 'category', filters)
         selected_categories = st.multiselect(
             "Market Cap Category",
-            options=categories,
-            default=st.session_state.get('category_filter', []), # Persist filter state
+            options=categories_options,
+            default=st.session_state.get('category_filter', []), 
             placeholder="Select categories (empty = All)",
             key="category_filter"
         )
-        
         filters['categories'] = selected_categories
         
-        # Sector filter
-        sectors = FilterEngine.get_filter_options(ranked_df_display, 'sector', filters)
-        
+        # Sector filter - options dependent on current category filter
+        sectors_options = FilterEngine.get_filter_options(st.session_state.ranked_df_full_copy, 'sector', filters)
         selected_sectors = st.multiselect(
             "Sector",
-            options=sectors,
-            default=st.session_state.get('sector_filter', []), # Persist filter state
+            options=sectors_options,
+            default=st.session_state.get('sector_filter', []), 
             placeholder="Select sectors (empty = All)",
             key="sector_filter"
         )
-        
         filters['sectors'] = selected_sectors
         
-        # NEW: Industry filter
-        industries = FilterEngine.get_filter_options(ranked_df_display, 'industry', filters)
-        
+        # Industry filter - options dependent on current category and sector filters
+        industries_options = FilterEngine.get_filter_options(st.session_state.ranked_df_full_copy, 'industry', filters)
         selected_industries = st.multiselect(
             "Industry",
-            options=industries,
-            default=st.session_state.get('industry_filter', []), # Persist filter state
+            options=industries_options,
+            default=st.session_state.get('industry_filter', []), 
             placeholder="Select industries (empty = All)",
             key="industry_filter"
         )
-        
         filters['industries'] = selected_industries
-        
+        # --- End Smart Filter Implementations ---
+
         # Score filter
         filters['min_score'] = st.slider(
             "Minimum Master Score",
@@ -2886,21 +2987,20 @@ def main():
             key="min_score"
         )
         
-        # Pattern filter
-        all_patterns = set()
-        for patterns in ranked_df_display['patterns'].dropna():
-            if patterns:
-                all_patterns.update(patterns.split(' | '))
-        
-        if all_patterns:
+        # Pattern filter - options dependent on other filters
+        all_patterns_options = FilterEngine.get_filter_options(st.session_state.ranked_df_full_copy, 'patterns', filters)
+        if all_patterns_options:
             filters['patterns'] = st.multiselect(
                 "Patterns",
-                options=sorted(all_patterns),
+                options=sorted(all_patterns_options), # Ensure patterns are sorted
                 default=st.session_state.get('patterns', []),
                 placeholder="Select patterns (empty = All)",
                 help="Filter by specific patterns",
                 key="patterns"
             )
+        else:
+            filters['patterns'] = [] # Set to empty if no patterns are available
+            st.info("No patterns available with current filters.")
         
         # Trend filter
         st.markdown("#### 📈 Trend Strength")
@@ -2912,19 +3012,17 @@ def main():
             "⚠️ Weak/Downtrend (<40)": (0, 39)
         }
         
-        # SAFELY get index for trend_filter (FIXED: Handling potential ValueError)
         default_trend_key = st.session_state.get('trend_filter', "All Trends")
         try:
             current_trend_index = list(trend_options.keys()).index(default_trend_key)
         except ValueError:
-            # Fallback if the stored default_trend_key is not in the current options (e.g., it's an empty string '')
             logger.warning(f"Invalid trend_filter state '{default_trend_key}' found in session_state, defaulting to 'All Trends'.")
-            current_trend_index = 0 # Default to 'All Trends' (first option)
+            current_trend_index = 0 
 
         filters['trend_filter'] = st.selectbox(
             "Trend Quality",
             options=list(trend_options.keys()),
-            index=current_trend_index, # Use the safely determined index
+            index=current_trend_index, 
             key="trend_filter",
             help="Filter stocks by trend strength based on SMA alignment"
         )
@@ -2932,7 +3030,7 @@ def main():
 
         # NEW: Wave Filters
         st.markdown("#### 🌊 Wave Filters")
-        wave_states_options = FilterEngine.get_filter_options(ranked_df_display, 'wave_state', filters)
+        wave_states_options = FilterEngine.get_filter_options(st.session_state.ranked_df_full_copy, 'wave_state', filters)
         filters['wave_states'] = st.multiselect(
             "Wave State",
             options=wave_states_options,
@@ -2943,23 +3041,18 @@ def main():
         )
 
         if 'overall_wave_strength' in ranked_df_display.columns:
-            # Ensure proper min/max for slider, handling cases of all identical values
             min_strength = float(ranked_df_display['overall_wave_strength'].min())
             max_strength = float(ranked_df_display['overall_wave_strength'].max())
             
-            # Adjust slider bounds to be more robust, preventing min_value == max_value causing issues
             slider_min_val = 0
             slider_max_val = 100
             
-            # Set default range value to cover actual data range, or full (0,100) if no data
             if pd.notna(min_strength) and pd.notna(max_strength) and min_strength <= max_strength:
                 default_range_value = (int(min_strength), int(max_strength))
             else:
                 default_range_value = (0, 100)
             
-            # Ensure the slider's value is within its min/max boundaries
             current_slider_value = st.session_state.get('wave_strength_range_slider', default_range_value)
-            # Clip persisted value to ensure it's within new min/max for the slider
             current_slider_value = (max(slider_min_val, min(slider_max_val, current_slider_value[0])),
                                     max(slider_min_val, min(slider_max_val, current_slider_value[1])))
 
@@ -2979,106 +3072,114 @@ def main():
         
         # Advanced filters
         with st.expander("🔧 Advanced Filters"):
-            # Tier filters
+            # Tier filters (options dependent on other filters)
             for tier_type, col_name in [
                 ('eps_tiers', 'eps_tier'),
                 ('pe_tiers', 'pe_tier'),
                 ('price_tiers', 'price_tier')
             ]:
-                if col_name in ranked_df_display.columns:
-                    tier_options = FilterEngine.get_filter_options(ranked_df_display, col_name, filters)
+                if col_name in st.session_state.ranked_df_full_copy.columns:
+                    tier_options = FilterEngine.get_filter_options(st.session_state.ranked_df_full_copy, col_name, filters)
                     
                     selected_tiers = st.multiselect(
                         f"{col_name.replace('_', ' ').title()}",
                         options=tier_options,
-                        default=st.session_state.get(f'{col_name}_filter', []), # Persist filter state
+                        default=st.session_state.get(f'{col_name}_filter', []), 
                         placeholder=f"Select {col_name.replace('_', ' ')}s (empty = All)",
                         key=f"{col_name}_filter"
                     )
                     filters[tier_type] = selected_tiers
             
-            # EPS change filter
+            # EPS change filter with input validation
             if 'eps_change_pct' in ranked_df_display.columns:
-                eps_change_input = st.text_input(
+                eps_change_input_str = st.text_input(
                     "Min EPS Change %",
                     value=st.session_state.get('min_eps_change', ""),
                     placeholder="e.g. -50 or leave empty",
                     help="Enter minimum EPS growth percentage",
-                    key="min_eps_change"
+                    key="min_eps_change_input" # Use a new key for text input widget
                 )
                 
-                if eps_change_input.strip():
+                eps_change_value = None
+                if eps_change_input_str.strip():
                     try:
-                        filters['min_eps_change'] = float(eps_change_input)
+                        eps_change_value = float(eps_change_input_str)
+                        st.session_state.min_eps_change = eps_change_value # Store valid float
                     except ValueError:
-                        st.error("Please enter a valid number for EPS change")
-                        filters['min_eps_change'] = None # Ensure filter is reset if invalid input
+                        st.error("❗ Invalid input for Min EPS Change. Please enter a valid number.", icon="🚫")
+                        st.session_state.min_eps_change = None # Reset to None on invalid input
                 else:
-                    filters['min_eps_change'] = None # Ensure empty string results in None
-            
-            # PE filters (only in hybrid mode)
+                    st.session_state.min_eps_change = None # Clear on empty input
+                filters['min_eps_change'] = st.session_state.min_eps_change # Use the validated value
+
+            # PE filters (only in hybrid mode) with input validation
             if show_fundamentals and 'pe' in ranked_df_display.columns:
                 st.markdown("**🔍 Fundamental Filters**")
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    min_pe_input = st.text_input(
+                    min_pe_input_str = st.text_input(
                         "Min PE Ratio",
                         value=st.session_state.get('min_pe', ""),
                         placeholder="e.g. 10",
-                        key="min_pe"
+                        key="min_pe_input" # New key for text input widget
                     )
-                    
-                    if min_pe_input.strip():
+                    min_pe_value = None
+                    if min_pe_input_str.strip():
                         try:
-                            filters['min_pe'] = float(min_pe_input)
+                            min_pe_value = float(min_pe_input_str)
+                            st.session_state.min_pe = min_pe_value # Store valid float
                         except ValueError:
-                            st.error("Invalid Min PE")
-                            filters['min_pe'] = None
+                            st.error("❗ Invalid input for Min PE. Please enter a valid number.", icon="🚫")
+                            st.session_state.min_pe = None
                     else:
-                        filters['min_pe'] = None
-                
+                        st.session_state.min_pe = None
+                    filters['min_pe'] = st.session_state.min_pe
+
                 with col2:
-                    max_pe_input = st.text_input(
+                    max_pe_input_str = st.text_input(
                         "Max PE Ratio",
                         value=st.session_state.get('max_pe', ""),
                         placeholder="e.g. 30",
-                        key="max_pe"
+                        key="max_pe_input" # New key for text input widget
                     )
-                    
-                    if max_pe_input.strip():
+                    max_pe_value = None
+                    if max_pe_input_str.strip():
                         try:
-                            filters['max_pe'] = float(max_pe_input)
+                            max_pe_value = float(max_pe_input_str)
+                            st.session_state.max_pe = max_pe_value # Store valid float
                         except ValueError:
-                            st.error("Invalid Max PE")
-                            filters['max_pe'] = None
+                            st.error("❗ Invalid input for Max PE. Please enter a valid number.", icon="🚫")
+                            st.session_state.max_pe = None
                     else:
-                        filters['max_pe'] = None
+                        st.session_state.max_pe = None
+                    filters['max_pe'] = st.session_state.max_pe
                 
                 # Data completeness filter
                 filters['require_fundamental_data'] = st.checkbox(
                     "Only show stocks with PE and EPS data",
-                    value=st.session_state.get('require_fundamental_data', False), # Retain state
+                    value=st.session_state.get('require_fundamental_data', False), 
                     key="require_fundamental_data"
                 )
     
-    # Apply filters
+    # Apply filters to the potentially quick-filtered DataFrame
     if quick_filter_applied:
+        # If quick filter is active, apply smart filters to the quick-filtered data
         filtered_df = FilterEngine.apply_filters(ranked_df_display, filters)
     else:
+        # Otherwise, apply smart filters to the full ranked data
         filtered_df = FilterEngine.apply_filters(ranked_df, filters)
     
     filtered_df = filtered_df.sort_values('rank')
     
-    # Save current filters
-    st.session_state.user_preferences['last_filters'] = filters
+    # Save current filter states back to session state
+    st.session_state.filters = filters
     
     # Debug info
-    if show_debug:
+    if st.session_state.show_debug:
         with st.sidebar.expander("🐛 Debug Info", expanded=True):
             st.write("**Active Filters:**")
             for key, value in filters.items():
-                # Correctly handle None for text inputs and default slider values
                 if value is not None and value != [] and value != 0 and \
                    (not (isinstance(value, tuple) and value == (0,100))):
                     st.write(f"• {key}: {value}")
@@ -3090,7 +3191,7 @@ def main():
             if st.session_state.performance_metrics:
                 st.write(f"\n**Performance:**")
                 for func, time_taken in st.session_state.performance_metrics.items():
-                    if time_taken > 0.001: # Show even very small times in debug
+                    if time_taken > 0.001: 
                         st.write(f"• {func}: {time_taken:.4f}s")
     
     # Main content area
@@ -3113,9 +3214,8 @@ def main():
                     st.info(f"**Viewing:** {filter_display} | **{len(filtered_df):,} stocks** shown")
         
         with filter_status_col2:
-            # Trigger the clear filters logic from the sidebar button
             if st.button("Clear Filters", type="secondary"):
-                st.session_state.trigger_clear = True 
+                SessionStateManager.clear_filters() 
                 st.rerun() 
     
     # Summary metrics
@@ -3642,6 +3742,9 @@ def main():
                             (wave_filtered_df['ret_1d'] > 2) &
                             (wave_filtered_df['price'] > wave_filtered_df['prev_close'] * 1.02)
                         ]
+                    else:
+                        st.warning(f"Missing required columns for '{wave_timeframe}' filter. Showing all results for this filter.")
+                        wave_filtered_df = filtered_df.copy() # Fallback to original filtered_df
                     
                 elif wave_timeframe == "3-Day Buildup":
                     required_cols = ['ret_3d', 'vol_ratio_7d_90d', 'price', 'sma_20d']
@@ -3651,6 +3754,9 @@ def main():
                             (wave_filtered_df['vol_ratio_7d_90d'] > 1.5) &
                             (wave_filtered_df['price'] > wave_filtered_df['sma_20d'])
                         ]
+                    else:
+                        st.warning(f"Missing required columns for '{wave_timeframe}' filter. Showing all results for this filter.")
+                        wave_filtered_df = filtered_df.copy() # Fallback to original filtered_df
                     
                 elif wave_timeframe == "Weekly Breakout":
                     required_cols = ['ret_7d', 'vol_ratio_7d_90d', 'from_high_pct']
@@ -3660,6 +3766,9 @@ def main():
                             (wave_filtered_df['vol_ratio_7d_90d'] > 2.0) &
                             (wave_filtered_df['from_high_pct'] > -10)
                         ]
+                    else:
+                        st.warning(f"Missing required columns for '{wave_timeframe}' filter. Showing all results for this filter.")
+                        wave_filtered_df = filtered_df.copy() # Fallback to original filtered_df
                     
                 elif wave_timeframe == "Monthly Trend":
                     required_cols = ['ret_30d', 'price', 'sma_20d', 'sma_50d', 'vol_ratio_30d_180d', 'from_low_pct']
@@ -3671,9 +3780,14 @@ def main():
                             (wave_filtered_df['vol_ratio_30d_180d'] > 1.2) &
                             (wave_filtered_df['from_low_pct'] > 30)
                         ]
+                    else:
+                        st.warning(f"Missing required columns for '{wave_timeframe}' filter. Showing all results for this filter.")
+                        wave_filtered_df = filtered_df.copy() # Fallback to original filtered_df
+
             except Exception as e:
                 logger.warning(f"Error applying {wave_timeframe} filter: {str(e)}")
-                st.warning(f"Some data not available for {wave_timeframe} filter")
+                st.warning(f"An error occurred applying the '{wave_timeframe}' filter. Displaying all stocks from current main filters.")
+                wave_filtered_df = filtered_df.copy() # Fallback if filter logic itself fails
         
         if not wave_filtered_df.empty:
             # 1. MOMENTUM SHIFT DETECTION
@@ -4739,13 +4853,13 @@ def main():
         with stats_cols[0]:
             UIComponents.render_metric_card(
                 "Total Stocks Loaded",
-                f"{len(ranked_df):,}" if 'ranked_df' in locals() else "0"
+                f"{len(ranked_df):,}" if 'ranked_df' in locals() and not ranked_df.empty else "0"
             )
         
         with stats_cols[1]:
             UIComponents.render_metric_card(
                 "Currently Filtered",
-                f"{len(filtered_df):,}" if 'filtered_df' in locals() else "0"
+                f"{len(filtered_df):,}" if 'filtered_df' in locals() and not filtered_df.empty else "0"
             )
         
         with stats_cols[2]:
@@ -4789,13 +4903,14 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         # Global error handler
-        st.error(f"Critical Application Error: {str(e)}")
+        st.error(f"❌ A critical application error occurred: {str(e)}")
         logger.error(f"Application crashed: {str(e)}", exc_info=True)
         
         # Show recovery options
         if st.button("🔄 Restart Application"):
             st.cache_data.clear()
+            st.session_state.clear() # Clear all session state on critical crash to ensure fresh start
             st.rerun()
         
         if st.button("📧 Report Issue"):
-            st.info("Please take a screenshot and report this error.")
+            st.info("To help us fix this, please take a screenshot and provide any steps that led to this error.")
