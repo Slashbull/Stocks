@@ -3224,13 +3224,13 @@ def main():
         # Score filter
         filters['min_score'] = st.slider(
                 "Minimum Master Score",
-                min_value=0,
-                max_value=100,
-                value=st.session_state.get('wd_min_score', 0),
-                step=5,
-                help="Filter stocks by minimum score",
-                key="wd_min_score"
-            )
+                min_value=0,
+                max_value=100,
+                value=st.session_state.get('wd_min_score', 0),
+                step=5,
+                help="Filter stocks by minimum score",
+                key="wd_min_score"
+            )
         
         # Pattern filter
         all_patterns = set()
