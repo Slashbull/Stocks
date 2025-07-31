@@ -4311,7 +4311,7 @@ def main():
                                     st.info("Insufficient data for category flow analysis after sampling.")
                             else:
                                 st.info("No valid stocks found in categories for flow analysis after sampling.")
-                        else:
+                        else: # This 'else' correctly belongs to 'if 'category' in wave_filtered_df.columns:'
                             st.info("Category data not available for flow analysis.")
                             
                     except Exception as e:
