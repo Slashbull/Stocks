@@ -60,7 +60,7 @@ class Config:
     
     # Data source - HARDCODED for production (DO NOT CHANGE)
     DEFAULT_SHEET_URL: str = "https://docs.google.com/spreadsheets/d/1OEQ_qxL4lXbO9LlKWDGlDju2yQC1iYvOYeXF3mTQuJM/edit?usp=sharing"
-    DEFAULT_GID: str = "1823439984"
+    DEFAULT_GID: str = "1823439984" # Retained as default fallback
     
     # Cache settings optimized for Streamlit Community Cloud
     CACHE_TTL: int = 3600  # 1 hour
@@ -328,7 +328,7 @@ class DataValidator:
 
 @st.cache_data(ttl=CONFIG.CACHE_TTL, persist="disk", show_spinner=False)
 def load_and_process_data(source_type: str = "sheet", file_data=None, 
-                         sheet_url: str = None, gid: str = None,
+                         sheet_url: str = None, gid: str = None, # gid parameter is now dynamic
                          data_version: str = "1.0") -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
     """Load and process data with smart caching and versioning"""
     
@@ -348,24 +348,26 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
             df = pd.read_csv(file_data, low_memory=False)
             metadata['source'] = "User Upload"
         else:
-            # Use defaults if not provided
+            # Use defaults if not provided for URL, or the passed GID (which could be user-defined)
             if not sheet_url:
                 sheet_url = CONFIG.DEFAULT_SHEET_URL
-            if not gid:
-                gid = CONFIG.DEFAULT_GID
+            
+            # The 'gid' parameter passed here will now come from st.session_state, which
+            # prioritizes user input, then falls back to CONFIG.DEFAULT_GID.
+            # No need for an internal fallback here, as the caller ensures 'gid' is valid.
             
             # Construct CSV URL
             base_url = sheet_url.split('/edit')[0]
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
             
-            logger.info(f"Loading data from Google Sheets")
+            logger.info(f"Loading data from Google Sheets with GID: {gid}")
             
             try:
                 df = pd.read_csv(csv_url, low_memory=False)
-                metadata['source'] = "Google Sheets"
+                metadata['source'] = f"Google Sheets (GID: {gid})"
             except Exception as e:
-                logger.error(f"Failed to load from Google Sheets: {str(e)}")
-                metadata['errors'].append(f"Sheet load error: {str(e)}")
+                logger.error(f"Failed to load from Google Sheets with GID {gid}: {str(e)}")
+                metadata['errors'].append(f"Sheet load error (GID: {gid}): {str(e)}")
                 
                 # Try to use cached data as fallback
                 if 'last_good_data' in st.session_state:
@@ -436,7 +438,7 @@ class DataProcessor:
         initial_count = len(df)
         
         # Process numeric columns with vectorization
-        numeric_cols = [col for col in df.columns if col not in ['ticker', 'company_name', 'category', 'sector', 'year', 'market_cap']]
+        numeric_cols = [col for col in df.columns if col not in ['ticker', 'company_name', 'category', 'sector', 'industry', 'year', 'market_cap']] # Added 'industry'
         
         for col in numeric_cols:
             if col in df.columns:
@@ -458,8 +460,8 @@ class DataProcessor:
                 # Vectorized cleaning
                 df[col] = df[col].apply(lambda x: DataValidator.clean_numeric_value(x, is_pct, bounds))
         
-        # Process categorical columns
-        string_cols = ['ticker', 'company_name', 'category', 'sector']
+        # Process categorical columns - ADDED 'industry'
+        string_cols = ['ticker', 'company_name', 'category', 'sector', 'industry']
         for col in string_cols:
             if col in df.columns:
                 df[col] = df[col].apply(DataValidator.sanitize_string)
@@ -1717,6 +1719,14 @@ class FilterEngine:
         sectors = filters.get('sectors', [])
         if sectors and 'All' not in sectors:
             mask &= df['sector'].isin(sectors)
+
+        # NEW: Industry filter
+        industries = filters.get('industries', [])
+        if industries and 'All' not in industries:
+            if 'industry' in df.columns:
+                mask &= df['industry'].isin(industries)
+            else:
+                logger.warning("Industry column not found in data for filtering.")
         
         # Score filter
         min_score = filters.get('min_score', 0)
@@ -1794,10 +1804,11 @@ class FilterEngine:
         filter_key_map = {
             'category': 'categories',
             'sector': 'sectors',
+            'industry': 'industries', # ADDED for new filter
             'eps_tier': 'eps_tiers',
             'pe_tier': 'pe_tiers',
             'price_tier': 'price_tiers',
-            'wave_state': 'wave_states' # New
+            'wave_state': 'wave_states' 
         }
         
         if column in filter_key_map:
@@ -1896,20 +1907,20 @@ class ExportEngine:
             'day_trader': {
                 'columns': ['rank', 'ticker', 'company_name', 'master_score', 'rvol', 
                            'momentum_score', 'acceleration_score', 'ret_1d', 'ret_7d', 
-                           'volume_score', 'vmi', 'wave_state', 'patterns', 'category'],
+                           'volume_score', 'vmi', 'wave_state', 'patterns', 'category', 'sector', 'industry'], # Added industry
                 'focus': 'Intraday momentum and volume'
             },
             'swing_trader': {
                 'columns': ['rank', 'ticker', 'company_name', 'master_score', 
                            'breakout_score', 'position_score', 'position_tension',
                            'from_high_pct', 'from_low_pct', 'trend_quality', 
-                           'momentum_harmony', 'patterns'],
+                           'momentum_harmony', 'patterns', 'sector', 'industry'], # Added industry
                 'focus': 'Position and breakout setups'
             },
             'investor': {
                 'columns': ['rank', 'ticker', 'company_name', 'master_score', 'pe', 
                            'eps_current', 'eps_change_pct', 'ret_1y', 'ret_3y', 
-                           'long_term_strength', 'money_flow_mm', 'category', 'sector'],
+                           'long_term_strength', 'money_flow_mm', 'category', 'sector', 'industry'], # Added industry
                 'focus': 'Fundamentals and long-term performance'
             },
             'full': {
@@ -2006,7 +2017,7 @@ class ExportEngine:
                 if len(wave_signals) > 0:
                     wave_cols = ['ticker', 'company_name', 'master_score', 
                                 'momentum_score', 'acceleration_score', 'rvol',
-                                'wave_state', 'patterns', 'category']
+                                'wave_state', 'patterns', 'category', 'sector', 'industry'] # Added industry
                     available_wave_cols = [col for col in wave_cols if col in wave_signals.columns]
                     
                     wave_signals[available_wave_cols].to_excel(
@@ -2050,7 +2061,7 @@ class ExportEngine:
             'ret_1d', 'ret_7d', 'ret_30d', 'ret_3m', 'ret_6m', 'ret_1y',
             'rvol', 'vmi', 'money_flow_mm', 'position_tension',
             'momentum_harmony', 'wave_state', 'patterns', 
-            'category', 'sector', 'eps_tier', 'pe_tier', 'overall_wave_strength'
+            'category', 'sector', 'industry', 'eps_tier', 'pe_tier', 'overall_wave_strength' # Added industry
         ]
         
         available_cols = [col for col in export_cols if col in df.columns]
@@ -2363,6 +2374,7 @@ class SessionStateManager:
             # if they were not explicitly initialized elsewhere or via a widget interaction.
             'category_filter': [],
             'sector_filter': [],
+            'industry_filter': [], # ADDED: New industry filter state
             'min_score': 0,
             'patterns': [],
             'trend_filter': "All Trends", # Default string value for selectbox
@@ -2379,6 +2391,7 @@ class SessionStateManager:
             'show_market_regime': True, # Wave Radar checkbox
             'wave_timeframe_select': "All Waves", # Wave Radar selectbox
             'wave_sensitivity': "Balanced", # Wave Radar select slider
+            'spreadsheet_gid': None # ADDED: For user-provided GID, starts as None
         }
         
         for key, default_value in defaults.items():
@@ -2392,17 +2405,17 @@ class SessionStateManager:
         # Reset all filter-related session state (FIXED LIST FOR V4)
         # This list must be exhaustive for all filter-related st.session_state keys.
         filter_keys = [
-            'category_filter', 'sector_filter', 'eps_tier_filter',
+            'category_filter', 'sector_filter', 'industry_filter', # ADDED for new filter
             'pe_tier_filter', 'price_tier_filter', 'patterns',
             'min_score', 'trend_filter', 'min_eps_change',
             'min_pe', 'max_pe', 'require_fundamental_data',
             'quick_filter', 'quick_filter_applied',
-            'wave_states_filter', # ADDED: For V4 bug fix
-            'wave_strength_range_slider', # ADDED: For V4 bug fix
-            'show_sensitivity_details', # ADDED: For Wave Radar tab's checkbox
-            'show_market_regime', # ADDED: For Wave Radar tab's checkbox
-            'wave_timeframe_select', # ADDED: For Wave Radar tab's selectbox
-            'wave_sensitivity', # ADDED: For Wave Radar tab's select slider
+            'wave_states_filter', 
+            'wave_strength_range_slider', 
+            'show_sensitivity_details', 
+            'show_market_regime', 
+            'wave_timeframe_select', 
+            'wave_sensitivity', 
         ]
         
         for key in filter_keys:
@@ -2565,6 +2578,39 @@ def main():
             if uploaded_file is None:
                 st.info("Please upload a CSV file to continue")
         
+        # New: Google Sheet GID input for dynamic data source
+        if st.session_state.data_source == "sheet":
+            st.markdown("#### 🔗 Google Sheet Configuration")
+            # Use current GID from session state for default value in text_input
+            # If st.session_state.spreadsheet_gid is None, default to an empty string for the text_input
+            current_gid_input_value = st.session_state.get('spreadsheet_gid', '') or CONFIG.DEFAULT_GID
+            
+            user_gid_input = st.text_input(
+                "Enter Google Sheet GID (e.g., 1823439984)",
+                value=current_gid_input_value,
+                placeholder=f"Default: {CONFIG.DEFAULT_GID}",
+                help="The GID is the long number in your Google Sheet URL after 'gid='.",
+                key="user_gid_input"
+            )
+
+            # Validate user_gid_input
+            validated_gid = None
+            if user_gid_input.strip() == "":
+                validated_gid = CONFIG.DEFAULT_GID # Use hardcoded default if input is empty
+                st.session_state.spreadsheet_gid = None # Clear user's GID from session state if they clear the input
+            elif user_gid_input.strip().isdigit():
+                validated_gid = user_gid_input.strip()
+                # Only update session state if the new input is valid and different from current stored
+                if st.session_state.get('spreadsheet_gid') != validated_gid:
+                    st.session_state.spreadsheet_gid = validated_gid
+                    # Rerun to load data with new GID, unless it's the same as previously validated
+                    st.rerun() # This reloads data immediately with the new GID
+            else:
+                st.error("Invalid Google Sheet ID. Please enter only digits.")
+                # If invalid, ensure we continue using the last valid GID or the default
+                validated_gid = st.session_state.get('spreadsheet_gid') or CONFIG.DEFAULT_GID
+                st.session_state.spreadsheet_gid = validated_gid # Keep the last valid GID
+
         # Data quality indicator
         if st.session_state.data_quality:
             with st.expander("📊 Data Quality", expanded=True):
@@ -2636,6 +2682,7 @@ def main():
         filter_checks = [
             ('category_filter', lambda x: x and len(x) > 0),
             ('sector_filter', lambda x: x and len(x) > 0),
+            ('industry_filter', lambda x: x and len(x) > 0), # ADDED for new filter
             ('min_score', lambda x: x > 0),
             ('patterns', lambda x: x and len(x) > 0),
             ('trend_filter', lambda x: x != 'All Trends'),
@@ -2676,6 +2723,9 @@ def main():
     
     # Data loading and processing
     try:
+        # Determine which GID to use: user input (from session_state.spreadsheet_gid) or default
+        active_gid = st.session_state.get('spreadsheet_gid') or CONFIG.DEFAULT_GID
+        
         # Check if we need to load data
         if st.session_state.data_source == "upload" and uploaded_file is None:
             st.warning("Please upload a CSV file to continue")
@@ -2692,7 +2742,7 @@ def main():
                     ranked_df, data_timestamp, metadata = load_and_process_data(
                         "sheet", 
                         sheet_url=CONFIG.DEFAULT_SHEET_URL, 
-                        gid=CONFIG.DEFAULT_GID
+                        gid=active_gid # Pass the determined GID
                     )
                 
                 st.session_state.ranked_df = ranked_df
@@ -2717,7 +2767,7 @@ def main():
                     st.warning("Failed to load fresh data, using cached version")
                 else:
                     st.error(f"❌ Error: {str(e)}")
-                    st.info("Common issues:\n- Network connectivity\n- Google Sheets permissions\n- Invalid CSV format")
+                    st.info("Common issues:\n- Network connectivity\n- Google Sheets permissions\n- Invalid CSV format or GID not found.")
                     st.stop()
         
     except Exception as e:
@@ -2826,6 +2876,18 @@ def main():
         )
         
         filters['sectors'] = selected_sectors
+
+        # NEW: Industry filter, placed after Sector
+        industries = FilterEngine.get_filter_options(ranked_df_display, 'industry', filters)
+        
+        selected_industries = st.multiselect(
+            "Industry",
+            options=industries,
+            default=st.session_state.get('industry_filter', []), # Persist filter state
+            placeholder="Select industries (empty = All)",
+            key="industry_filter"
+        )
+        filters['industries'] = selected_industries
         
         # Score filter
         filters['min_score'] = st.slider(
@@ -3318,7 +3380,9 @@ def main():
                 'rvol': 'RVOL',
                 'vmi': 'VMI',
                 'patterns': 'Patterns',
-                'category': 'Category'
+                'category': 'Category',
+                'sector': 'Sector', # Added sector to display
+                'industry': 'Industry' # Added industry to display
             })
             
             # Format numeric columns
@@ -3679,6 +3743,8 @@ def main():
                     display_columns.insert(-2, 'ret_7d')
                 
                 display_columns.append('category')
+                display_columns.append('sector') # Added sector to display
+                display_columns.append('industry') # Added industry to display
                 
                 shift_display = top_shifts[[col for col in display_columns if col in top_shifts.columns]].copy() # Ensure columns exist
                 
@@ -3701,7 +3767,9 @@ def main():
                     'momentum_score': 'Momentum',
                     'acceleration_score': 'Acceleration',
                     'wave_state': 'Wave',
-                    'category': 'Category'
+                    'category': 'Category',
+                    'sector': 'Sector',
+                    'industry': 'Industry'
                 })
                 
                 shift_display = shift_display.drop('signal_count', axis=1)
@@ -3951,7 +4019,7 @@ def main():
                 col1, col2 = st.columns([2, 1])
                 
                 with col1:
-                    display_cols = ['ticker', 'company_name', 'rvol', 'price', 'money_flow_mm', 'wave_state', 'category']
+                    display_cols = ['ticker', 'company_name', 'rvol', 'price', 'money_flow_mm', 'wave_state', 'category', 'sector', 'industry'] # Added industry
                     
                     if 'ret_1d' in top_surges.columns:
                         display_cols.insert(3, 'ret_1d')
@@ -3982,6 +4050,8 @@ def main():
                         'money_flow_mm': 'Money Flow',
                         'wave_state': 'Wave',
                         'category': 'Category',
+                        'sector': 'Sector',
+                        'industry': 'Industry',
                         'ret_1d': '1D Ret'
                     }
                     surge_display = surge_display.rename(columns=rename_dict)
@@ -4116,6 +4186,36 @@ def main():
                 )
             else:
                 st.info("Category column not available in data.")
+
+            # NEW: Industry performance (Similar to category performance)
+            st.markdown("#### Industry Performance")
+            if 'industry' in filtered_df.columns:
+                industry_df = filtered_df.groupby('industry').agg({
+                    'master_score': ['mean', 'count'],
+                    'momentum_score': 'mean',
+                    'volume_score': 'mean',
+                    'money_flow_mm': 'sum' if 'money_flow_mm' in filtered_df.columns else lambda x: 0
+                }).round(2)
+                
+                if 'money_flow_mm' in filtered_df.columns:
+                    industry_df.columns = ['Avg Score', 'Count', 'Avg Momentum', 'Avg Volume', 'Total Money Flow']
+                else:
+                    industry_df.columns = ['Avg Score', 'Count', 'Avg Momentum', 'Avg Volume', 'Dummy Flow']
+                    industry_df = industry_df.drop('Dummy Flow', axis=1)
+
+                industry_df['Flow Score'] = (
+                    industry_df['Avg Score'] * 0.4 +
+                    industry_df['Avg Momentum'] * 0.3 +
+                    industry_df['Avg Volume'] * 0.3
+                )
+                industry_df = industry_df.sort_values('Flow Score', ascending=False)
+                
+                st.dataframe(
+                    industry_df.style.background_gradient(subset=['Flow Score', 'Avg Score']),
+                    use_container_width=True
+                )
+            else:
+                st.info("Industry column not available in data.")
         
         else:
             st.info("No data available for analysis.")
@@ -4253,6 +4353,7 @@ def main():
                         with detail_cols_top[0]:
                             st.markdown("**📊 Classification**")
                             st.text(f"Sector: {stock.get('sector', 'Unknown')}")
+                            st.text(f"Industry: {stock.get('industry', 'Unknown')}") # Added industry to display
                             st.text(f"Category: {stock.get('category', 'Unknown')}")
                             
                             if show_fundamentals:
