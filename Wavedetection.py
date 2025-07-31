@@ -32,6 +32,7 @@ import hashlib # For cache invalidation
 import requests # For robust data loading
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import re
 
 # Suppress warnings for clean output
 warnings.filterwarnings('ignore')
@@ -513,7 +514,7 @@ class DataProcessor:
                 if 'volume' in col.lower():
                     bounds = CONFIG.VALUE_BOUNDS['volume']
                 elif col == 'rvol':
-                    bounds = CONFIG.VALUE_BOUNDs['rvol']
+                    bounds = CONFIG.VALUE_BOUNDS['rvol']
                 elif col == 'pe':
                     bounds = CONFIG.VALUE_BOUNDS['pe']
                 elif is_pct:
@@ -2473,7 +2474,7 @@ class UIComponents:
         # 3. MARKET INTELLIGENCE
         st.markdown("### 🧠 Market Intelligence")
         
-        intel_col1, intel_col2 = st.columns([2, 1])
+        intel_col1, intel_col2 = st.columns([3, 2])
         
         with intel_col1:
             # Sector Rotation Map
