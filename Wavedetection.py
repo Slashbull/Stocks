@@ -3224,29 +3224,29 @@ def main():
         # Score filter
         filters['min_score'] = st.slider(
             "Minimum Master Score",
-            min_value=0,
-            max_value=100,
-            value=st.session_state.get('wd_min_score', 0),
-            step=5,
-            help="Filter stocks by minimum score",
-            key="wd_min_score"
-        )
-        
-        # Pattern filter
-        all_patterns = set()
-        for patterns_str in ranked_df_display['patterns'].dropna():
-            if patterns_str:
-                all_patterns.update(patterns_str.split(' | '))
-        
-        if all_patterns:
-            filters['patterns'] = st.multiselect(
-                "Patterns",
-                options=sorted(all_patterns),
-                default=st.session_state.get('wd_patterns', []),
-                placeholder="Select patterns (empty = All)",
-                help="Filter by specific patterns",
-                key="wd_patterns"
-            )
+            min_value=0,
+            max_value=100,
+            value=st.session_state.get('wd_min_score', 0),
+            step=5,
+            help="Filter stocks by minimum score",
+            key="wd_min_score"
+        )
+        
+        # Pattern filter
+        all_patterns = set()
+        for patterns_str in ranked_df_display['patterns'].dropna():
+            if patterns_str:
+                all_patterns.update(patterns_str.split(' | '))
+        
+        if all_patterns:
+            filters['patterns'] = st.multiselect(
+                "Patterns",
+                options=sorted(all_patterns),
+                default=st.session_state.get('wd_patterns', []),
+                placeholder="Select patterns (empty = All)",
+                help="Filter by specific patterns",
+                key="wd_patterns"
+            )
         
         # Trend filter
         st.markdown("#### 📈 Trend Strength")
