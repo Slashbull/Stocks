@@ -326,11 +326,12 @@ class DataValidator:
 # ============================================
 # SMART CACHING WITH VERSIONING
 # ============================================
+
 @st.cache_data(ttl=CONFIG.CACHE_TTL, persist="disk", show_spinner=False)
 def load_and_process_data(source_type: str = "sheet", file_data=None, data_version: str = "1.0") -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
     """
     Load and process data with smart caching and versioning.
-    Now validates user-provided Spreadsheet ID less strictly.
+    Now strictly validates user-provided Spreadsheet ID.
     """
     
     start_time = time.perf_counter()
@@ -352,9 +353,9 @@ def load_and_process_data(source_type: str = "sheet", file_data=None, data_versi
             # --- NEW SPREADSHEET ID LOGIC ---
             user_provided_id = st.session_state.get('user_spreadsheet_id')
             
-            # This check now only verifies that the input is not empty
-            if not user_provided_id or not user_provided_id.strip():
-                raise ValueError("A Google Spreadsheet ID is required to load data. Please enter a valid ID.")
+            if not user_provided_id or not user_provided_id.strip() or not (len(user_provided_id.strip()) == 44 and user_provided_id.strip().isalnum()):
+                 # This check is crucial for preventing malformed URLs and catching empty input
+                raise ValueError("A valid Google Spreadsheet ID is required to load data. Please enter a valid 44-character alphanumeric ID.")
 
             final_spreadsheet_id_to_use = user_provided_id.strip()
             
@@ -379,7 +380,6 @@ def load_and_process_data(source_type: str = "sheet", file_data=None, data_versi
                     return df, timestamp, metadata
                 raise
         
-        # ... [rest of the function remains unchanged] ...
         # Validate loaded data
         is_valid, validation_msg = DataValidator.validate_dataframe(df, CONFIG.CRITICAL_COLUMNS, "Initial load")
         if not is_valid:
@@ -422,6 +422,7 @@ def load_and_process_data(source_type: str = "sheet", file_data=None, data_versi
         logger.error(f"Failed to load and process data: {str(e)}")
         metadata['errors'].append(str(e))
         raise
+
 # ============================================
 # DATA PROCESSING ENGINE
 # ============================================
@@ -2671,12 +2672,13 @@ def main():
             )
 
             # Process user input immediately and trigger rerun
-            if user_spreadsheet_id_input != st.session_state.get('user_spreadsheet_id'):
+if user_spreadsheet_id_input != st.session_state.get('user_spreadsheet_id'):
                 new_id = user_spreadsheet_id_input.strip()
                 if not new_id:
                     st.session_state.user_spreadsheet_id = None
                     st.rerun()
-                elif len(new_id) == 44 and new_id.isalnum(): # Basic format validation
+                # Relaxed validation to only check for length, allowing underscores and other valid URL characters
+                elif len(new_id) == 44:
                     st.session_state.user_spreadsheet_id = new_id
                     st.success("Spreadsheet ID updated. Reloading data...")
                     st.rerun()
