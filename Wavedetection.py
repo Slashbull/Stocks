@@ -328,8 +328,12 @@ class DataValidator:
 @st.cache_data(ttl=CONFIG.CACHE_TTL, persist="disk", show_spinner=False)
 def load_and_process_data(source_type: str = "sheet", file_data=None, 
                          spreadsheet_id: str = None, 
-                         data_version: str = f"{datetime.now().strftime('%H%M')}_{spreadsheet_id}") -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
-    """Load and process data with smart caching and versioning"""
+                         data_version: str = "1.0") -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
+    """
+    Load and process data with smart caching and versioning.
+    The data_version parameter is used by Streamlit to determine if the cache needs to be re-run.
+    It should be passed a unique value (like a timestamp or file hash) when a refresh is needed.
+    """
     
     start_time = time.perf_counter()
     metadata = {
@@ -2709,14 +2713,18 @@ def main():
         # Load and process data
         with st.spinner("📥 Loading and processing data..."):
             try:
-                if st.session_state.data_source == "upload" and uploaded_file is not None:
+                # FIX: Construct the data_version string before calling the function
+                if st.session_state.data_source == "upload":
+                    data_version = f"upload_{uploaded_file.name}_{uploaded_file.size}"
                     ranked_df, data_timestamp, metadata = load_and_process_data(
-                        "upload", file_data=uploaded_file
+                        "upload", file_data=uploaded_file, data_version=data_version
                     )
                 else:
+                    data_version = f"{datetime.now().strftime('%Y%m%d%H%M')}_{st.session_state.get('spreadsheet_id')}"
                     ranked_df, data_timestamp, metadata = load_and_process_data(
                         "sheet", 
-                        spreadsheet_id=st.session_state.get('spreadsheet_id')
+                        spreadsheet_id=st.session_state.get('spreadsheet_id'),
+                        data_version=data_version
                     )
                 
                 st.session_state.ranked_df = ranked_df
