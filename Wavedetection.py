@@ -332,7 +332,9 @@ def load_and_process_data(source_type: str = "sheet", file_data=None, data_versi
     try:
         # Load data based on source
         if source_type == "upload" and file_data is not None:
-            # ... (upload logic) ...
+            logger.info("Loading data from uploaded CSV")
+            df = pd.read_csv(file_data, low_memory=False)
+            metadata['source'] = "User Upload"
         else:
             # --- SPREADSHEET ID LOGIC (FIXED) ---
             user_provided_id = st.session_state.get('user_spreadsheet_id')
@@ -364,7 +366,7 @@ def load_and_process_data(source_type: str = "sheet", file_data=None, data_versi
                     metadata['cache_used'] = True
                     return df, timestamp, metadata
                 raise
-        
+                
         # Validate loaded data
         is_valid, validation_msg = DataValidator.validate_dataframe(df, CONFIG.CRITICAL_COLUMNS, "Initial load")
         if not is_valid:
