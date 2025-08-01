@@ -1,3 +1,4 @@
+"""
 Wave Detection Ultimate 3.0 - FINAL ENHANCED PRODUCTION VERSION
 ===============================================================
 Professional Stock Ranking System with Advanced Analytics
@@ -327,7 +328,7 @@ class DataValidator:
 @st.cache_data(ttl=CONFIG.CACHE_TTL, persist="disk", show_spinner=False)
 def load_and_process_data(source_type: str = "sheet", file_data=None, 
                          spreadsheet_id: str = None, 
-                         data_version: str = f"{datetime.now().strftime('%Y%m%d_%H%M')}_{spreadsheet_id}") -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
+                         data_version: str = f"{datetime.now().strftime('%H%M')}_{spreadsheet_id}") -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
     """Load and process data with smart caching and versioning"""
     
     start_time = time.perf_counter()
@@ -1462,86 +1463,91 @@ class MarketIntelligence:
         return ad_metrics
     
     @staticmethod
-    def detect_sector_rotation(df: pd.DataFrame) -> pd.DataFrame:
+    def _detect_rotation(df: pd.DataFrame, group_col: str) -> pd.DataFrame:
         """
-        Detect sector rotation patterns with normalized analysis and dynamic sampling.
-        Uses dynamic sampling based on sector size.
+        Generic function to detect rotation patterns for a given column (e.g., sector, industry)
+        with normalized analysis and dynamic sampling.
         """
-        
-        if 'sector' not in df.columns or df.empty:
+        if group_col not in df.columns or df.empty:
             return pd.DataFrame()
         
-        sector_dfs = []
+        group_dfs = []
         
-        for sector in df['sector'].unique():
-            if sector != 'Unknown':
-                sector_df = df[df['sector'] == sector].copy()
-                sector_size = len(sector_df)
+        for group_name in df[group_col].unique():
+            if group_name != 'Unknown':
+                group_df = df[df[group_col] == group_name].copy()
+                group_size = len(group_df)
                 
-                # Dynamic sampling based on sector size
-                if 1 <= sector_size <= 5:
-                    sample_count = sector_size # Use all (100%)
-                elif 6 <= sector_size <= 20:
-                    sample_count = max(1, int(sector_size * 0.80)) # Use 80%
-                elif 21 <= sector_size <= 50:
-                    sample_count = max(1, int(sector_size * 0.60)) # Use 60%
-                elif 51 <= sector_size <= 100:
-                    sample_count = max(1, int(sector_size * 0.40)) # Use 40%
-                else: # sector_size > 100
-                    sample_count = min(50, int(sector_size * 0.25)) # Use 25%, max 50 stocks
+                # Dynamic sampling based on group size
+                if 1 <= group_size <= 5:
+                    sample_count = group_size # Use all (100%)
+                elif 6 <= group_size <= 20:
+                    sample_count = max(1, int(group_size * 0.80)) # Use 80%
+                elif 21 <= group_size <= 50:
+                    sample_count = max(1, int(group_size * 0.60)) # Use 60%
+                elif 51 <= group_size <= 100:
+                    sample_count = max(1, int(group_size * 0.40)) # Use 40%
+                else: # group_size > 100
+                    sample_count = min(50, int(group_size * 0.25)) # Use 25%, max 50 stocks
                 
                 if sample_count > 0:
                     # Sort by master_score and take the dynamic 'N'
-                    sector_df = sector_df.nlargest(sample_count, 'master_score')
+                    group_df = group_df.nlargest(sample_count, 'master_score')
                 else:
-                    sector_df = pd.DataFrame() # No stocks selected
+                    group_df = pd.DataFrame() # No stocks selected
                 
-                if not sector_df.empty:
-                    sector_dfs.append(sector_df)
+                if not group_df.empty:
+                    group_dfs.append(group_df)
         
-        # Combine normalized sector data
-        if sector_dfs:
-            normalized_df = pd.concat(sector_dfs, ignore_index=True)
-        else:
-            # If no valid sectors after sampling, return empty or handle gracefully
+        if not group_dfs:
             return pd.DataFrame()
         
-        # Calculate sector metrics on normalized data
-        sector_metrics = normalized_df.groupby('sector').agg({
+        # Combine normalized data
+        normalized_df = pd.concat(group_dfs, ignore_index=True)
+        
+        # Calculate metrics on normalized data
+        group_metrics = normalized_df.groupby(group_col).agg({
             'master_score': ['mean', 'median', 'std', 'count'],
             'momentum_score': 'mean',
             'volume_score': 'mean',
             'rvol': 'mean',
             'ret_30d': 'mean',
-            'money_flow_mm': 'sum' if 'money_flow_mm' in normalized_df.columns else lambda x: 0 # Default to 0 if column missing
+            'money_flow_mm': 'sum' if 'money_flow_mm' in normalized_df.columns else lambda x: 0
         }).round(2)
         
         # Flatten column names
+        cols = ['avg_score', 'median_score', 'std_score', 'count', 'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d']
         if 'money_flow_mm' in normalized_df.columns:
-            sector_metrics.columns = ['avg_score', 'median_score', 'std_score', 'count', 
-                                     'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d', 'total_money_flow']
-        else:
-            sector_metrics.columns = ['avg_score', 'median_score', 'std_score', 'count', 
-                                     'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d', 'dummy_money_flow']
-            sector_metrics = sector_metrics.drop('dummy_money_flow', axis=1) # Remove dummy column
+            cols.append('total_money_flow')
+        group_metrics.columns = cols
         
-        # Add original sector size for reference
-        original_counts = df.groupby('sector').size().rename('total_stocks')
-        sector_metrics = sector_metrics.join(original_counts, how='left')
-        sector_metrics['analyzed_stocks'] = sector_metrics['count']
+        # Add original size for reference
+        original_counts = df.groupby(group_col).size().rename('total_stocks')
+        group_metrics = group_metrics.join(original_counts, how='left')
+        group_metrics['analyzed_stocks'] = group_metrics['count']
         
         # Calculate flow score with median for robustness
-        sector_metrics['flow_score'] = (
-            sector_metrics['avg_score'] * 0.3 +
-            sector_metrics['median_score'] * 0.2 +
-            sector_metrics['avg_momentum'] * 0.25 +
-            sector_metrics['avg_volume'] * 0.25
+        group_metrics['flow_score'] = (
+            group_metrics['avg_score'] * 0.3 +
+            group_metrics['median_score'] * 0.2 +
+            group_metrics['avg_momentum'] * 0.25 +
+            group_metrics['avg_volume'] * 0.25
         )
         
-        # Rank sectors
-        sector_metrics['rank'] = sector_metrics['flow_score'].rank(ascending=False)
+        # Rank groups
+        group_metrics['rank'] = group_metrics['flow_score'].rank(ascending=False)
         
-        return sector_metrics.sort_values('flow_score', ascending=False)
+        return group_metrics.sort_values('flow_score', ascending=False)
+    
+    @staticmethod
+    def detect_sector_rotation(df: pd.DataFrame) -> pd.DataFrame:
+        """Detect sector rotation patterns using generic helper."""
+        return MarketIntelligence._detect_rotation(df, 'sector')
+
+    @staticmethod
+    def detect_industry_rotation(df: pd.DataFrame) -> pd.DataFrame:
+        """Detect industry rotation patterns using generic helper."""
+        return MarketIntelligence._detect_rotation(df, 'industry')
 
 # ============================================
 # VISUALIZATION ENGINE
@@ -1787,14 +1793,13 @@ class FilterEngine:
         if df.empty or column not in df.columns:
             return []
         
-        # Apply other filters first for interconnected filtering
+        # Create a copy of the filters to apply, but remove the current column's filter
         temp_filters = current_filters.copy()
         
-        # Remove the current column's filter to see all its options
         filter_key_map = {
             'category': 'categories',
             'sector': 'sectors',
-            'industry': 'industries', # Added new filter
+            'industry': 'industries', 
             'eps_tier': 'eps_tiers',
             'pe_tier': 'pe_tiers',
             'price_tier': 'price_tiers',
@@ -1804,13 +1809,13 @@ class FilterEngine:
         if column in filter_key_map:
             temp_filters.pop(filter_key_map[column], None)
         
-        # Apply remaining filters
-        filtered_df = FilterEngine.apply_filters(df, temp_filters)
+        # Apply the remaining filters to get the interconnected options
+        filtered_df_for_options = FilterEngine.apply_filters(df, temp_filters)
         
-        # Get unique values
-        values = filtered_df[column].dropna().unique()
+        # Get unique values from the filtered DataFrame
+        values = filtered_df_for_options[column].dropna().unique()
         
-        # Exclude Unknown and empty values
+        # Exclude 'Unknown' and empty values
         values = [v for v in values if str(v).strip() not in ['Unknown', 'unknown', '', 'nan', 'NaN']]
         
         return sorted(values)
@@ -2641,37 +2646,6 @@ def main():
         st.markdown("---")
         st.markdown("### 🔍 Smart Filters")
         
-        # Show data quality alerts
-        if st.session_state.data_quality.get('completeness', 100) < 80:
-            st.warning(f"⚠️ Data Quality: {st.session_state.data_quality['completeness']:.1f}% complete")
-        if st.session_state.data_quality.get('duplicate_tickers', 0) > 0:
-            st.info(f"ℹ️ Removed {st.session_state.data_quality['duplicate_tickers']} duplicate tickers")
-
-        # Function to get smart filter options
-        def get_smart_options(df, column, current_filters):
-            temp_df = df.copy()
-            
-            if current_filters.get('categories') and column != 'category':
-                temp_df = temp_df[temp_df['category'].isin(current_filters['categories'])]
-            if current_filters.get('sectors') and column != 'sector':
-                temp_df = temp_df[temp_df['sector'].isin(current_filters['sectors'])]
-            if current_filters.get('industries') and column != 'industry':
-                temp_df = temp_df[temp_df['industry'].isin(current_filters['industries'])]
-            if current_filters.get('min_score', 0) > 0:
-                temp_df = temp_df[temp_df['master_score'] >= current_filters['min_score']]
-            if current_filters.get('patterns'):
-                pattern_regex = '|'.join(current_filters['patterns'])
-                temp_df = temp_df[temp_df['patterns'].str.contains(pattern_regex, case=False, na=False, regex=True)]
-            if current_filters.get('trend_range') and current_filters.get('trend_filter') != 'All Trends':
-                min_trend, max_trend = current_filters['trend_range']
-                temp_df = temp_df[(temp_df['trend_quality'] >= min_trend) & (temp_df['trend_quality'] <= max_trend)]
-
-            values = temp_df[column].dropna().unique()
-            values = [v for v in values if str(v).strip() not in ['Unknown', 'unknown', '', 'nan', 'NaN']]
-            return sorted(values)
-
-        current_filters = {}
-        
         # Count active filters
         active_filter_count = 0
         
@@ -2737,7 +2711,7 @@ def main():
             try:
                 if st.session_state.data_source == "upload" and uploaded_file is not None:
                     ranked_df, data_timestamp, metadata = load_and_process_data(
-                        "upload", file_data=uploaded_file, spreadsheet_id=None
+                        "upload", file_data=uploaded_file
                     )
                 else:
                     ranked_df, data_timestamp, metadata = load_and_process_data(
@@ -2758,6 +2732,9 @@ def main():
                     for error in metadata['errors']:
                         st.error(error)
                 
+                # Add gc.collect() after data processing in main
+                gc.collect()
+
             except Exception as e:
                 logger.error(f"Failed to load data: {str(e)}")
                 
@@ -2769,8 +2746,6 @@ def main():
                     st.error(f"❌ Error: {str(e)}")
                     st.info("Common issues:\n- Network connectivity\n- Google Sheets permissions\n- Invalid CSV format")
                     st.stop()
-        
-        import gc; gc.collect()
         
     except Exception as e:
         st.error(f"❌ Critical Error: {str(e)}")
@@ -2835,6 +2810,8 @@ def main():
     
     # Sidebar filters
     with st.sidebar:
+        # Initialize filters dict
+        filters = {}
         
         # Display Mode
         st.markdown("### 📊 Display Mode")
@@ -2851,34 +2828,25 @@ def main():
         
         st.markdown("---")
         
-        # Update filter options based on current selection
-        def get_smart_options(df, column, current_filters):
-            temp_df = df.copy()
-            
-            # Apply other filters first
-            if current_filters.get('categories') and column != 'category':
-                temp_df = temp_df[temp_df['category'].isin(current_filters['categories'])]
-            if current_filters.get('sectors') and column != 'sector':
-                temp_df = temp_df[temp_df['sector'].isin(current_filters['sectors'])]
-            if current_filters.get('industries') and column != 'industry':
-                temp_df = temp_df[temp_df['industry'].isin(current_filters['industries'])]
-            if current_filters.get('min_score', 0) > 0:
-                temp_df = temp_df[temp_df['master_score'] >= current_filters['min_score']]
-            if current_filters.get('patterns'):
-                pattern_regex = '|'.join(current_filters['patterns'])
-                temp_df = temp_df[temp_df['patterns'].str.contains(pattern_regex, case=False, na=False, regex=True)]
-            if current_filters.get('trend_range') and current_filters.get('trend_filter') != 'All Trends':
-                min_trend, max_trend = current_filters['trend_range']
-                temp_df = temp_df[(temp_df['trend_quality'] >= min_trend) & (temp_df['trend_quality'] <= max_trend)]
+        # Data Quality Warnings (Added here as requested by user)
+        if st.session_state.data_quality.get('completeness', 100) < 80:
+            st.warning(f"⚠️ Data Quality: {st.session_state.data_quality['completeness']:.1f}% complete. Filter results may be inaccurate.")
+        if st.session_state.data_quality.get('duplicate_tickers', 0) > 0:
+            st.info(f"ℹ️ Removed {st.session_state.data_quality['duplicate_tickers']} duplicate tickers.")
 
-            values = temp_df[column].dropna().unique()
-            values = [v for v in values if str(v).strip() not in ['Unknown', 'unknown', '', 'nan', 'NaN']]
-            return sorted(values)
-
-        current_filters = {}
+        st.markdown("---")
         
+        # Filter Interconnection Logic
+        # Get current filter state to pass to the helper function
+        current_filters = {
+            'categories': st.session_state.get('category_filter', []),
+            'sectors': st.session_state.get('sector_filter', []),
+            'industries': st.session_state.get('industry_filter', []),
+            'min_score': st.session_state.get('min_score', 0)
+        }
+
         # Category filter
-        categories = get_smart_options(ranked_df_display, 'category', current_filters)
+        categories = FilterEngine.get_filter_options(ranked_df_display, 'category', current_filters)
         
         selected_categories = st.multiselect(
             f"Market Cap Category ({len(categories)})",
@@ -2888,10 +2856,10 @@ def main():
             key="category_filter"
         )
         
-        current_filters['categories'] = selected_categories
+        filters['categories'] = selected_categories
         
         # Sector filter
-        sectors = get_smart_options(ranked_df_display, 'sector', current_filters)
+        sectors = FilterEngine.get_filter_options(ranked_df_display, 'sector', current_filters)
         
         selected_sectors = st.multiselect(
             f"Sector ({len(sectors)})",
@@ -2901,11 +2869,11 @@ def main():
             key="sector_filter"
         )
         
-        current_filters['sectors'] = selected_sectors
+        filters['sectors'] = selected_sectors
 
         # Industry filter (NEW)
         if 'industry' in ranked_df_display.columns:
-            industries = get_smart_options(ranked_df_display, 'industry', current_filters)
+            industries = FilterEngine.get_filter_options(ranked_df_display, 'industry', current_filters)
             selected_industries = st.multiselect(
                 f"Industry ({len(industries)})",
                 options=industries,
@@ -2913,9 +2881,9 @@ def main():
                 placeholder="Select industries (empty = All)",
                 key="industry_filter"
             )
-            current_filters['industries'] = selected_industries
+            filters['industries'] = selected_industries
         else:
-            current_filters['industries'] = []
+            filters['industries'] = []
             st.info("Industry filter not available in data.")
         
         # Score filter
@@ -2929,8 +2897,6 @@ def main():
             key="min_score"
         )
         
-        current_filters['min_score'] = filters['min_score']
-
         # Pattern filter
         all_patterns = set()
         for patterns in ranked_df_display['patterns'].dropna():
@@ -2946,7 +2912,6 @@ def main():
                 help="Filter by specific patterns",
                 key="patterns"
             )
-            current_filters['patterns'] = filters['patterns']
         
         # Trend filter
         st.markdown("#### 📈 Trend Strength")
@@ -2975,12 +2940,10 @@ def main():
             help="Filter stocks by trend strength based on SMA alignment"
         )
         filters['trend_range'] = trend_options[filters['trend_filter']]
-        current_filters['trend_filter'] = filters['trend_filter']
-        current_filters['trend_range'] = filters['trend_range']
 
         # NEW: Wave Filters
         st.markdown("#### 🌊 Wave Filters")
-        wave_states_options = FilterEngine.get_filter_options(ranked_df_display, 'wave_state', current_filters)
+        wave_states_options = FilterEngine.get_filter_options(ranked_df_display, 'wave_state', filters)
         filters['wave_states'] = st.multiselect(
             "Wave State",
             options=wave_states_options,
@@ -2989,8 +2952,6 @@ def main():
             help="Filter by the detected 'Wave State'",
             key="wave_states_filter"
         )
-        current_filters['wave_states'] = filters['wave_states']
-
 
         if 'overall_wave_strength' in ranked_df_display.columns:
             # Ensure proper min/max for slider, handling cases of all identical values
@@ -3022,10 +2983,8 @@ def main():
                 help="Filter by the calculated 'Overall Wave Strength' score",
                 key="wave_strength_range_slider"
             )
-            current_filters['wave_strength_range'] = filters['wave_strength_range']
         else:
             filters['wave_strength_range'] = (0, 100) # Default to full range if column is missing
-            current_filters['wave_strength_range'] = (0, 100)
             st.info("Overall Wave Strength data not available.")
 
         
@@ -3038,7 +2997,7 @@ def main():
                 ('price_tiers', 'price_tier')
             ]:
                 if col_name in ranked_df_display.columns:
-                    tier_options = get_smart_options(ranked_df_display, col_name, current_filters)
+                    tier_options = FilterEngine.get_filter_options(ranked_df_display, col_name, filters)
                     
                     selected_tiers = st.multiselect(
                         f"{col_name.replace('_', ' ').title()}",
@@ -3048,7 +3007,6 @@ def main():
                         key=f"{col_name}_filter"
                     )
                     filters[tier_type] = selected_tiers
-                    current_filters[tier_type] = selected_tiers
             
             # EPS change filter
             if 'eps_change_pct' in ranked_df_display.columns:
@@ -3513,8 +3471,6 @@ def main():
                         st.text(f"Q1: {filtered_df['master_score'].quantile(0.25):.1f}")
                         st.text(f"Q3: {filtered_df['master_score'].quantile(0.75):.1f}")
                         st.text(f"Std: {filtered_df['master_score'].std():.1f}")
-                    else:
-                        st.text("No master score data available")
                 
                 with stat_cols[1]:
                     st.markdown("**Returns (30D)**")
@@ -4199,92 +4155,36 @@ def main():
             
             # Industry performance
             st.markdown("#### Industry Performance (Dynamically Sampled)")
-            if 'industry' in filtered_df.columns:
+            industry_overview_df_local = MarketIntelligence.detect_industry_rotation(filtered_df)
+            
+            if not industry_overview_df_local.empty:
+                display_cols_overview = ['flow_score', 'avg_score', 'median_score', 'avg_momentum', 
+                                         'avg_volume', 'avg_rvol', 'avg_ret_30d', 'analyzed_stocks', 'total_stocks']
                 
-                # Dynamic sampling logic for industries
-                industry_dfs = []
-                for industry in filtered_df['industry'].unique():
-                    if industry != 'Unknown':
-                        industry_df = filtered_df[filtered_df['industry'] == industry].copy()
-                        industry_size = len(industry_df)
-                        
-                        if 1 <= industry_size <= 5:
-                            sample_count = industry_size
-                        elif 6 <= industry_size <= 20:
-                            sample_count = max(1, int(industry_size * 0.80))
-                        elif 21 <= industry_size <= 50:
-                            sample_count = max(1, int(industry_size * 0.60))
-                        elif 51 <= industry_size <= 100:
-                            sample_count = max(1, int(industry_size * 0.40))
-                        else:
-                            sample_count = min(50, int(industry_size * 0.25))
-
-                        if sample_count > 0:
-                            industry_df = industry_df.nlargest(sample_count, 'master_score')
-                        else:
-                            industry_df = pd.DataFrame()
-                        
-                        if not industry_df.empty:
-                            industry_dfs.append(industry_df)
+                available_overview_cols = [col for col in display_cols_overview if col in industry_overview_df_local.columns]
                 
-                if industry_dfs:
-                    normalized_industry_df = pd.concat(industry_dfs, ignore_index=True)
-                    
-                    industry_metrics = normalized_industry_df.groupby('industry').agg({
-                        'master_score': ['mean', 'median', 'count'],
-                        'momentum_score': 'mean',
-                        'volume_score': 'mean',
-                        'rvol': 'mean',
-                        'ret_30d': 'mean'
-                    }).round(2)
-                    
-                    industry_metrics.columns = ['avg_score', 'median_score', 'count', 
-                                                'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d']
+                industry_overview_display = industry_overview_df_local[available_overview_cols].copy()
+                
+                industry_overview_display.columns = [
+                    'Flow Score', 'Avg Score', 'Median Score', 'Avg Momentum', 
+                    'Avg Volume', 'Avg RVOL', 'Avg 30D Ret', 'Analyzed Stocks', 'Total Stocks'
+                ]
+                
+                industry_overview_display['Coverage %'] = (
+                    (industry_overview_display['Analyzed Stocks'] / industry_overview_display['Total Stocks'] * 100)
+                    .replace([np.inf, -np.inf], np.nan)
+                    .fillna(0)
+                    .round(1)
+                    .apply(lambda x: f"{x}%")
+                )
 
-                    original_counts = filtered_df.groupby('industry').size().rename('total_stocks')
-                    industry_metrics = industry_metrics.join(original_counts, how='left')
-                    industry_metrics['analyzed_stocks'] = industry_metrics['count']
-                    
-                    # Calculate flow score for industries
-                    industry_metrics['flow_score'] = (
-                        industry_metrics['avg_score'] * 0.3 +
-                        industry_metrics['median_score'] * 0.2 +
-                        industry_metrics['avg_momentum'] * 0.25 +
-                        industry_metrics['avg_volume'] * 0.25
-                    )
-                    
-                    industry_metrics = industry_metrics.sort_values('flow_score', ascending=False)
-                    
-                    display_cols_industry = ['flow_score', 'avg_score', 'median_score', 'avg_momentum', 
-                                             'avg_volume', 'avg_rvol', 'avg_ret_30d', 'analyzed_stocks', 'total_stocks']
-                    
-                    available_industry_cols = [col for col in display_cols_industry if col in industry_metrics.columns]
-                    
-                    industry_overview_display = industry_metrics[available_industry_cols].copy()
-                    
-                    industry_overview_display.columns = [
-                        'Flow Score', 'Avg Score', 'Median Score', 'Avg Momentum',
-                        'Avg Volume', 'Avg RVOL', 'Avg 30D Ret', 'Analyzed Stocks', 'Total Stocks'
-                    ]
-
-                    industry_overview_display['Coverage %'] = (
-                        (industry_overview_display['Analyzed Stocks'] / industry_overview_display['Total Stocks'] * 100)
-                        .replace([np.inf, -np.inf], np.nan)
-                        .fillna(0)
-                        .round(1)
-                        .apply(lambda x: f"{x}%")
-                    )
-
-                    st.dataframe(
-                        industry_overview_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
-                        use_container_width=True
-                    )
-                    st.info("📊 **Normalized Analysis**: Shows metrics for dynamically sampled stocks per industry (by Master Score) to ensure fair comparison across industries of different sizes.")
-
-                else:
-                    st.info("No industry data available in the filtered dataset for analysis after sampling.")
+                st.dataframe(
+                    industry_overview_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
+                    use_container_width=True
+                )
+                st.info("📊 **Normalized Analysis**: Shows metrics for dynamically sampled stocks per industry (by Master Score) to ensure fair comparison across industries of different sizes.")
             else:
-                st.info("Industry column not available in data.")
+                st.info("No industry data available in the filtered dataset for analysis. Please check your filters.")
 
             # Category performance
             st.markdown("#### Category Performance")
@@ -4470,7 +4370,7 @@ def main():
                                 if 'eps_current' in stock and pd.notna(stock['eps_current']):
                                     st.text(f"EPS Current: ₹{stock['eps_current']:.2f}")
                                 else:
-                                st.text("EPS Current: N/A")
+                                    st.text("EPS Current: N/A")
 
                                 # EPS Change
                                 if 'eps_change_pct' in stock and pd.notna(stock['eps_change_pct']):
