@@ -2672,7 +2672,7 @@ def main():
             )
 
             # Process user input immediately and trigger rerun
-if user_spreadsheet_id_input != st.session_state.get('user_spreadsheet_id'):
+            if user_spreadsheet_id_input != st.session_state.get('user_spreadsheet_id'):
                 new_id = user_spreadsheet_id_input.strip()
                 if not new_id:
                     st.session_state.user_spreadsheet_id = None
@@ -2747,6 +2747,7 @@ if user_spreadsheet_id_input != st.session_state.get('user_spreadsheet_id'):
                             st.caption(f"{func_name}: {elapsed:.4f}s")
         
         st.markdown("---")
+        
         st.markdown("### 🔍 Smart Filters")
         
         # Count active filters
