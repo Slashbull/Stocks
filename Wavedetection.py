@@ -2620,13 +2620,17 @@ def main():
                 st.info("Please upload a CSV file to continue")
         else: # Google Sheets
             # FIXED: Persist spreadsheet_id correctly
-            st.session_state.spreadsheet_id = st.text_input(
-                "Enter Google Spreadsheet ID",
-                value=st.session_state.get('spreadsheet_id', ""),
-                placeholder="e.g. 1OEQ_qxL4lXbO9LlKWDGlD...",
-                help="Enter the unique part of your Google Sheets URL. Your ID will be saved.",
-                key="spreadsheet_id"
-            )
+           # Check if the key exists before creating the widget
+            if 'spreadsheet_id' not in st.session_state:
+                    st.session_state.spreadsheet_id = ""
+                
+                st.text_input(
+                    "Enter Google Spreadsheet ID",
+                    value=st.session_state.spreadsheet_id, # Use the session state value
+                    placeholder="e.g. 1OEQ_qxL4lXbO9LlKWDGlD...",
+                    help="Enter the unique part of your Google Sheets URL. Your ID will be saved.",
+                    key="spreadsheet_id"
+                )
 
         
         # Data quality indicator
