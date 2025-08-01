@@ -326,36 +326,21 @@ class DataValidator:
 # ============================================
 # SMART CACHING WITH VERSIONING
 # ============================================
-
 @st.cache_data(ttl=CONFIG.CACHE_TTL, persist="disk", show_spinner=False)
 def load_and_process_data(source_type: str = "sheet", file_data=None, data_version: str = "1.0") -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
-    """
-    Load and process data with smart caching and versioning.
-    Now strictly validates user-provided Spreadsheet ID.
-    """
-    
-    start_time = time.perf_counter()
-    metadata = {
-        'source_type': source_type,
-        'data_version': data_version,
-        'processing_start': datetime.now(timezone.utc),
-        'errors': [],
-        'warnings': []
-    }
-    
+    # ... (code for metadata setup) ...
     try:
         # Load data based on source
         if source_type == "upload" and file_data is not None:
-            logger.info("Loading data from uploaded CSV")
-            df = pd.read_csv(file_data, low_memory=False)
-            metadata['source'] = "User Upload"
+            # ... (upload logic) ...
         else:
-            # --- NEW SPREADSHEET ID LOGIC ---
+            # --- SPREADSHEET ID LOGIC (FIXED) ---
             user_provided_id = st.session_state.get('user_spreadsheet_id')
             
-            if not user_provided_id or not user_provided_id.strip() or not (len(user_provided_id.strip()) == 44 and user_provided_id.strip().isalnum()):
-                 # This check is crucial for preventing malformed URLs and catching empty input
-                raise ValueError("A valid Google Spreadsheet ID is required to load data. Please enter a valid 44-character alphanumeric ID.")
+            # Relaxed validation to allow alphanumeric characters and underscores/hyphens, common in sheet IDs
+            # The key check is that the ID is not empty and has a specific length.
+            if not user_provided_id or not user_provided_id.strip() or not (len(user_provided_id.strip()) == 44):
+                raise ValueError("A valid Google Spreadsheet ID is required to load data. Please enter a valid 44-character ID.")
 
             final_spreadsheet_id_to_use = user_provided_id.strip()
             
