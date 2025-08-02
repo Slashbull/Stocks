@@ -752,8 +752,13 @@ class RankingEngine:
     
     # FIX: Fixed the AttributeError by ensuring the series is a Pandas Series and checking its length correctly.
     @staticmethod
-    def _safe_rank(series: pd.Series, pct: bool = True, ascending: bool = True) -> pd.Series:
+    def _safe_rank(series: Union[pd.Series, np.ndarray], pct: bool = True, ascending: bool = True) -> pd.Series:
         """Safely rank a series with proper edge case handling"""
+        
+        # Check if the input is an ndarray and convert it to a Series
+        if isinstance(series, np.ndarray):
+            series = pd.Series(series)
+            
         if series is None or len(series) == 0:
             return pd.Series(dtype=float)
         
@@ -2344,7 +2349,11 @@ class SessionStateManager:
     def initialize():
         """Initialize all session state variables with explicit defaults."""
         
-        # FIX: Persist spreadsheet ID in session state
+        # FIX: The previous version had a bug where nested dictionaries were not
+        # initialized properly, leading to a KeyError. This fix ensures that
+        # `st.session_state.user_preferences` is a dictionary and contains all
+        # its default sub-keys.
+        
         defaults = {
             'search_query': "",
             'last_refresh': datetime.now(timezone.utc),
@@ -2361,34 +2370,41 @@ class SessionStateManager:
             'show_debug': False,
             'performance_metrics': {},
             'data_quality': {},
-            'trigger_clear': False, # For clear filters button sync
-            'spreadsheet_id': "", # New: for user-input data source
-
-            # Explicit Initialization for all filter-related keys (NEW/IMPROVED)
+            'trigger_clear': False,
+            'spreadsheet_id': "",
             'category_filter': [],
             'sector_filter': [],
-            'industry_filter': [], # New: Industry filter
+            'industry_filter': [],
             'min_score': 0,
             'patterns': [],
-            'trend_filter': "All Trends", # Default string value for selectbox
+            'trend_filter': "All Trends",
             'eps_tier_filter': [],
             'pe_tier_filter': [],
             'price_tier_filter': [],
-            'min_eps_change': "", # Text input default
-            'min_pe': "", # Text input default
-            'max_pe': "", # Text input default
-            'require_fundamental_data': False, # Checkbox default
-            'wave_states_filter': [], # New multiselect filter
-            'wave_strength_range_slider': (0, 100), # New slider filter default
-            'show_sensitivity_details': False, # Wave Radar checkbox
-            'show_market_regime': True, # Wave Radar checkbox
-            'wave_timeframe_select': "All Waves", # Wave Radar selectbox
-            'wave_sensitivity': "Balanced", # Wave Radar select slider
+            'min_eps_change': "",
+            'min_pe': "",
+            'max_pe': "",
+            'require_fundamental_data': False,
+            'wave_states_filter': [],
+            'wave_strength_range_slider': (0, 100),
+            'show_sensitivity_details': False,
+            'show_market_regime': True,
+            'wave_timeframe_select': "All Waves",
+            'wave_sensitivity': "Balanced",
         }
         
+        # Initialize top-level keys
         for key, default_value in defaults.items():
             if key not in st.session_state:
-                st.session_state[key] = default_value
+                if isinstance(default_value, dict):
+                    st.session_state[key] = {}
+                else:
+                    st.session_state[key] = default_value
+
+        # Initialize sub-keys for nested dictionaries like 'user_preferences'
+        for sub_key, sub_default_value in defaults['user_preferences'].items():
+            if sub_key not in st.session_state.user_preferences:
+                st.session_state.user_preferences[sub_key] = sub_default_value
     
     @staticmethod
     def clear_filters():
