@@ -100,7 +100,7 @@ class Config:
     # Data source settings
     DEFAULT_GID: str = "1823439984"
     # User can provide their own spreadsheet ID
-    DEFAULT_SHEET_ID: str = "1OEQ_qxL4lXbO9LlKWDGlDju2yQC1iYvOYeXF3mTQuJM"
+    DEFAULT_SHEET_ID: str = ""
     VALID_SHEET_ID_PATTERN: str = r'^[a-zA-Z0-9_-]{20,60}$'
     
     # Cache settings
@@ -2885,3 +2885,4 @@ if __name__ == "__main__":
             st.cache_data.clear(); st.rerun()
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
