@@ -57,8 +57,7 @@ logger = logging.getLogger(__name__)
 class Config:
     """System configuration with validated weights and thresholds"""
     
-    # Data source - GID for Google Sheets is hardcoded as it's common
-    # The Spreadsheet ID will be a user input
+    # Data source - GID is hardcoded, Spreadsheet ID is user input.
     DEFAULT_GID: str = "1823439984"
     
     # Cache settings optimized for Streamlit Community Cloud
@@ -349,7 +348,7 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
         else:
             # Enforce that a valid spreadsheet_id is provided
             if not spreadsheet_id or not (isinstance(spreadsheet_id, str) and len(spreadsheet_id.strip()) == 44 and all(c.isalnum() or c in '-_' for c in spreadsheet_id.strip())):
-                raise ValueError("A valid Google Spreadsheet ID is required. Please enter it in the sidebar.")
+                raise ValueError("A valid Google Spreadsheet ID is required. Please enter a 44-character alphanumeric ID in the sidebar.")
             
             # Construct CSV URL from user-provided ID and hardcoded GID
             final_spreadsheet_id = spreadsheet_id.strip()
@@ -1547,7 +1546,7 @@ class MarketIntelligence:
         sector_metrics['rank'] = sector_metrics['flow_score'].rank(ascending=False)
         
         return sector_metrics.sort_values('flow_score', ascending=False)
-
+    
     @staticmethod
     def detect_industry_rotation(df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -1827,7 +1826,11 @@ class FilterEngine:
             mask &= df['pe'].isna() | ((df['pe'] > 0) & (df['pe'] <= max_pe))
         
         # Apply tier filters
-        for tier_type in ['eps_tiers', 'pe_tiers', 'price_tiers']:
+        for tier_type, col_name in [
+            ('eps_tiers', 'eps_tier'),
+            ('pe_tiers', 'pe_tier'),
+            ('price_tiers', 'price_tier')
+        ]:
             tier_values = filters.get(tier_type, [])
             if tier_values and 'All' not in tier_values:
                 col_name = tier_type.replace('_tiers', '_tier')
@@ -1867,11 +1870,11 @@ class FilterEngine:
         # Apply other filters first for interconnected filtering
         temp_filters = current_filters.copy()
         
-        # Remove the current column's filter to see all its options
+        # Fix for interconnectedness bug: Add new filter key to map
         filter_key_map = {
             'category': 'categories',
             'sector': 'sectors',
-            'industry': 'industries', # Added new filter
+            'industry': 'industries', 
             'eps_tier': 'eps_tiers',
             'pe_tier': 'pe_tiers',
             'price_tier': 'price_tiers',
@@ -2059,8 +2062,13 @@ class ExportEngine:
                 sector_rotation = MarketIntelligence.detect_sector_rotation(df)
                 if not sector_rotation.empty:
                     sector_rotation.to_excel(writer, sheet_name='Sector Rotation')
+
+                # 4. Industry Rotation (NEW)
+                industry_rotation = MarketIntelligence.detect_industry_rotation(df)
+                if not industry_rotation.empty:
+                    industry_rotation.to_excel(writer, sheet_name='Industry Rotation')
                 
-                # 4. Pattern Analysis
+                # 5. Pattern Analysis
                 pattern_counts = {}
                 for patterns in df['patterns'].dropna():
                     if patterns:
@@ -2074,7 +2082,7 @@ class ExportEngine:
                     ).sort_values('Count', ascending=False)
                     pattern_df.to_excel(writer, sheet_name='Pattern Analysis', index=False)
                 
-                # 5. Wave Radar Signals
+                # 6. Wave Radar Signals
                 wave_signals = df[
                     (df['momentum_score'] >= 60) & 
                     (df['acceleration_score'] >= 70) &
@@ -2091,7 +2099,7 @@ class ExportEngine:
                         writer, sheet_name='Wave Radar', index=False
                     )
                 
-                # 6. Summary Statistics
+                # 7. Summary Statistics
                 summary_stats = {
                     'Total Stocks': len(df),
                     'Average Master Score': df['master_score'].mean(),
@@ -2435,7 +2443,7 @@ class SessionStateManager:
             'performance_metrics': {},
             'data_quality': {},
             'trigger_clear': False, # For clear filters button sync
-            'spreadsheet_id': None, # New: for user-input data source, starts as None
+            'user_spreadsheet_id': '', # New: for user-input data source, starts as empty string
             'last_loaded_url': None, # New: to store the last successfully loaded URL
 
             # Explicit Initialization for all filter-related keys
@@ -2644,35 +2652,35 @@ def main():
                 st.info("Please upload a CSV file to continue")
         else: # Google Sheets
             st.markdown("#### 🔗 Google Sheet Configuration")
-            # Display user input for Spreadsheet ID with persistence and validation
-            spreadsheet_id_input = st.text_input(
+            spreadsheet_id_input_value = st.text_input(
                 "Enter Google Spreadsheet ID",
                 value=st.session_state.get('user_spreadsheet_id', ''),
                 placeholder="e.g. 1OEQ_qxL4lXbO9LlKWDGlD...",
-                help="The unique part of your Google Sheets URL (after '/d/' and before '/edit/').",
-                key="spreadsheet_id_input"
+                help="Enter the unique part of your Google Sheets URL (after '/d/' and before '/edit/').",
+                key="user_spreadsheet_id_input"
             )
 
-            # --- Validation and Session State Update Logic ---
-            new_id_input = spreadsheet_id_input.strip()
+            # --- CRITICAL UI LOGIC for validation and persistence ---
+            new_id_input = spreadsheet_id_input_value.strip()
             
-            if new_id_input:
-                # Corrected validation check to allow alphanumeric, hyphens, and underscores
-                is_valid_format = len(new_id_input) == 44 and all(c.isalnum() or c in '-_' for c in new_id_input)
-                
-                if is_valid_format:
-                    if st.session_state.get('user_spreadsheet_id') != new_id_input:
+            # Check if input has changed
+            if new_id_input != st.session_state.get('user_spreadsheet_id', ''):
+                if new_id_input:
+                    # Corrected validation logic
+                    is_valid_format = len(new_id_input) == 44 and all(c.isalnum() or c in '-_' for c in new_id_input)
+                    if is_valid_format:
                         st.session_state.user_spreadsheet_id = new_id_input
                         st.success("Spreadsheet ID updated. Reloading data...")
                         st.rerun()
-                else:
-                    st.error("Invalid Spreadsheet ID format. Please enter a 44-character alphanumeric ID.")
-            elif st.session_state.get('user_spreadsheet_id') is not None:
-                # If user clears a previously valid input, clear the session state and rerun
-                st.session_state.user_spreadsheet_id = None
-                st.rerun()
+                    else:
+                        st.error("Invalid Spreadsheet ID format. Please enter a 44-character alphanumeric ID.")
+                        # The session state remains unchanged, allowing the pre-load check to stop the app
+                elif st.session_state.get('user_spreadsheet_id') is not None:
+                    # If user clears a previously valid input, clear the session state and rerun
+                    st.session_state.user_spreadsheet_id = None
+                    st.rerun()
 
-            # Display the generated URL from the last successful load, if available
+            # Display the last successfully loaded URL, if available
             if st.session_state.get('last_loaded_url'):
                 st.caption(f"**Last loaded URL:** {st.session_state.last_loaded_url}")
             
@@ -2796,7 +2804,7 @@ def main():
         
         # Critical pre-load gate for Google Sheets
         if st.session_state.data_source == "sheet" and not st.session_state.get('user_spreadsheet_id'):
-            st.warning("Please enter a Google Spreadsheet ID in the sidebar to load data.")
+            st.info("Please enter a Google Spreadsheet ID in the sidebar to load data.")
             st.stop()
         
         # Load and process data
@@ -2826,6 +2834,10 @@ def main():
                     for error in metadata['errors']:
                         st.error(error)
                 
+            except ValueError as ve:
+                st.error(f"❌ Input Error: {str(ve)}")
+                st.info("Please correct the Spreadsheet ID in the sidebar to proceed.")
+                st.stop()
             except Exception as e:
                 logger.error(f"Failed to load data: {str(e)}")
                 
@@ -2839,7 +2851,7 @@ def main():
                     st.stop()
         
     except Exception as e:
-        st.error(f"❌ Critical Error: {str(e)}")
+        st.error(f"❌ Critical Application Error: {str(e)}")
         with st.expander("🔍 Error Details"):
             st.code(str(e))
         st.stop()
@@ -4534,9 +4546,6 @@ def main():
 
             else:
                 st.warning("No stocks found matching your search criteria.")
-    
-    # Removed "📊 Sector Analysis" tab as requested.
-    # The content of this tab has been removed from the application's tabs list.
     
     # Tab 5: Export (moved from 6)
     with tabs[5]:
