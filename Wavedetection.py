@@ -5,7 +5,7 @@ Professional Stock Ranking System with Advanced Analytics
 All bugs fixed, optimized for Streamlit Community Cloud
 Enhanced with perfect filtering system and robust error handling
 
-Version: 3.0.9-FINAL-PERFECTED
+Version: 3.1.0-FINAL-PERFECTED
 Last Updated: December 2024
 Status: PRODUCTION READY - PERMANENTLY LOCKED
 """
@@ -64,6 +64,7 @@ class RobustSessionState:
         'last_refresh': None,  # Will be set to datetime on first run
         'data_source': "sheet",
         'sheet_id': "",  # For custom Google Sheets
+        'gid': "",  # For sheet tab GID
         'user_preferences': {
             'default_top_n': 50,
             'display_mode': 'Technical',
@@ -166,10 +167,10 @@ class RobustSessionState:
 class Config:
     """System configuration with validated weights and thresholds"""
     
-    # Data source - NOW DYNAMIC (NO DEFAULT URL)
+    # Data source - NOW DYNAMIC (WITH DEFAULT GID)
     DEFAULT_SHEET_URL_TEMPLATE: str = "https://docs.google.com/spreadsheets/d/{sheet_id}/edit?usp=sharing"
     CSV_URL_TEMPLATE: str = "https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
-    DEFAULT_GID: str = "0"  # Default to first sheet
+    DEFAULT_GID: str = "1823439984"  # Default GID kept as specified
     
     # Cache settings optimized for Streamlit Community Cloud
     CACHE_TTL: int = 3600  # 1 hour
@@ -1493,7 +1494,7 @@ class MarketIntelligence:
     
     @staticmethod
     def detect_sector_rotation(df: pd.DataFrame) -> pd.DataFrame:
-        """Detect sector rotation patterns with normalized analysis"""
+        """Detect sector rotation patterns with smart normalized analysis"""
         
         if 'sector' not in df.columns or df.empty:
             return pd.DataFrame()
@@ -1501,21 +1502,27 @@ class MarketIntelligence:
         sector_dfs = []
         
         for sector in df['sector'].unique():
-            if sector != 'Unknown':
+            if sector != 'Unknown' and pd.notna(sector):
                 sector_df = df[df['sector'] == sector].copy()
                 sector_size = len(sector_df)
                 
-                # Dynamic sampling based on sector size
-                if 1 <= sector_size <= 5:
+                # Smart dynamic sampling based on sector size
+                if sector_size == 1:
+                    sample_count = 1
+                elif 2 <= sector_size <= 5:
                     sample_count = sector_size
-                elif 6 <= sector_size <= 20:
-                    sample_count = max(1, int(sector_size * 0.80))
-                elif 21 <= sector_size <= 50:
-                    sample_count = max(1, int(sector_size * 0.60))
+                elif 6 <= sector_size <= 10:
+                    sample_count = max(3, int(sector_size * 0.80))
+                elif 11 <= sector_size <= 25:
+                    sample_count = max(5, int(sector_size * 0.60))
+                elif 26 <= sector_size <= 50:
+                    sample_count = max(10, int(sector_size * 0.50))
                 elif 51 <= sector_size <= 100:
-                    sample_count = max(1, int(sector_size * 0.40))
-                else:
-                    sample_count = min(50, int(sector_size * 0.25))
+                    sample_count = max(20, int(sector_size * 0.40))
+                elif 101 <= sector_size <= 200:
+                    sample_count = max(30, int(sector_size * 0.30))
+                else:  # sector_size > 200
+                    sample_count = min(60, int(sector_size * 0.25))
                 
                 if sample_count > 0:
                     sector_df = sector_df.nlargest(sample_count, 'master_score')
@@ -1564,6 +1571,12 @@ class MarketIntelligence:
         
         # Rank sectors
         sector_metrics['rank'] = sector_metrics['flow_score'].rank(ascending=False)
+        
+        # Calculate sampling percentage
+        sector_metrics['sampling_pct'] = (
+            (sector_metrics['analyzed_stocks'] / sector_metrics['total_stocks'] * 100)
+            .round(1)
+        )
         
         return sector_metrics.sort_values('flow_score', ascending=False)
     
@@ -1656,6 +1669,101 @@ class MarketIntelligence:
         )
         
         return industry_metrics.sort_values('flow_score', ascending=False)
+    
+    @staticmethod
+    def detect_category_performance(df: pd.DataFrame) -> pd.DataFrame:
+        """Detect category performance patterns with smart normalized analysis"""
+        
+        if 'category' not in df.columns or df.empty:
+            return pd.DataFrame()
+        
+        category_dfs = []
+        
+        for category in df['category'].unique():
+            if category != 'Unknown' and pd.notna(category):
+                category_df = df[df['category'] == category].copy()
+                category_size = len(category_df)
+                
+                # Smart dynamic sampling for categories
+                if category_size == 1:
+                    sample_count = 1
+                elif 2 <= category_size <= 10:
+                    sample_count = category_size  # Use all
+                elif 11 <= category_size <= 50:
+                    sample_count = max(5, int(category_size * 0.60))
+                elif 51 <= category_size <= 100:
+                    sample_count = max(20, int(category_size * 0.40))
+                elif 101 <= category_size <= 200:
+                    sample_count = max(30, int(category_size * 0.30))
+                else:  # category_size > 200
+                    sample_count = min(50, int(category_size * 0.25))
+                
+                if sample_count > 0:
+                    category_df = category_df.nlargest(sample_count, 'master_score')
+                else:
+                    category_df = pd.DataFrame()
+                
+                if not category_df.empty:
+                    category_dfs.append(category_df)
+        
+        if category_dfs:
+            normalized_df = pd.concat(category_dfs, ignore_index=True)
+        else:
+            return pd.DataFrame()
+        
+        # Calculate category metrics on normalized data
+        category_metrics = normalized_df.groupby('category').agg({
+            'master_score': ['mean', 'median', 'std', 'count'],
+            'momentum_score': 'mean',
+            'volume_score': 'mean',
+            'rvol': 'mean',
+            'ret_30d': 'mean',
+            'acceleration_score': 'mean',
+            'breakout_score': 'mean',
+            'money_flow_mm': 'sum' if 'money_flow_mm' in normalized_df.columns else lambda x: 0
+        }).round(2)
+        
+        # Flatten column names
+        if 'money_flow_mm' in normalized_df.columns:
+            category_metrics.columns = ['avg_score', 'median_score', 'std_score', 'count', 
+                                       'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d',
+                                       'avg_acceleration', 'avg_breakout', 'total_money_flow']
+        else:
+            category_metrics.columns = ['avg_score', 'median_score', 'std_score', 'count', 
+                                       'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d',
+                                       'avg_acceleration', 'avg_breakout', 'dummy_money_flow']
+            category_metrics = category_metrics.drop('dummy_money_flow', axis=1)
+        
+        # Add original category size for reference
+        original_counts = df.groupby('category').size().rename('total_stocks')
+        category_metrics = category_metrics.join(original_counts, how='left')
+        category_metrics['analyzed_stocks'] = category_metrics['count']
+        
+        # Calculate flow score with category-specific weights
+        category_metrics['flow_score'] = (
+            category_metrics['avg_score'] * 0.35 +
+            category_metrics['median_score'] * 0.20 +
+            category_metrics['avg_momentum'] * 0.20 +
+            category_metrics['avg_acceleration'] * 0.15 +
+            category_metrics['avg_volume'] * 0.10
+        )
+        
+        # Rank categories
+        category_metrics['rank'] = category_metrics['flow_score'].rank(ascending=False)
+        
+        # Calculate sampling percentage
+        category_metrics['sampling_pct'] = (
+            (category_metrics['analyzed_stocks'] / category_metrics['total_stocks'] * 100)
+            .round(1)
+        )
+        
+        # Sort by predefined order for categories
+        category_order = ['Mega Cap', 'Large Cap', 'Mid Cap', 'Small Cap', 'Micro Cap']
+        category_metrics = category_metrics.reindex(
+            [cat for cat in category_order if cat in category_metrics.index]
+        )
+        
+        return category_metrics
 
 # ============================================
 # VISUALIZATION ENGINE
@@ -1905,7 +2013,7 @@ class FilterEngine:
         filter_key_map = {
             'category': 'categories',
             'sector': 'sectors',
-            'industry': 'industries',  # NEW
+            'industry': 'industries',
             'eps_tier': 'eps_tiers',
             'pe_tier': 'pe_tiers',
             'price_tier': 'price_tiers',
@@ -1915,6 +2023,12 @@ class FilterEngine:
         # Remove the current column's filter to see all its available options
         if column in filter_key_map:
             temp_filters.pop(filter_key_map[column], None)
+        
+        # Special handling for industry - should respect sector filter
+        if column == 'industry':
+            # Don't remove sector filter for industry interconnection
+            if 'sectors' in current_filters:
+                temp_filters['sectors'] = current_filters['sectors']
         
         # Apply all other filters to see interconnected options
         filtered_df = FilterEngine.apply_filters(df, temp_filters)
@@ -2622,15 +2736,15 @@ def main():
             # Optional GID input
             gid_input = st.text_input(
                 "Sheet Tab GID (Optional)",
-                value=RobustSessionState.safe_get('gid', '0'),
-                placeholder="Default: 0 (first sheet)",
+                value=RobustSessionState.safe_get('gid', CONFIG.DEFAULT_GID),
+                placeholder=f"Default: {CONFIG.DEFAULT_GID}",
                 help="The GID identifies specific sheet tab. Found in URL after #gid="
             )
             
             if gid_input:
                 gid = gid_input.strip()
             else:
-                gid = "0"
+                gid = CONFIG.DEFAULT_GID
             
             if not sheet_id:
                 st.warning("Please enter a Google Sheets ID to continue")
@@ -2906,7 +3020,12 @@ def main():
         
         # Industry filter - NEW
         if 'industry' in ranked_df_display.columns:
-            industries = FilterEngine.get_filter_options(ranked_df_display, 'industry', filters)
+            # Apply sector filter to get relevant industries
+            temp_df = ranked_df_display.copy()
+            if selected_sectors and 'All' not in selected_sectors:
+                temp_df = temp_df[temp_df['sector'].isin(selected_sectors)]
+            
+            industries = FilterEngine.get_filter_options(temp_df, 'industry', filters)
             
             selected_industries = st.multiselect(
                 "Industry",
@@ -4330,29 +4449,167 @@ def main():
                 else:
                     st.info("No industry data available in the filtered dataset for analysis.")
             
-            # Category performance
-            st.markdown("#### Category Performance")
-            if 'category' in filtered_df.columns:
-                category_df = filtered_df.groupby('category').agg({
-                    'master_score': ['mean', 'count'],
-                    'category_percentile': 'mean',
-                    'money_flow_mm': 'sum' if 'money_flow_mm' in filtered_df.columns else lambda x: 0
-                }).round(2)
+            # Category performance - ENHANCED
+            st.markdown("#### 📊 Category Performance (Market Cap Analysis)")
+            category_overview_df = MarketIntelligence.detect_category_performance(filtered_df)
+            
+            if not category_overview_df.empty:
+                # Create two tabs for different views
+                cat_tab1, cat_tab2 = st.tabs(["📊 Category Flow", "📈 Detailed Metrics"])
                 
-                if 'money_flow_mm' in filtered_df.columns:
-                    category_df.columns = ['Avg Score', 'Count', 'Avg Cat %ile', 'Total Money Flow']
-                else:
-                    category_df.columns = ['Avg Score', 'Count', 'Avg Cat %ile', 'Dummy Flow']
-                    category_df = category_df.drop('Dummy Flow', axis=1)
+                with cat_tab1:
+                    # Create visualization
+                    fig_category = go.Figure()
+                    
+                    # Create bar chart with color coding based on category
+                    colors = {
+                        'Mega Cap': '#1f77b4',
+                        'Large Cap': '#2ca02c',
+                        'Mid Cap': '#ff7f0e',
+                        'Small Cap': '#d62728',
+                        'Micro Cap': '#9467bd'
+                    }
+                    
+                    bar_colors = [colors.get(cat, '#7f7f7f') for cat in category_overview_df.index]
+                    
+                    fig_category.add_trace(go.Bar(
+                        x=category_overview_df.index,
+                        y=category_overview_df['flow_score'],
+                        text=[f"{val:.1f}" for val in category_overview_df['flow_score']],
+                        textposition='outside',
+                        marker_color=bar_colors,
+                        hovertemplate=(
+                            'Category: %{x}<br>'
+                            'Flow Score: %{y:.1f}<br>'
+                            'Analyzed: %{customdata[0]} of %{customdata[1]} stocks<br>'
+                            'Avg Score: %{customdata[2]:.1f}<br>'
+                            'Avg Momentum: %{customdata[3]:.1f}<br>'
+                            'Avg Acceleration: %{customdata[4]:.1f}<extra></extra>'
+                        ),
+                        customdata=np.column_stack((
+                            category_overview_df['analyzed_stocks'],
+                            category_overview_df['total_stocks'],
+                            category_overview_df['avg_score'],
+                            category_overview_df['avg_momentum'],
+                            category_overview_df['avg_acceleration']
+                        ))
+                    ))
+                    
+                    # Determine market state
+                    if len(category_overview_df) >= 3:
+                        small_micro_avg = category_overview_df.loc[
+                            category_overview_df.index.isin(['Small Cap', 'Micro Cap']), 'flow_score'
+                        ].mean()
+                        large_mega_avg = category_overview_df.loc[
+                            category_overview_df.index.isin(['Large Cap', 'Mega Cap']), 'flow_score'
+                        ].mean()
+                        
+                        if small_micro_avg > large_mega_avg + 10:
+                            market_state = "🔥 RISK-ON (Small/Micro Leading)"
+                        elif large_mega_avg > small_micro_avg + 10:
+                            market_state = "🛡️ RISK-OFF (Large/Mega Leading)"
+                        else:
+                            market_state = "⚖️ BALANCED MARKET"
+                    else:
+                        market_state = "📊 ANALYZING..."
+                    
+                    fig_category.update_layout(
+                        title=f"Category Performance - {market_state}",
+                        xaxis_title="Market Cap Category",
+                        yaxis_title="Flow Score",
+                        height=400,
+                        template='plotly_white',
+                        showlegend=False
+                    )
+                    
+                    st.plotly_chart(fig_category, use_container_width=True)
+                    
+                    # Summary metrics
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        best_category = category_overview_df.index[0] if len(category_overview_df) > 0 else "N/A"
+                        best_score = category_overview_df['flow_score'].iloc[0] if len(category_overview_df) > 0 else 0
+                        UIComponents.render_metric_card(
+                            "Leading Category",
+                            f"{best_category}",
+                            f"Score: {best_score:.1f}"
+                        )
+                    
+                    with col2:
+                        if 'avg_momentum' in category_overview_df.columns:
+                            highest_momentum = category_overview_df.nlargest(1, 'avg_momentum')
+                            if not highest_momentum.empty:
+                                UIComponents.render_metric_card(
+                                    "Highest Momentum",
+                                    f"{highest_momentum.index[0]}",
+                                    f"{highest_momentum['avg_momentum'].iloc[0]:.1f}"
+                                )
+                    
+                    with col3:
+                        if 'avg_acceleration' in category_overview_df.columns:
+                            highest_accel = category_overview_df.nlargest(1, 'avg_acceleration')
+                            if not highest_accel.empty:
+                                UIComponents.render_metric_card(
+                                    "Best Acceleration",
+                                    f"{highest_accel.index[0]}",
+                                    f"{highest_accel['avg_acceleration'].iloc[0]:.1f}"
+                                )
                 
-                category_df = category_df.sort_values('Avg Score', ascending=False)
-                
-                st.dataframe(
-                    category_df.style.background_gradient(subset=['Avg Score']),
-                    use_container_width=True
-                )
+                with cat_tab2:
+                    # Full category table
+                    display_cols_category = ['flow_score', 'avg_score', 'median_score', 'avg_momentum', 
+                                           'avg_acceleration', 'avg_breakout', 'avg_volume', 'avg_rvol', 
+                                           'avg_ret_30d', 'analyzed_stocks', 'total_stocks', 'sampling_pct']
+                    
+                    available_category_cols = [col for col in display_cols_category if col in category_overview_df.columns]
+                    
+                    category_display = category_overview_df[available_category_cols].copy()
+                    
+                    # Rename columns for display
+                    display_names = {
+                        'flow_score': 'Flow Score',
+                        'avg_score': 'Avg Score',
+                        'median_score': 'Median Score',
+                        'avg_momentum': 'Avg Momentum',
+                        'avg_acceleration': 'Avg Acceleration',
+                        'avg_breakout': 'Avg Breakout',
+                        'avg_volume': 'Avg Volume',
+                        'avg_rvol': 'Avg RVOL',
+                        'avg_ret_30d': 'Avg 30D Ret',
+                        'analyzed_stocks': 'Analyzed',
+                        'total_stocks': 'Total',
+                        'sampling_pct': 'Sample %'
+                    }
+                    
+                    category_display.columns = [display_names.get(col, col) for col in category_display.columns]
+                    
+                    # Format Sample % column
+                    if 'Sample %' in category_display.columns:
+                        category_display['Sample %'] = category_display['Sample %'].apply(lambda x: f"{x:.1f}%")
+                    
+                    st.dataframe(
+                        category_display.style.background_gradient(
+                            subset=['Flow Score', 'Avg Score', 'Avg Momentum', 'Avg Acceleration'],
+                            cmap='RdYlGn'
+                        ),
+                        use_container_width=True
+                    )
+                    
+                    # Market regime analysis
+                    st.markdown("##### 🎯 Market Regime Analysis")
+                    if len(category_overview_df) >= 2:
+                        # Calculate spreads
+                        if 'Small Cap' in category_overview_df.index and 'Large Cap' in category_overview_df.index:
+                            spread = category_overview_df.loc['Small Cap', 'flow_score'] - category_overview_df.loc['Large Cap', 'flow_score']
+                            if spread > 15:
+                                st.success(f"🔥 Strong Risk-On Signal: Small Cap outperforming Large Cap by {spread:.1f} points")
+                            elif spread < -15:
+                                st.warning(f"🛡️ Risk-Off Signal: Large Cap outperforming Small Cap by {abs(spread):.1f} points")
+                            else:
+                                st.info(f"⚖️ Balanced Market: Small-Large spread is {spread:.1f} points")
             else:
-                st.info("Category column not available in data.")
+                st.info("No category data available in the filtered dataset for analysis.")
         
         else:
             st.info("No data available for analysis.")
@@ -4817,7 +5074,7 @@ def main():
             6. Detect all 25 patterns (vectorized)
             7. Classify into tiers
             8. Apply smart ranking
-            9. Analyze sector & industry performance
+            9. Analyze category, sector & industry performance
             
             #### 🎨 Display Modes
             
@@ -4882,7 +5139,7 @@ def main():
             
             #### 🔒 Production Status
             
-            **Version**: 3.0.9-FINAL-PERFECTED
+            **Version**: 3.1.0-FINAL-PERFECTED
             **Last Updated**: December 2024
             **Status**: PRODUCTION
             **Updates**: PERMANENTLY LOCKED
@@ -4891,16 +5148,16 @@ def main():
             
             #### 🔧 Key Improvements
             
-            - ✅ Robust session state
             - ✅ Perfect filter interconnection
-            - ✅ Industry filter added
-            - ✅ Industry performance analysis
+            - ✅ Industry filter respects sector
+            - ✅ Enhanced performance analysis
+            - ✅ Smart sampling for all levels
             - ✅ Dynamic Google Sheets
             - ✅ O(n) pattern detection
             - ✅ Exact search priority
             - ✅ Zero KeyErrors
-            - ✅ Enhanced UI/UX
-            - ✅ Smart industry sampling
+            - ✅ Beautiful visualizations
+            - ✅ Market regime detection
             
             #### 💬 Credits
             
