@@ -5,7 +5,7 @@ Professional Stock Ranking System with Advanced Analytics
 All bugs fixed, optimized for Streamlit Community Cloud
 Enhanced with perfect filtering system and robust error handling
 
-Version: 3.0.8-FINAL-PERFECTED
+Version: 3.0.9-FINAL-PERFECTED
 Last Updated: December 2024
 Status: PRODUCTION READY - PERMANENTLY LOCKED
 """
@@ -107,9 +107,8 @@ class RobustSessionState:
         'last_good_data': None,
         
         # UI states
-        'search_input': "",
-        'sheets_button': False,
-        'upload_button': False
+        'search_input': ""
+        # Removed button keys - buttons should not have session state defaults
     }
     
     @staticmethod
@@ -435,7 +434,7 @@ class DataValidator:
 # SMART CACHING WITH VERSIONING - UPDATED
 # ============================================
 
-@st.cache_data(ttl=CONFIG.CACHE_TTL, persist="disk", show_spinner=False)
+@st.cache_data(persist="disk", show_spinner=False)
 def load_and_process_data(source_type: str = "sheet", file_data=None, 
                          sheet_id: str = None, gid: str = None,
                          data_version: str = "1.0") -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
@@ -1567,6 +1566,96 @@ class MarketIntelligence:
         sector_metrics['rank'] = sector_metrics['flow_score'].rank(ascending=False)
         
         return sector_metrics.sort_values('flow_score', ascending=False)
+    
+    @staticmethod
+    def detect_industry_rotation(df: pd.DataFrame) -> pd.DataFrame:
+        """Detect industry rotation patterns with smart normalized analysis"""
+        
+        if 'industry' not in df.columns or df.empty:
+            return pd.DataFrame()
+        
+        industry_dfs = []
+        
+        for industry in df['industry'].unique():
+            if industry != 'Unknown' and pd.notna(industry):
+                industry_df = df[df['industry'] == industry].copy()
+                industry_size = len(industry_df)
+                
+                # Smart dynamic sampling based on industry size
+                if industry_size == 1:
+                    sample_count = 1  # Single stock industry
+                elif 2 <= industry_size <= 5:
+                    sample_count = industry_size  # Use all stocks
+                elif 6 <= industry_size <= 10:
+                    sample_count = max(3, int(industry_size * 0.80))  # Use 80%, min 3
+                elif 11 <= industry_size <= 25:
+                    sample_count = max(5, int(industry_size * 0.60))  # Use 60%, min 5
+                elif 26 <= industry_size <= 50:
+                    sample_count = max(10, int(industry_size * 0.40))  # Use 40%, min 10
+                elif 51 <= industry_size <= 100:
+                    sample_count = max(15, int(industry_size * 0.30))  # Use 30%, min 15
+                elif 101 <= industry_size <= 250:
+                    sample_count = max(25, int(industry_size * 0.20))  # Use 20%, min 25
+                elif 251 <= industry_size <= 550:
+                    sample_count = max(40, int(industry_size * 0.15))  # Use 15%, min 40
+                else:  # industry_size > 550
+                    sample_count = min(75, int(industry_size * 0.10))  # Use 10%, max 75
+                
+                if sample_count > 0:
+                    industry_df = industry_df.nlargest(sample_count, 'master_score')
+                else:
+                    industry_df = pd.DataFrame()
+                
+                if not industry_df.empty:
+                    industry_dfs.append(industry_df)
+        
+        if industry_dfs:
+            normalized_df = pd.concat(industry_dfs, ignore_index=True)
+        else:
+            return pd.DataFrame()
+        
+        # Calculate industry metrics on normalized data
+        industry_metrics = normalized_df.groupby('industry').agg({
+            'master_score': ['mean', 'median', 'std', 'count'],
+            'momentum_score': 'mean',
+            'volume_score': 'mean',
+            'rvol': 'mean',
+            'ret_30d': 'mean',
+            'money_flow_mm': 'sum' if 'money_flow_mm' in normalized_df.columns else lambda x: 0
+        }).round(2)
+        
+        # Flatten column names
+        if 'money_flow_mm' in normalized_df.columns:
+            industry_metrics.columns = ['avg_score', 'median_score', 'std_score', 'count', 
+                                       'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d', 'total_money_flow']
+        else:
+            industry_metrics.columns = ['avg_score', 'median_score', 'std_score', 'count', 
+                                       'avg_momentum', 'avg_volume', 'avg_rvol', 'avg_ret_30d', 'dummy_money_flow']
+            industry_metrics = industry_metrics.drop('dummy_money_flow', axis=1)
+        
+        # Add original industry size for reference
+        original_counts = df.groupby('industry').size().rename('total_stocks')
+        industry_metrics = industry_metrics.join(original_counts, how='left')
+        industry_metrics['analyzed_stocks'] = industry_metrics['count']
+        
+        # Calculate flow score with median for robustness
+        industry_metrics['flow_score'] = (
+            industry_metrics['avg_score'] * 0.3 +
+            industry_metrics['median_score'] * 0.2 +
+            industry_metrics['avg_momentum'] * 0.25 +
+            industry_metrics['avg_volume'] * 0.25
+        )
+        
+        # Rank industries
+        industry_metrics['rank'] = industry_metrics['flow_score'].rank(ascending=False)
+        
+        # Calculate sampling percentage for transparency
+        industry_metrics['sampling_pct'] = (
+            (industry_metrics['analyzed_stocks'] / industry_metrics['total_stocks'] * 100)
+            .round(1)
+        )
+        
+        return industry_metrics.sort_values('flow_score', ascending=False)
 
 # ============================================
 # VISUALIZATION ENGINE
@@ -2485,16 +2574,14 @@ def main():
         with data_source_col1:
             if st.button("📊 Google Sheets", 
                         type="primary" if RobustSessionState.safe_get('data_source') == "sheet" else "secondary", 
-                        use_container_width=True, 
-                        key="sheets_button"):
+                        use_container_width=True):
                 RobustSessionState.safe_set('data_source', "sheet")
                 st.rerun()
         
         with data_source_col2:
             if st.button("📁 Upload CSV", 
                         type="primary" if RobustSessionState.safe_get('data_source') == "upload" else "secondary", 
-                        use_container_width=True, 
-                        key="upload_button"):
+                        use_container_width=True):
                 RobustSessionState.safe_set('data_source', "upload")
                 st.rerun()
 
@@ -4100,6 +4187,149 @@ def main():
             else:
                 st.info("No sector data available in the filtered dataset for analysis. Please check your filters.")
             
+            # Industry performance - NEW
+            if 'industry' in filtered_df.columns:
+                st.markdown("#### Industry Performance (Smart Dynamic Sampling)")
+                industry_overview_df = MarketIntelligence.detect_industry_rotation(filtered_df)
+                
+                if not industry_overview_df.empty:
+                    # Create two tabs for different views
+                    ind_tab1, ind_tab2 = st.tabs(["📊 Top Industries", "📈 All Industries"])
+                    
+                    with ind_tab1:
+                        # Show top 20 industries
+                        top_industries = industry_overview_df.head(20)
+                        
+                        # Create visualization
+                        fig_industry = go.Figure()
+                        
+                        fig_industry.add_trace(go.Bar(
+                            x=top_industries.index[:15],  # Top 15 industries for clarity
+                            y=top_industries['flow_score'][:15],
+                            text=[f"{val:.1f}" for val in top_industries['flow_score'][:15]],
+                            textposition='outside',
+                            marker_color=['#2ecc71' if score > 60 else '#e74c3c' if score < 40 else '#f39c12' 
+                                         for score in top_industries['flow_score'][:15]],
+                            hovertemplate=(
+                                'Industry: %{x}<br>'
+                                'Flow Score: %{y:.1f}<br>'
+                                'Analyzed: %{customdata[0]} of %{customdata[1]} stocks<br>'
+                                'Sampling: %{customdata[2]:.1f}%<br>'
+                                'Avg Score: %{customdata[3]:.1f}<br>'
+                                'Median Score: %{customdata[4]:.1f}<extra></extra>'
+                            ),
+                            customdata=np.column_stack((
+                                top_industries['analyzed_stocks'][:15],
+                                top_industries['total_stocks'][:15],
+                                top_industries['sampling_pct'][:15],
+                                top_industries['avg_score'][:15],
+                                top_industries['median_score'][:15]
+                            ))
+                        ))
+                        
+                        fig_industry.update_layout(
+                            title="Top 15 Industries by Smart Money Flow",
+                            xaxis_title="Industry",
+                            yaxis_title="Flow Score",
+                            height=500,
+                            template='plotly_white',
+                            showlegend=False,
+                            xaxis_tickangle=-45
+                        )
+                        
+                        st.plotly_chart(fig_industry, use_container_width=True)
+                        
+                        # Summary metrics
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            UIComponents.render_metric_card(
+                                "Total Industries",
+                                f"{len(industry_overview_df):,}"
+                            )
+                        
+                        with col2:
+                            top_3_avg = top_industries.head(3)['avg_score'].mean()
+                            UIComponents.render_metric_card(
+                                "Top 3 Avg Score",
+                                f"{top_3_avg:.1f}"
+                            )
+                        
+                        with col3:
+                            strong_industries = len(industry_overview_df[industry_overview_df['flow_score'] > 60])
+                            UIComponents.render_metric_card(
+                                "Strong Industries",
+                                f"{strong_industries}",
+                                f"{strong_industries/len(industry_overview_df)*100:.0f}% of total"
+                            )
+                        
+                        with col4:
+                            total_analyzed = industry_overview_df['analyzed_stocks'].sum()
+                            UIComponents.render_metric_card(
+                                "Stocks Analyzed",
+                                f"{total_analyzed:,}",
+                                f"From {len(filtered_df):,} total"
+                            )
+                    
+                    with ind_tab2:
+                        # Full industry table
+                        display_cols_industry = ['flow_score', 'avg_score', 'median_score', 'avg_momentum', 
+                                               'avg_volume', 'avg_rvol', 'avg_ret_30d', 'analyzed_stocks', 
+                                               'total_stocks', 'sampling_pct']
+                        
+                        available_industry_cols = [col for col in display_cols_industry if col in industry_overview_df.columns]
+                        
+                        industry_display = industry_overview_df[available_industry_cols].copy()
+                        
+                        # Rename columns for display
+                        display_names = {
+                            'flow_score': 'Flow Score',
+                            'avg_score': 'Avg Score',
+                            'median_score': 'Median Score',
+                            'avg_momentum': 'Avg Momentum',
+                            'avg_volume': 'Avg Volume',
+                            'avg_rvol': 'Avg RVOL',
+                            'avg_ret_30d': 'Avg 30D Ret',
+                            'analyzed_stocks': 'Analyzed',
+                            'total_stocks': 'Total',
+                            'sampling_pct': 'Sample %'
+                        }
+                        
+                        industry_display.columns = [display_names.get(col, col) for col in industry_display.columns]
+                        
+                        # Format Sample % column
+                        if 'Sample %' in industry_display.columns:
+                            industry_display['Sample %'] = industry_display['Sample %'].apply(lambda x: f"{x:.1f}%")
+                        
+                        # Add rank column
+                        industry_display.insert(0, 'Rank', range(1, len(industry_display) + 1))
+                        
+                        st.dataframe(
+                            industry_display.style.background_gradient(
+                                subset=['Flow Score', 'Avg Score', 'Avg Momentum'],
+                                cmap='RdYlGn'
+                            ),
+                            use_container_width=True,
+                            height=400
+                        )
+                        
+                        st.info("""
+                        📊 **Smart Dynamic Sampling**: 
+                        - Single stock industries: 100% (1 stock)
+                        - 2-5 stocks: 100% (all stocks)
+                        - 6-10 stocks: 80% (min 3)
+                        - 11-25 stocks: 60% (min 5)
+                        - 26-50 stocks: 40% (min 10)
+                        - 51-100 stocks: 30% (min 15)
+                        - 101-250 stocks: 20% (min 25)
+                        - 251-550 stocks: 15% (min 40)
+                        - 550+ stocks: 10% (max 75)
+                        
+                        This ensures fair comparison across industries of vastly different sizes.
+                        """)
+                else:
+                    st.info("No industry data available in the filtered dataset for analysis.")
+            
             # Category performance
             st.markdown("#### Category Performance")
             if 'category' in filtered_df.columns:
@@ -4587,6 +4817,7 @@ def main():
             6. Detect all 25 patterns (vectorized)
             7. Classify into tiers
             8. Apply smart ranking
+            9. Analyze sector & industry performance
             
             #### 🎨 Display Modes
             
@@ -4651,7 +4882,7 @@ def main():
             
             #### 🔒 Production Status
             
-            **Version**: 3.0.8-FINAL-PERFECTED
+            **Version**: 3.0.9-FINAL-PERFECTED
             **Last Updated**: December 2024
             **Status**: PRODUCTION
             **Updates**: PERMANENTLY LOCKED
@@ -4663,11 +4894,13 @@ def main():
             - ✅ Robust session state
             - ✅ Perfect filter interconnection
             - ✅ Industry filter added
+            - ✅ Industry performance analysis
             - ✅ Dynamic Google Sheets
             - ✅ O(n) pattern detection
             - ✅ Exact search priority
             - ✅ Zero KeyErrors
             - ✅ Enhanced UI/UX
+            - ✅ Smart industry sampling
             
             #### 💬 Credits
             
