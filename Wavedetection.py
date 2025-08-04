@@ -532,7 +532,7 @@ validator = DataValidator()
 # ============================================
 
 def get_requests_session() -> requests.Session:
-    """Create requests session with retry logic"""
+    """Create requests session with retry logic."""
     session = requests.Session()
     
     retry = Retry(
@@ -566,7 +566,7 @@ def get_requests_session() -> requests.Session:
 def load_and_process_data(source_type: str = "sheet", file_data=None, 
                          sheet_id: str = None, gid: str = None,
                          data_version: str = "1.0") -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
-    """Load and process data with smart caching and versioning"""
+    """Load and process data with smart caching and versioning."""
     
     start_time = time.perf_counter()
     metadata = {
@@ -579,19 +579,14 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
     }
     
     try:
-        # Reset validator stats
         validator.reset_stats()
         
-        # Load data based on source
         if source_type == "upload" and file_data is not None:
             logger.info("Loading data from uploaded CSV")
-            
-            # Smart CSV reading with encoding detection
             try:
                 df = pd.read_csv(file_data, low_memory=False)
                 metadata['source'] = "User Upload"
             except UnicodeDecodeError:
-                # Try different encodings
                 for encoding in ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']:
                     try:
                         file_data.seek(0)
@@ -603,36 +598,29 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
                 else:
                     raise ValueError("Unable to decode CSV file")
         else:
-            # Google Sheets loading with retry
             if not sheet_id:
                 raise ValueError("Please enter a Google Sheets ID")
             
-            # Clean sheet_id - extract ID from full URL if provided
             sheet_id_match = re.search(r'/d/([a-zA-Z0-9-_]+)', sheet_id)
             if sheet_id_match:
                 sheet_id = sheet_id_match.group(1)
             
-            # Use provided GID or default
             if not gid:
                 gid = CONFIG.DEFAULT_GID
             
-            # Construct CSV URL
             csv_url = CONFIG.CSV_URL_TEMPLATE.format(sheet_id=sheet_id, gid=gid)
             
             logger.info(f"Loading data from Google Sheets ID: {sheet_id}")
             
-            # Use requests session for reliable loading
             session = get_requests_session()
             
             try:
                 response = session.get(csv_url, timeout=CONFIG.REQUEST_TIMEOUT)
                 response.raise_for_status()
                 
-                # Verify content
                 if len(response.content) < 100:
                     raise ValueError("Response too small, likely an error page")
                 
-                # Load CSV
                 df = pd.read_csv(BytesIO(response.content), low_memory=False)
                 metadata['source'] = "Google Sheets"
                 metadata['sheet_id'] = sheet_id
@@ -640,7 +628,6 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
             except requests.exceptions.RequestException as e:
                 logger.error(f"Failed to load from Google Sheets: {str(e)}")
                 
-                # Try to use cached data as fallback
                 last_good_data = RobustSessionState.safe_get('last_good_data')
                 if last_good_data:
                     logger.info("Using cached data as fallback")
@@ -650,44 +637,36 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
                     return df, timestamp, metadata
                 raise
         
-        # Track load time
         metadata['performance']['load_time'] = time.perf_counter() - start_time
         
-        # Validate loaded data
         is_valid, validation_msg = DataValidator.validate_dataframe(
             df, CONFIG.CRITICAL_COLUMNS, "Initial load"
         )
         if not is_valid:
             raise ValueError(validation_msg)
         
-        # Process the data
         processing_start = time.perf_counter()
         df = DataProcessor.process_dataframe(df, metadata)
         metadata['performance']['processing_time'] = time.perf_counter() - processing_start
         
-        # Calculate all scores and rankings
         scoring_start = time.perf_counter()
         df = RankingEngine.calculate_all_scores(df)
         metadata['performance']['scoring_time'] = time.perf_counter() - scoring_start
         
-        # Detect patterns
         pattern_start = time.perf_counter()
         df = PatternDetector.detect_all_patterns_optimized(df)
         metadata['performance']['pattern_time'] = time.perf_counter() - pattern_start
         
-        # Add advanced metrics
         metrics_start = time.perf_counter()
         df = AdvancedMetrics.calculate_all_metrics(df)
         metadata['performance']['metrics_time'] = time.perf_counter() - metrics_start
         
-        # Final validation
         is_valid, validation_msg = DataValidator.validate_dataframe(
             df, ['master_score', 'rank'], "Final processed"
         )
         if not is_valid:
             raise ValueError(validation_msg)
         
-        # Get validation report
         validation_report = validator.get_validation_report()
         if validation_report['total_issues'] > 0:
             metadata['warnings'].append(
@@ -695,16 +674,13 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
             )
             metadata['validation_report'] = validation_report
         
-        # Store as last good data
         timestamp = datetime.now(timezone.utc)
         RobustSessionState.safe_set('last_good_data', (df.copy(), timestamp, metadata))
         
-        # Record total processing time
         total_time = time.perf_counter() - start_time
         metadata['performance']['total_time'] = total_time
         metadata['processing_end'] = datetime.now(timezone.utc)
         
-        # Log performance summary
         logger.info(
             f"Data processing complete: {len(df)} stocks in {total_time:.2f}s "
             f"(Load: {metadata['performance'].get('load_time', 0):.2f}s, "
@@ -712,7 +688,6 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
             f"Score: {metadata['performance'].get('scoring_time', 0):.2f}s)"
         )
         
-        # Clean up memory
         gc.collect()
         
         return df, timestamp, metadata
@@ -721,7 +696,6 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
         logger.error(f"Failed to load and process data: {str(e)}")
         metadata['errors'].append(str(e))
         
-        # Try to use last good data if available
         last_good_data = RobustSessionState.safe_get('last_good_data')
         if last_good_data:
             df, timestamp, old_metadata = last_good_data
@@ -744,25 +718,20 @@ class DataProcessor:
     def process_dataframe(df: pd.DataFrame, metadata: Dict[str, Any]) -> pd.DataFrame:
         """Complete data processing pipeline"""
         
-        # Create copy to avoid modifying original
         df = df.copy()
         initial_count = len(df)
         
         logger.info(f"Processing {initial_count} rows...")
         
-        # Process ticker column first (required)
         df['ticker'] = df['ticker'].apply(DataValidator.sanitize_string)
         
-        # Process numeric columns with vectorization
         numeric_cols = [col for col in df.columns if col not in 
                        ['ticker', 'company_name', 'category', 'sector', 'industry', 'year', 'market_cap']]
         
         for col in numeric_cols:
             if col in df.columns:
-                # Determine if percentage column
                 is_pct = col in CONFIG.PERCENTAGE_COLUMNS
                 
-                # Determine bounds
                 if 'volume' in col.lower():
                     bounds = CONFIG.VALUE_BOUNDS['volume']
                 elif col == 'rvol':
@@ -774,31 +743,25 @@ class DataProcessor:
                 else:
                     bounds = CONFIG.VALUE_BOUNDS.get('price', None)
                 
-                # Apply cleaning with tracking
                 df[col] = df[col].apply(
                     lambda x: validator.clean_numeric_value(x, is_pct, bounds, col)
                 )
         
-        # Process categorical columns
         string_cols = ['ticker', 'company_name', 'category', 'sector', 'industry']
         for col in string_cols:
             if col in df.columns:
                 df[col] = df[col].apply(DataValidator.sanitize_string)
         
-        # Smart industry handling - if missing, use sector
         if 'industry' not in df.columns and 'sector' in df.columns:
             df['industry'] = df['sector']
             metadata['warnings'].append("Industry column created from sector data")
         
-        # Fix volume ratios (convert from percentage change to ratio)
         for col in CONFIG.VOLUME_RATIO_COLUMNS:
             if col in df.columns:
-                # Convert percentage change to ratio: (100 + change%) / 100
                 df[col] = (100 + df[col]) / 100
                 df[col] = df[col].clip(0.01, 1000.0)
                 df[col] = df[col].fillna(1.0)
         
-        # Calculate RVOL if missing
         if 'rvol' not in df.columns or df['rvol'].isna().all():
             if 'volume_1d' in df.columns and 'volume_90d' in df.columns:
                 with np.errstate(divide='ignore', invalid='ignore'):
@@ -809,28 +772,22 @@ class DataProcessor:
                     )
                 metadata['warnings'].append("RVOL calculated from volume data")
         
-        # Validate critical data
         df = df.dropna(subset=['ticker', 'price'], how='any')
-        df = df[df['price'] > 0.01]  # Minimum valid price
+        df = df[df['price'] > 0.01]
         
-        # Remove duplicates (keep first)
         before_dedup = len(df)
         df = df.drop_duplicates(subset=['ticker'], keep='first')
         if before_dedup > len(df):
             metadata['warnings'].append(f"Removed {before_dedup - len(df)} duplicate tickers")
         
-        # Fill missing values with sensible defaults
         df = DataProcessor._fill_missing_values(df)
         
-        # Add tier classifications
         df = DataProcessor._add_tier_classifications(df)
         
-        # Data quality check
         removed = initial_count - len(df)
         if removed > 0:
             metadata['warnings'].append(f"Removed {removed} invalid rows during processing")
         
-        # Calculate data completeness
         total_cells = len(df) * len(df.columns)
         missing_cells = df.isna().sum().sum()
         completeness = (1 - missing_cells / total_cells) * 100 if total_cells > 0 else 0
@@ -843,7 +800,6 @@ class DataProcessor:
             'columns_available': list(df.columns)
         }
         
-        # Store quality metrics in session state
         RobustSessionState.safe_set('data_quality', metadata['data_quality'])
         
         logger.info(f"Processed {len(df)} valid stocks from {initial_count} initial rows")
@@ -852,45 +808,37 @@ class DataProcessor:
     
     @staticmethod
     def _fill_missing_values(df: pd.DataFrame) -> pd.DataFrame:
-        """Fill missing values with sensible defaults"""
+        """Fill missing values with sensible defaults. This is a defensive
+        method to ensure no NaN values remain in critical columns before scoring."""
         
-        # Position data defaults
-        if 'from_low_pct' in df.columns:
-            df['from_low_pct'] = df['from_low_pct'].fillna(50)
-        else:
-            df['from_low_pct'] = 50
+        df['from_low_pct'] = df.get('from_low_pct', pd.Series(50.0, index=df.index)).fillna(50.0)
+        df['from_high_pct'] = df.get('from_high_pct', pd.Series(-50.0, index=df.index)).fillna(-50.0)
         
-        if 'from_high_pct' in df.columns:
-            df['from_high_pct'] = df['from_high_pct'].fillna(-50)
-        else:
-            df['from_high_pct'] = -50
+        df['rvol'] = df.get('rvol', pd.Series(1.0, index=df.index)).fillna(1.0)
         
-        # RVOL default
-        if 'rvol' in df.columns:
-            df['rvol'] = df['rvol'].fillna(1.0)
-        else:
-            df['rvol'] = 1.0
-        
-        # Return defaults (0 for missing returns)
         return_cols = [col for col in df.columns if col.startswith('ret_')]
         for col in return_cols:
-            df[col] = df[col].fillna(0)
+            if col in df.columns:
+                df[col] = df[col].fillna(0.0)
         
-        # Volume defaults
         volume_cols = [col for col in df.columns if col.startswith('volume_')]
         for col in volume_cols:
-            df[col] = df[col].fillna(0)
+            if col in df.columns:
+                df[col] = df[col].fillna(0)
         
-        # Category/Sector/Industry defaults
-        df['category'] = df.get('category', 'Unknown').fillna('Unknown')
-        df['sector'] = df.get('sector', 'Unknown').fillna('Unknown')
-        df['industry'] = df.get('industry', df.get('sector', 'Unknown')).fillna('Unknown')
+        df['category'] = df.get('category', pd.Series('Unknown', index=df.index)).fillna('Unknown')
+        df['sector'] = df.get('sector', pd.Series('Unknown', index=df.index)).fillna('Unknown')
+        
+        if 'industry' in df.columns:
+            df['industry'] = df['industry'].fillna(df['sector'])
+        else:
+            df['industry'] = df['sector']
         
         return df
     
     @staticmethod
     def _add_tier_classifications(df: pd.DataFrame) -> pd.DataFrame:
-        """Add tier classifications with proper boundary handling"""
+        """Add tier classifications for filtering"""
         
         def classify_tier(value: float, tier_dict: Dict[str, Tuple[float, float]]) -> str:
             """Classify value into tier with fixed boundary logic"""
@@ -898,38 +846,52 @@ class DataProcessor:
                 return "Unknown"
             
             for tier_name, (min_val, max_val) in tier_dict.items():
-                # Use < for upper bound, <= for lower bound to avoid gaps
                 if min_val < value <= max_val:
                     return tier_name
-                # Handle edge cases for first tier (includes min_val)
                 if min_val == -float('inf') and value <= max_val:
                     return tier_name
-                # Handle edge cases for last tier (includes max_val)
                 if max_val == float('inf') and value > min_val:
                     return tier_name
-                # Special case for zero boundaries
                 if min_val == 0 and max_val > 0 and value == 0:
-                    # Zero belongs to the tier that starts at 0
-                    continue  # Let the next tier catch it
+                    continue
             
             return "Unknown"
         
-        # Add tier columns
-        if 'eps_current' in df.columns:
-            df['eps_tier'] = df['eps_current'].apply(
-                lambda x: classify_tier(x, CONFIG.TIERS['eps'])
-            )
+        if 'eps_change_pct' in df.columns:
+            conditions = [
+                df['eps_change_pct'] < 0,
+                (df['eps_change_pct'] >= 0) & (df['eps_change_pct'] < 20),
+                (df['eps_change_pct'] >= 20) & (df['eps_change_pct'] < 50),
+                (df['eps_change_pct'] >= 50) & (df['eps_change_pct'] < 100),
+                df['eps_change_pct'] >= 100
+            ]
+            choices = ['Negative', 'Low (0-20%)', 'Medium (20-50%)', 
+                       'High (50-100%)', 'Extreme (>100%)']
+            df['eps_tier'] = np.select(conditions, choices, default='Unknown')
         
         if 'pe' in df.columns:
-            df['pe_tier'] = df['pe'].apply(
-                lambda x: "Negative/NA" if pd.isna(x) or x <= 0 
-                else classify_tier(x, CONFIG.TIERS['pe'])
-            )
+            conditions = [
+                df['pe'] < 0,
+                (df['pe'] >= 0) & (df['pe'] < 15),
+                (df['pe'] >= 15) & (df['pe'] < 25),
+                (df['pe'] >= 25) & (df['pe'] < 50),
+                df['pe'] >= 50
+            ]
+            choices = ['Negative/NA', 'Value (<15)', 'Fair (15-25)', 
+                       'Growth (25-50)', 'Expensive (>50)']
+            df['pe_tier'] = np.select(conditions, choices, default='Unknown')
         
         if 'price' in df.columns:
-            df['price_tier'] = df['price'].apply(
-                lambda x: classify_tier(x, CONFIG.TIERS['price'])
-            )
+            conditions = [
+                df['price'] < 10,
+                (df['price'] >= 10) & (df['price'] < 100),
+                (df['price'] >= 100) & (df['price'] < 1000),
+                (df['price'] >= 1000) & (df['price'] < 5000),
+                df['price'] >= 5000
+            ]
+            choices = ['Penny (<₹10)', 'Low (₹10-100)', 'Mid (₹100-1000)', 
+                       'High (₹1000-5000)', 'Premium (>₹5000)']
+            df['price_tier'] = np.select(conditions, choices, default='Unknown')
         
         return df
 
@@ -944,6 +906,9 @@ class AdvancedMetrics:
     def calculate_all_metrics(df: pd.DataFrame) -> pd.DataFrame:
         """Calculate all advanced metrics"""
         
+        # New from V1: Market Regime Detection
+        df['market_regime'] = AdvancedMetrics._detect_market_regime(df)
+
         # Money Flow (in millions)
         if all(col in df.columns for col in ['price', 'volume_1d', 'rvol']):
             df['money_flow'] = df['price'] * df['volume_1d'] * df['rvol']
@@ -989,6 +954,9 @@ class AdvancedMetrics:
         
         if 'ret_3m' in df.columns:
             df['momentum_harmony'] += (df['ret_3m'] > 0).astype(int)
+
+        # New from V1: Smart Money Flow
+        df['smart_money_flow'] = AdvancedMetrics._calculate_smart_money_flow(df)
         
         # Wave State
         df['wave_state'] = df.apply(AdvancedMetrics._get_wave_state, axis=1)
@@ -1028,7 +996,53 @@ class AdvancedMetrics:
             return "🌊 FORMING"
         else:
             return "💥 BREAKING"
-
+            
+    @staticmethod
+    def _detect_market_regime(df: pd.DataFrame) -> pd.Series:
+        """Detect current market regime with supporting data."""
+        if df.empty or 'ret_30d' not in df.columns:
+            return pd.Series("😴 RANGE-BOUND", index=df.index)
+        
+        positive_breadth = (df['ret_30d'] > 0).mean()
+        strong_positive = (df['ret_30d'] > 10).mean()
+        strong_negative = (df['ret_30d'] < -10).mean()
+        
+        regime = np.full(len(df), "😴 RANGE-BOUND", dtype=object)
+        
+        if positive_breadth > 0.6 and strong_positive > 0.3:
+            regime = "🔥 RISK-ON BULL"
+        elif positive_breadth < 0.4 and strong_negative > 0.3:
+            regime = "🛡️ RISK-OFF DEFENSIVE"
+        else:
+            regime = "😴 RANGE-BOUND"
+        
+        return pd.Series(regime, index=df.index)
+    
+    @staticmethod
+    def _calculate_smart_money_flow(df: pd.DataFrame) -> pd.Series:
+        """Calculate smart money flow indicator using V1's logic."""
+        smart_flow = pd.Series(50, index=df.index, dtype=float)
+        
+        if all(col in df.columns for col in ['vol_ratio_7d_90d', 'vol_ratio_30d_90d']):
+            vol_persistence = (
+                (df['vol_ratio_7d_90d'] > 1.2) & 
+                (df['vol_ratio_30d_90d'] > 1.1)
+            ).astype(float) * 20
+            smart_flow += vol_persistence
+        
+        if 'ret_30d' in df.columns and 'volume_score' in df.columns:
+            divergence = np.where(
+                (np.abs(df['ret_30d']) < 5) & (df['volume_score'] > 70),
+                20, 0
+            )
+            smart_flow += divergence
+        
+        if 'liquidity_score' in df.columns:
+            institutional = np.where(df['liquidity_score'] > 80, 10, 0)
+            smart_flow += institutional
+        
+        return smart_flow.clip(0, 100)
+        
 # ============================================
 # RANKING ENGINE - OPTIMIZED
 # ============================================
@@ -1080,6 +1094,11 @@ class RankingEngine:
             quality_bonus = df['momentum_quality'] * 0.05
             df['master_score'] = (df['master_score'] + quality_bonus).clip(0, 100)
         
+        # Add Smart Money Flow Bonus
+        if 'smart_money_flow' in df.columns:
+            flow_bonus = np.where(df['smart_money_flow'] > 70, 3, 0)
+            df['master_score'] = (df['master_score'] + flow_bonus).clip(0, 100)
+
         # Calculate ranks
         df['rank'] = df['master_score'].rank(method='first', ascending=False, na_option='bottom')
         df['rank'] = df['rank'].fillna(len(df) + 1).astype(int)
@@ -1559,7 +1578,7 @@ class PatternDetector:
             pattern_results['⚠️ HIGH PE'] = has_valid_pe & (df['pe'] > 100)
         
         # 17. 52W High Approach
-        if 'from_high_pct' in df.columns and 'volume_score' in df.columns and 'momentum_score' in df.columns:
+        if all(col in df.columns for col in ['from_high_pct', 'volume_score', 'momentum_score']):
             pattern_results['🎯 52W HIGH APPROACH'] = (
                 (df['from_high_pct'] > -5) & 
                 (df['volume_score'] >= 70) & 
@@ -2212,7 +2231,7 @@ class Visualizer:
             return go.Figure()
 
 # ============================================
-# FILTER ENGINE - ENHANCED WITH INDUSTRY
+# FILTER ENGINE - ENHANCED WITH INTERCONNECTION
 # ============================================
 
 class FilterEngine:
@@ -2843,7 +2862,8 @@ class UIComponents:
                     yaxis_title="Flow Score",
                     height=400,
                     template='plotly_white',
-                    showlegend=False
+                    showlegend=False,
+                    xaxis_tickangle=-45
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
@@ -3201,25 +3221,30 @@ def main():
             st.warning("Please enter a Google Sheets ID to continue")
             st.stop()
         
+        # V1's Smart Cache Key Implementation
+        cache_key_prefix = f"{RobustSessionState.safe_get('data_source')}_{sheet_id}_{gid}"
+        current_hour_key = datetime.now(timezone.utc).strftime('%Y-%m-%d-%H')
+        data_version_hash = hashlib.md5(f"{cache_key_prefix}_{current_hour_key}".encode()).hexdigest()
+
         # Load and process data
         with st.spinner("📥 Loading and processing data..."):
             try:
                 if RobustSessionState.safe_get('data_source') == "upload" and uploaded_file is not None:
                     ranked_df, data_timestamp, metadata = load_and_process_data(
-                        "upload", file_data=uploaded_file
+                        "upload", file_data=uploaded_file, data_version=data_version_hash
                     )
                 else:
                     ranked_df, data_timestamp, metadata = load_and_process_data(
                         "sheet", 
                         sheet_id=sheet_id,
-                        gid=gid
+                        gid=gid,
+                        data_version=data_version_hash
                     )
                 
                 RobustSessionState.safe_set('ranked_df', ranked_df)
                 RobustSessionState.safe_set('data_timestamp', data_timestamp)
                 RobustSessionState.safe_set('last_refresh', datetime.now(timezone.utc))
                 
-                # Show any warnings or errors
                 if metadata.get('warnings'):
                     for warning in metadata['warnings']:
                         st.warning(warning)
@@ -3231,7 +3256,6 @@ def main():
             except Exception as e:
                 logger.error(f"Failed to load data: {str(e)}")
                 
-                # Try to use last good data
                 last_good_data = RobustSessionState.safe_get('last_good_data')
                 if last_good_data:
                     ranked_df, data_timestamp, metadata = last_good_data
@@ -3240,7 +3264,6 @@ def main():
                     st.error(f"❌ Error: {str(e)}")
                     st.info("Common issues:\n- Invalid Google Sheets ID\n- Sheet not publicly accessible\n- Network connectivity\n- Invalid CSV format")
                     st.stop()
-        
     except Exception as e:
         st.error(f"❌ Critical Error: {str(e)}")
         with st.expander("🔍 Error Details"):
