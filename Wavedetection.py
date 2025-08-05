@@ -19,19 +19,30 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 from typing import Dict, List, Tuple, Optional, Any, Union, Set
 from dataclasses import dataclass, field
 from functools import lru_cache, wraps
 import time
-from io import BytesIO
+from io import BytesIO, StringIO
 import warnings
 import gc
 import re
+import hashlib
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from collections import defaultdict, Counter
+import math
 
 # Suppress warnings for clean output
 warnings.filterwarnings('ignore')
+
+# Performance optimizations
+np.seterr(all='ignore')
+pd.options.mode.chained_assignment = None
+pd.options.display.float_format = '{:.2f}'.format
 
 # Set random seed for reproducibility
 np.random.seed(42)
@@ -40,9 +51,7 @@ np.random.seed(42)
 # LOGGING CONFIGURATION
 # ============================================
 
-# Production logging with proper formatting
 log_level = logging.INFO
-
 logging.basicConfig(
     level=log_level,
     format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
@@ -57,14 +66,13 @@ logger = logging.getLogger(__name__)
 class RobustSessionState:
     """Bulletproof session state management - prevents all KeyErrors"""
     
-    # Complete list of ALL session state keys with their default values
     STATE_DEFAULTS = {
-        # Core states
         'search_query': "",
-        'last_refresh': None,  # Will be set to datetime on first run
+        'search_input': "",
+        'last_refresh': None,
         'data_source': "sheet",
-        'sheet_id': "",  # For custom Google Sheets
-        'gid': "",  # For sheet tab GID
+        'sheet_id': "",
+        'gid': "",
         'user_preferences': {
             'default_top_n': 50,
             'display_mode': 'Technical',
@@ -78,11 +86,9 @@ class RobustSessionState:
         'performance_metrics': {},
         'data_quality': {},
         'trigger_clear': False,
-        
-        # All filter states with proper defaults
         'category_filter': [],
         'sector_filter': [],
-        'industry_filter': [],  # NEW: Industry filter
+        'industry_filter': [],
         'min_score': 0,
         'patterns': [],
         'trend_filter': "All Trends",
@@ -100,23 +106,16 @@ class RobustSessionState:
         'wave_timeframe_select': "All Waves",
         'wave_sensitivity': "Balanced",
         'export_template_radio': "Full Analysis (All Data)",
-        'display_mode_toggle': 0,  # Radio button index
-        
-        # Data states
+        'display_mode_toggle': 0,
         'ranked_df': None,
         'data_timestamp': None,
         'last_good_data': None,
-        
-        # UI states
-        'search_input': ""
-        # Removed button keys - buttons should not have session state defaults
     }
     
     @staticmethod
     def safe_get(key: str, default: Any = None) -> Any:
         """Safely get a session state value with fallback"""
         if key not in st.session_state:
-            # Use our defaults if available, otherwise use provided default
             st.session_state[key] = RobustSessionState.STATE_DEFAULTS.get(key, default)
         return st.session_state[key]
     
@@ -130,7 +129,6 @@ class RobustSessionState:
         """Initialize all session state variables"""
         for key, default_value in RobustSessionState.STATE_DEFAULTS.items():
             if key not in st.session_state:
-                # Special handling for datetime
                 if key == 'last_refresh' and default_value is None:
                     st.session_state[key] = datetime.now(timezone.utc)
                 else:
@@ -147,33 +145,32 @@ class RobustSessionState:
             'quick_filter', 'quick_filter_applied',
             'wave_states_filter', 'wave_strength_range_slider',
             'show_sensitivity_details', 'show_market_regime',
-            'wave_timeframe_select', 'wave_sensitivity'
+            'wave_timeframe_select', 'wave_sensitivity',
+            'search_query', 'search_input'
         ]
         
         for key in filter_keys:
             if key in RobustSessionState.STATE_DEFAULTS:
                 RobustSessionState.safe_set(key, RobustSessionState.STATE_DEFAULTS[key])
         
-        # Reset filter dictionaries
         RobustSessionState.safe_set('filters', {})
         RobustSessionState.safe_set('active_filter_count', 0)
         RobustSessionState.safe_set('trigger_clear', False)
 
 # ============================================
-# CONFIGURATION AND CONSTANTS - UPDATED
+# CONFIGURATION AND CONSTANTS
 # ============================================
 
 @dataclass(frozen=True)
 class Config:
     """System configuration with validated weights and thresholds"""
     
-    # Data source - NOW DYNAMIC (WITH DEFAULT GID)
     DEFAULT_SHEET_URL_TEMPLATE: str = "https://docs.google.com/spreadsheets/d/{sheet_id}/edit?usp=sharing"
     CSV_URL_TEMPLATE: str = "https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
-    DEFAULT_GID: str = "1823439984"  # Default GID kept as specified
+    DEFAULT_GID: str = "1823439984"
     
     # Cache settings optimized for Streamlit Community Cloud
-    CACHE_TTL: int = 3600  # 1 hour
+    CACHE_TTL: int = 3600
     STALE_DATA_HOURS: int = 24
     
     # Master Score 3.0 weights (total = 100%) - DO NOT MODIFY
@@ -184,114 +181,56 @@ class Config:
     BREAKOUT_WEIGHT: float = 0.10
     RVOL_WEIGHT: float = 0.10
     
-    # Display settings
     DEFAULT_TOP_N: int = 50
     AVAILABLE_TOP_N: List[int] = field(default_factory=lambda: [10, 20, 50, 100, 200, 500])
     
-    # Critical columns (app fails without these)
     CRITICAL_COLUMNS: List[str] = field(default_factory=lambda: ['ticker', 'price', 'volume_1d'])
     
-    # Important columns (degraded experience without)
-    IMPORTANT_COLUMNS: List[str] = field(default_factory=lambda: [
-        'ret_30d', 'from_low_pct', 'from_high_pct',
-        'vol_ratio_1d_90d', 'vol_ratio_7d_90d', 'vol_ratio_30d_90d',
-        'vol_ratio_1d_180d', 'vol_ratio_7d_180d', 'vol_ratio_30d_180d',
-        'vol_ratio_90d_180d', 'industry'  # Added industry
-    ])
-    
-    # All percentage columns for consistent handling
     PERCENTAGE_COLUMNS: List[str] = field(default_factory=lambda: [
-        'from_low_pct', 'from_high_pct',
-        'ret_1d', 'ret_3d', 'ret_7d', 'ret_30d', 
-        'ret_3m', 'ret_6m', 'ret_1y', 'ret_3y', 'ret_5y',
-        'eps_change_pct'
+        'from_low_pct', 'from_high_pct', 'ret_1d', 'ret_3d', 'ret_7d', 'ret_30d', 
+        'ret_3m', 'ret_6m', 'ret_1y', 'ret_3y', 'ret_5y', 'eps_change_pct'
     ])
     
-    # Volume ratio columns
     VOLUME_RATIO_COLUMNS: List[str] = field(default_factory=lambda: [
         'vol_ratio_1d_90d', 'vol_ratio_7d_90d', 'vol_ratio_30d_90d',
         'vol_ratio_1d_180d', 'vol_ratio_7d_180d', 'vol_ratio_30d_180d',
         'vol_ratio_90d_180d'
     ])
-    
-    # Pattern thresholds
+   
     PATTERN_THRESHOLDS: Dict[str, float] = field(default_factory=lambda: {
-        "category_leader": 90,
-        "hidden_gem": 80,
-        "acceleration": 85,
-        "institutional": 75,
-        "vol_explosion": 95,
-        "breakout_ready": 80,
-        "market_leader": 95,
-        "momentum_wave": 75,
-        "liquid_leader": 80,
-        "long_strength": 80,
-        "52w_high_approach": 90,
-        "52w_low_bounce": 85,
-        "golden_zone": 85,
-        "vol_accumulation": 80,
-        "momentum_diverge": 90,
-        "range_compress": 75,
-        "stealth": 70,
-        "vampire": 85,
-        "perfect_storm": 80
+        "category_leader": 90, "hidden_gem": 80, "acceleration": 85, "institutional": 75,
+        "vol_explosion": 95, "breakout_ready": 80, "market_leader": 95, "momentum_wave": 75,
+        "liquid_leader": 80, "long_strength": 80, "52w_high_approach": 90, "52w_low_bounce": 85,
+        "golden_zone": 85, "vol_accumulation": 80, "momentum_diverge": 90, "range_compress": 75,
+        "stealth": 70, "vampire": 85, "perfect_storm": 80,
+        "value_momentum": 70, "earnings_rocket": 70, "quality_leader": 80, "turnaround": 70, "high_pe": 100
     })
     
-    # Value bounds for data validation
     VALUE_BOUNDS: Dict[str, Tuple[float, float]] = field(default_factory=lambda: {
-        'price': (0.01, 1_000_000),
-        'rvol': (0.01, 1_000_000.0),
-        'pe': (-10000, 10000),
-        'returns': (-99.99, 9999.99),
-        'volume': (0, 1e12)
+        'price': (0.01, 1_000_000), 'rvol': (0.01, 1_000_000.0), 'pe': (-10000, 10000),
+        'returns': (-99.99, 9999.99), 'volume': (0, 1e12)
     })
     
-    # Performance thresholds
     PERFORMANCE_TARGETS: Dict[str, float] = field(default_factory=lambda: {
-        'data_processing': 2.0,
-        'filtering': 0.2,
-        'pattern_detection': 0.5,
-        'export_generation': 1.0,
-        'search': 0.05
+        'data_processing': 2.0, 'filtering': 0.2, 'pattern_detection': 0.5,
+        'export_generation': 1.0, 'search': 0.05
     })
     
-    # Market categories (Indian market specific)
     MARKET_CATEGORIES: List[str] = field(default_factory=lambda: [
         'Mega Cap', 'Large Cap', 'Mid Cap', 'Small Cap', 'Micro Cap'
     ])
     
-    # Tier definitions with proper boundaries
     TIERS: Dict[str, Dict[str, Tuple[float, float]]] = field(default_factory=lambda: {
-        "eps": {
-            "Loss": (-float('inf'), 0),
-            "0-5": (0, 5),
-            "5-10": (5, 10),
-            "10-20": (10, 20),
-            "20-50": (20, 50),
-            "50-100": (50, 100),
-            "100+": (100, float('inf'))
-        },
-        "pe": {
-            "Negative/NA": (-float('inf'), 0),
-            "0-10": (0, 10),
-            "10-15": (10, 15),
-            "15-20": (15, 20),
-            "20-30": (20, 30),
-            "30-50": (30, 50),
-            "50+": (50, float('inf'))
-        },
-        "price": {
-            "0-100": (0, 100),
-            "100-250": (100, 250),
-            "250-500": (250, 500),
-            "500-1000": (500, 1000),
-            "1000-2500": (1000, 2500),
-            "2500-5000": (2500, 5000),
-            "5000+": (5000, float('inf'))
-        }
+        "eps": {"Loss": (-np.inf, 0), "0-5": (0, 5), "5-10": (5, 10), "10-20": (10, 20), "20-50": (20, 50), "50-100": (50, 100), "100+": (100, np.inf)},
+        "pe": {"Negative/NA": (-np.inf, 0), "0-10": (0, 10), "10-15": (10, 15), "15-20": (15, 20), "20-30": (20, 30), "30-50": (30, 50), "50+": (50, np.inf)},
+        "price": {"0-100": (0, 100), "100-250": (100, 250), "250-500": (250, 500), "500-1000": (500, 1000), "1000-2500": (1000, 2500), "2500-5000": (2500, 5000), "5000+": (5000, np.inf)}
     })
+    
+    def __post_init__(self):
+        total_weight = sum([self.POSITION_WEIGHT, self.VOLUME_WEIGHT, self.MOMENTUM_WEIGHT, self.ACCELERATION_WEIGHT, self.BREAKOUT_WEIGHT, self.RVOL_WEIGHT])
+        if not np.isclose(total_weight, 1.0, rtol=1e-5):
+            raise ValueError(f"Scoring weights must sum to 1.0, but got {total_weight}")
 
-# Global configuration instance
 CONFIG = Config()
 
 # ============================================
@@ -312,13 +251,11 @@ class PerformanceMonitor:
                     result = func(*args, **kwargs)
                     elapsed = time.perf_counter() - start
                     
-                    # Log if exceeds target
                     if target_time and elapsed > target_time:
                         logger.warning(f"{func.__name__} took {elapsed:.2f}s (target: {target_time}s)")
                     elif elapsed > 1.0:
                         logger.info(f"{func.__name__} completed in {elapsed:.2f}s")
                     
-                    # Store timing
                     perf_metrics = RobustSessionState.safe_get('performance_metrics', {})
                     perf_metrics[func.__name__] = elapsed
                     RobustSessionState.safe_set('performance_metrics', perf_metrics)
@@ -347,17 +284,14 @@ class DataValidator:
         if df.empty:
             return False, f"{context}: DataFrame is empty"
         
-        # Check critical columns
         missing_critical = [col for col in CONFIG.CRITICAL_COLUMNS if col not in df.columns]
         if missing_critical:
             return False, f"{context}: Missing critical columns: {missing_critical}"
         
-        # Check for duplicate tickers
         duplicates = df['ticker'].duplicated().sum()
         if duplicates > 0:
             logger.warning(f"{context}: Found {duplicates} duplicate tickers")
         
-        # Calculate data quality metrics
         total_cells = len(df) * len(df.columns)
         filled_cells = df.notna().sum().sum()
         completeness = (filled_cells / total_cells * 100) if total_cells > 0 else 0
@@ -365,7 +299,6 @@ class DataValidator:
         if completeness < 50:
             logger.warning(f"{context}: Low data completeness ({completeness:.1f}%)")
         
-        # Store quality metrics
         data_quality = RobustSessionState.safe_get('data_quality', {})
         data_quality.update({
             'completeness': completeness,
@@ -387,27 +320,21 @@ class DataValidator:
             return np.nan
         
         try:
-            # Convert to string for cleaning
             cleaned = str(value).strip()
             
-            # Check for invalid values
             if cleaned.upper() in ['', '-', 'N/A', 'NA', 'NAN', 'NONE', '#VALUE!', '#ERROR!', '#DIV/0!', 'INF', '-INF']:
                 return np.nan
             
-            # Remove common symbols and spaces
             cleaned = cleaned.replace('₹', '').replace('$', '').replace(',', '').replace(' ', '').replace('%', '')
             
-            # Convert to float
             result = float(cleaned)
             
-            # Apply bounds if specified
             if bounds:
                 min_val, max_val = bounds
                 if result < min_val or result > max_val:
                     logger.debug(f"Value {result} outside bounds [{min_val}, {max_val}]")
                     result = np.clip(result, min_val, max_val)
             
-            # Check for unreasonable values
             if np.isnan(result) or np.isinf(result):
                 return np.nan
             
@@ -426,13 +353,12 @@ class DataValidator:
         if cleaned.upper() in ['', 'N/A', 'NA', 'NAN', 'NONE', 'NULL', '-']:
             return default
         
-        # Remove excessive whitespace
         cleaned = ' '.join(cleaned.split())
         
         return cleaned
 
 # ============================================
-# SMART CACHING WITH VERSIONING - UPDATED
+# SMART CACHING WITH VERSIONING
 # ============================================
 
 @st.cache_data(persist="disk", show_spinner=False)
@@ -534,6 +460,13 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
     except Exception as e:
         logger.error(f"Failed to load and process data: {str(e)}")
         metadata['errors'].append(str(e))
+        
+        last_good_data = RobustSessionState.safe_get('last_good_data')
+        if last_good_data:
+            df, timestamp, old_metadata = last_good_data
+            metadata['warnings'].append("Using cached data due to failed live load.")
+            return df, timestamp, metadata
+        
         raise
 
 # ============================================
@@ -548,19 +481,15 @@ class DataProcessor:
     def process_dataframe(df: pd.DataFrame, metadata: Dict[str, Any]) -> pd.DataFrame:
         """Complete data processing pipeline"""
         
-        # Create copy to avoid modifying original
         df = df.copy()
         initial_count = len(df)
         
-        # Process numeric columns with vectorization
         numeric_cols = [col for col in df.columns if col not in ['ticker', 'company_name', 'category', 'sector', 'industry', 'year', 'market_cap']]
         
         for col in numeric_cols:
             if col in df.columns:
-                # Determine if percentage column
                 is_pct = col in CONFIG.PERCENTAGE_COLUMNS
                 
-                # Determine bounds
                 if 'volume' in col.lower():
                     bounds = CONFIG.VALUE_BOUNDS['volume']
                 elif col == 'rvol':
@@ -572,40 +501,31 @@ class DataProcessor:
                 else:
                     bounds = CONFIG.VALUE_BOUNDS.get('price', None)
                 
-                # Vectorized cleaning
                 df[col] = df[col].apply(lambda x: DataValidator.clean_numeric_value(x, is_pct, bounds))
         
-        # Process categorical columns - INCLUDING INDUSTRY
         string_cols = ['ticker', 'company_name', 'category', 'sector', 'industry']
         for col in string_cols:
             if col in df.columns:
                 df[col] = df[col].apply(DataValidator.sanitize_string)
         
-        # Fix volume ratios (vectorized)
         for col in CONFIG.VOLUME_RATIO_COLUMNS:
             if col in df.columns:
-                # Convert percentage change to ratio: (100 + change%) / 100
                 df[col] = (100 + df[col]) / 100
                 df[col] = df[col].clip(0.01, 1000.0)
                 df[col] = df[col].fillna(1.0)
         
-        # Validate critical data
         df = df.dropna(subset=['ticker', 'price'], how='any')
-        df = df[df['price'] > 0.01]  # Minimum valid price
+        df = df[df['price'] > 0.01]
         
-        # Remove duplicates (keep first)
         before_dedup = len(df)
         df = df.drop_duplicates(subset=['ticker'], keep='first')
         if before_dedup > len(df):
             metadata['warnings'].append(f"Removed {before_dedup - len(df)} duplicate tickers")
         
-        # Fill missing values with sensible defaults
         df = DataProcessor._fill_missing_values(df)
         
-        # Add tier classifications
         df = DataProcessor._add_tier_classifications(df)
         
-        # Data quality check
         removed = initial_count - len(df)
         if removed > 0:
             metadata['warnings'].append(f"Removed {removed} invalid rows during processing")
@@ -618,7 +538,6 @@ class DataProcessor:
     def _fill_missing_values(df: pd.DataFrame) -> pd.DataFrame:
         """Fill missing values with sensible defaults"""
         
-        # Position data defaults
         if 'from_low_pct' in df.columns:
             df['from_low_pct'] = df['from_low_pct'].fillna(50)
         else:
@@ -629,18 +548,15 @@ class DataProcessor:
         else:
             df['from_high_pct'] = -50
         
-        # RVOL default
         if 'rvol' in df.columns:
             df['rvol'] = df['rvol'].fillna(1.0)
         else:
             df['rvol'] = 1.0
         
-        # Return defaults (0 for missing returns)
         return_cols = [col for col in df.columns if col.startswith('ret_')]
         for col in return_cols:
             df[col] = df[col].fillna(0)
         
-        # Volume defaults
         volume_cols = [col for col in df.columns if col.startswith('volume_')]
         for col in volume_cols:
             df[col] = df[col].fillna(0)
@@ -657,23 +573,15 @@ class DataProcessor:
                 return "Unknown"
             
             for tier_name, (min_val, max_val) in tier_dict.items():
-                # Use < for upper bound, <= for lower bound to avoid gaps
                 if min_val < value <= max_val:
                     return tier_name
-                # Handle edge cases for first tier (includes min_val)
                 if min_val == -float('inf') and value <= max_val:
                     return tier_name
-                # Handle edge cases for last tier (includes max_val)
                 if max_val == float('inf') and value > min_val:
                     return tier_name
-                # Special case for zero boundaries
-                if min_val == 0 and max_val > 0 and value == 0:
-                    # Zero belongs to the tier that starts at 0
-                    continue  # Let the next tier catch it
             
             return "Unknown"
         
-        # Add tier columns
         if 'eps_current' in df.columns:
             df['eps_tier'] = df['eps_current'].apply(
                 lambda x: classify_tier(x, CONFIG.TIERS['eps'])
@@ -703,14 +611,12 @@ class AdvancedMetrics:
     def calculate_all_metrics(df: pd.DataFrame) -> pd.DataFrame:
         """Calculate all advanced metrics"""
         
-        # Money Flow (in millions)
         if all(col in df.columns for col in ['price', 'volume_1d', 'rvol']):
             df['money_flow'] = df['price'] * df['volume_1d'] * df['rvol']
             df['money_flow_mm'] = df['money_flow'] / 1_000_000
         else:
             df['money_flow_mm'] = 0.0
         
-        # Volume Momentum Index (VMI)
         if all(col in df.columns for col in ['vol_ratio_1d_90d', 'vol_ratio_7d_90d', 'vol_ratio_30d_90d', 'vol_ratio_90d_180d']):
             df['vmi'] = (
                 df['vol_ratio_1d_90d'] * 4 +
@@ -721,13 +627,11 @@ class AdvancedMetrics:
         else:
             df['vmi'] = 1.0
         
-        # Position Tension
         if all(col in df.columns for col in ['from_low_pct', 'from_high_pct']):
             df['position_tension'] = df['from_low_pct'] + abs(df['from_high_pct'])
         else:
             df['position_tension'] = 100.0
         
-        # Momentum Harmony
         df['momentum_harmony'] = 0
         
         if 'ret_1d' in df.columns:
@@ -749,10 +653,8 @@ class AdvancedMetrics:
         if 'ret_3m' in df.columns:
             df['momentum_harmony'] += (df['ret_3m'] > 0).astype(int)
         
-        # Wave State
         df['wave_state'] = df.apply(AdvancedMetrics._get_wave_state, axis=1)
 
-        # Overall Wave Strength (for filtering)
         if all(col in df.columns for col in ['momentum_score', 'acceleration_score', 'rvol_score', 'breakout_score']):
             df['overall_wave_strength'] = (
                 df['momentum_score'] * 0.3 +
@@ -3081,6 +2983,7 @@ def main():
         except ValueError:
             logger.warning(f"Invalid trend_filter state '{default_trend_key}' found, defaulting to 'All Trends'.")
             current_trend_index = 0
+            RobustSessionState.safe_set('trend_filter', 'All Trends')
 
         filters['trend_filter'] = st.selectbox(
             "Trend Quality",
