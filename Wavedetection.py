@@ -3940,11 +3940,13 @@ def main():
                 if 'ret_7d' in shift_display.columns:
                     shift_display['7D Return'] = shift_display['ret_7d'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else '-')
                 
+                # FIX: Renaming rvol here to prevent duplicate column error
                 if 'rvol' in shift_display.columns:
                     shift_display['RVOL'] = shift_display['rvol'].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else '-')
-                
+                    shift_display = shift_display.drop('rvol', axis=1)  # Remove original 'rvol' column
+                    
                 # Rename columns
-                shift_display = shift_display.rename(columns={
+                rename_dict = {
                     'ticker': 'Ticker',
                     'company_name': 'Company',
                     'master_score': 'Score',
@@ -3952,9 +3954,12 @@ def main():
                     'acceleration_score': 'Acceleration',
                     'wave_state': 'Wave',
                     'category': 'Category'
-                })
+                }
                 
-                shift_display = shift_display.drop('signal_count', axis=1)
+                shift_display = shift_display.rename(columns=rename_dict)
+                
+                if 'signal_count' in shift_display.columns:
+                    shift_display = shift_display.drop('signal_count', axis=1)
                 
                 st.dataframe(shift_display, use_container_width=True, hide_index=True)
                 
@@ -4181,82 +4186,80 @@ def main():
                 st.info(f"No patterns emerging within {pattern_distance}% threshold.")
             
             # 5. VOLUME SURGE DETECTION
-st.markdown("#### 🌊 Volume Surges - Unusual Activity NOW")
-st.markdown("*Catch waves as they form, not after they've peaked!*")
-
-# Set RVOL threshold based on sensitivity
-rvol_threshold = {"Conservative": 3.0, "Balanced": 2.0, "Aggressive": 1.5}[sensitivity]
-
-volume_surges = wave_filtered_df[wave_filtered_df['rvol'] >= rvol_threshold].copy()
-
-if len(volume_surges) > 0:
-    # Calculate surge score
-    volume_surges['surge_score'] = (
-        volume_surges['rvol_score'] * 0.5 +
-        volume_surges['volume_score'] * 0.3 +
-        volume_surges['momentum_score'] * 0.2
-    )
-    
-    top_surges = volume_surges.nlargest(15, 'surge_score')
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        display_cols = ['ticker', 'company_name', 'rvol', 'price', 'money_flow_mm', 'wave_state', 'category']
+            st.markdown("#### 🌊 Volume Surges - Unusual Activity NOW")
+            
+            # Set RVOL threshold based on sensitivity
+            rvol_threshold = {"Conservative": 3.0, "Balanced": 2.0, "Aggressive": 1.5}[sensitivity]
+            
+            volume_surges = wave_filtered_df[wave_filtered_df['rvol'] >= rvol_threshold].copy()
+            
+            if len(volume_surges) > 0:
+                # Calculate surge score
+                volume_surges['surge_score'] = (
+                    volume_surges['rvol_score'] * 0.5 +
+                    volume_surges['volume_score'] * 0.3 +
+                    volume_surges['momentum_score'] * 0.2
+                )
+                
+                top_surges = volume_surges.nlargest(15, 'surge_score')
+                
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    display_cols = ['ticker', 'company_name', 'rvol', 'price', 'money_flow_mm', 'wave_state', 'category']
+                    
+                    if 'ret_1d' in top_surges.columns:
+                        display_cols.insert(3, 'ret_1d')
+                    
+                    surge_display = top_surges[[col for col in display_cols if col in top_surges.columns]].copy()
+                    
+                    # Add surge type
+                    surge_display['Type'] = surge_display['rvol'].apply(
+                        lambda x: "🔥🔥🔥" if x > 5 else "🔥🔥" if x > 3 else "🔥"
+                    )
+                    
+                    # Format columns
+                    if 'ret_1d' in surge_display.columns:
+                        surge_display['ret_1d'] = surge_display['ret_1d'].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else '-')
+                    
+                    if 'money_flow_mm' in surge_display.columns:
+                        surge_display['money_flow_mm'] = surge_display['money_flow_mm'].apply(lambda x: f"₹{x:.1f}M" if pd.notna(x) else '-')
+                    
+                    surge_display['price'] = surge_display['price'].apply(lambda x: f"₹{x:,.0f}" if pd.notna(x) else '-')
+                    surge_display['rvol'] = surge_display['rvol'].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else '-')
+                    
+                    # Rename columns
+                    rename_dict = {
+                        'ticker': 'Ticker',
+                        'company_name': 'Company',
+                        'rvol': 'RVOL',
+                        'price': 'Price',
+                        'money_flow_mm': 'Money Flow',
+                        'wave_state': 'Wave',
+                        'category': 'Category',
+                        'ret_1d': '1D Ret'
+                    }
+                    surge_display = surge_display.rename(columns=rename_dict)
+                    
+                    st.dataframe(surge_display, use_container_width=True, hide_index=True)
+                
+                with col2:
+                    UIComponents.render_metric_card("Active Surges", len(volume_surges))
+                    UIComponents.render_metric_card("Extreme (>5x)", len(volume_surges[volume_surges['rvol'] > 5]))
+                    UIComponents.render_metric_card("High (>3x)", len(volume_surges[volume_surges['rvol'] > 3]))
+                    
+                    # Surge distribution by category
+                    if 'category' in volume_surges.columns:
+                        st.markdown("**📊 Surge by Category:**")
+                        surge_categories = volume_surges['category'].value_counts()
+                        if len(surge_categories) > 0:
+                            for cat, count in surge_categories.head(3).items():
+                                st.caption(f"• {cat}: {count} stocks")
+            else:
+                st.info(f"No volume surges detected with {sensitivity} sensitivity (requires RVOL ≥ {rvol_threshold}x).")
         
-        if 'ret_1d' in top_surges.columns:
-            display_cols.insert(3, 'ret_1d')
-        
-        surge_display = top_surges[[col for col in display_cols if col in top_surges.columns]].copy()
-        
-        # Add surge type
-        surge_display['Type'] = surge_display['rvol'].apply(
-            lambda x: "🔥🔥🔥" if x > 5 else "🔥🔥" if x > 3 else "🔥"
-        )
-        
-        # Format columns
-        if 'ret_1d' in surge_display.columns:
-            surge_display['ret_1d'] = surge_display['ret_1d'].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else '-')
-        
-        if 'rvol' in surge_display.columns:
-            surge_display['RVOL'] = surge_display['rvol'].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else '-')
-        
-        if 'money_flow_mm' in surge_display.columns:
-            surge_display['money_flow_mm'] = surge_display['money_flow_mm'].apply(lambda x: f"₹{x:.1f}M" if pd.notna(x) else '-')
-        
-        surge_display['price'] = surge_display['price'].apply(lambda x: f"₹{x:,.0f}" if pd.notna(x) else '-')
-
-        # Rename columns, making sure to handle the new 'RVOL' column
-        rename_dict = {
-            'ticker': 'Ticker',
-            'company_name': 'Company',
-            'price': 'Price',
-            'money_flow_mm': 'Money Flow',
-            'wave_state': 'Wave',
-            'category': 'Category',
-            'ret_1d': '1D Ret'
-        }
-        surge_display = surge_display.rename(columns=rename_dict)
-        
-        if 'signal_count' in surge_display.columns:
-            surge_display = surge_display.drop('signal_count', axis=1)
-        
-        st.dataframe(surge_display, use_container_width=True, hide_index=True)
-    
-    with col2:
-        UIComponents.render_metric_card("Active Surges", len(volume_surges))
-        UIComponents.render_metric_card("Extreme (>5x)", len(volume_surges[volume_surges['rvol'] > 5]))
-        UIComponents.render_metric_card("High (>3x)", len(volume_surges[volume_surges['rvol'] > 3]))
-        
-        # Surge distribution by category
-        if 'category' in volume_surges.columns:
-            st.markdown("**📊 Surge by Category:**")
-            surge_categories = volume_surges['category'].value_counts()
-            if len(surge_categories) > 0:
-                for cat, count in surge_categories.head(3).items():
-                    st.caption(f"• {cat}: {count} stocks")
         else:
-            st.info(f"No volume surges detected with {sensitivity} sensitivity (requires RVOL ≥ {rvol_threshold}x).")
+            st.warning(f"No data available for Wave Radar analysis with {wave_timeframe} timeframe.")
     
     # Tab 3: Analysis
     with tabs[3]:
@@ -4311,38 +4314,43 @@ if len(volume_surges) > 0:
             
             st.markdown("---")
             
-            # Sector performance
+            # Sector performance (moved from dedicated tab, now simple table here)
             st.markdown("#### 🏢 Sector Performance")
-            sector_rotation = MarketIntelligence.detect_sector_rotation(filtered_df)
+            sector_overview_df_local = MarketIntelligence.detect_sector_rotation(filtered_df)
             
-            if not sector_rotation.empty:
-                sector_display = sector_rotation[['flow_score', 'avg_score', 'avg_momentum', 
-                                                 'avg_volume', 'analyzed_stocks', 'total_stocks']].head(10)
+            if not sector_overview_df_local.empty:
+                display_cols_overview = ['flow_score', 'avg_score', 'median_score', 'avg_momentum', 
+                                         'avg_volume', 'avg_rvol', 'avg_ret_30d', 'analyzed_stocks', 'total_stocks']
                 
-                rename_dict = {
-                    'flow_score': 'Flow Score',
-                    'avg_score': 'Avg Score',
-                    'avg_momentum': 'Avg Momentum',
-                    'avg_volume': 'Avg Volume',
-                    'analyzed_stocks': 'Analyzed',
-                    'total_stocks': 'Total'
-                }
+                available_overview_cols = [col for col in display_cols_overview if col in sector_overview_df_local.columns]
                 
-                sector_display = sector_display.rename(columns=rename_dict)
+                sector_overview_display = sector_overview_df_local[available_overview_cols].copy()
                 
+                sector_overview_display.columns = [
+                    'Flow Score', 'Avg Score', 'Median Score', 'Avg Momentum', 
+                    'Avg Volume', 'Avg RVOL', 'Avg 30D Ret', 'Analyzed Stocks', 'Total Stocks'
+                ]
+                
+                sector_overview_display['Coverage %'] = (
+                    (sector_overview_display['Analyzed Stocks'] / sector_overview_display['Total Stocks'] * 100)
+                    .replace([np.inf, -np.inf], np.nan)
+                    .fillna(0)
+                    .round(1)
+                    .apply(lambda x: f"{x}%")
+                )
+
                 st.dataframe(
-                    sector_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
+                    sector_overview_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
                     use_container_width=True
                 )
-                
-                st.info("📊 **Normalized Analysis**: Shows metrics for dynamically sampled stocks per sector to ensure fair comparison.")
+                st.info("📊 **Normalized Analysis**: Shows metrics for dynamically sampled stocks per sector (by Master Score) to ensure fair comparison across sectors of different sizes.")
 
             else:
-                st.info("No sector data available in the filtered dataset for analysis.")
+                st.info("No sector data available in the filtered dataset for analysis. Please check your filters.")
             
             st.markdown("---") # Separator for Industry Performance
             
-            # Industry Performance
+            # Industry Performance (NEW ADDITION TO ANALYSIS TAB)
             st.markdown("#### 🏭 Industry Performance")
             industry_rotation = MarketIntelligence.detect_industry_rotation(filtered_df)
             
@@ -4678,7 +4686,7 @@ if len(volume_surges) > 0:
             else:
                 st.warning("No stocks found matching your search criteria.")
     
-    # Tab 5: Export
+    # Tab 5: Export (moved from 6)
     with tabs[5]:
         st.markdown("### 📥 Export Data")
         
@@ -4692,8 +4700,7 @@ if len(volume_surges) > 0:
                 "Swing Trader Focus",
                 "Investor Focus"
             ],
-            index=0,
-            key="export_template",
+            key="export_template_radio", # Added key for state management
             help="Select a template based on your trading style"
         )
         
@@ -4715,7 +4722,7 @@ if len(volume_surges) > 0:
                 "Comprehensive multi-sheet report including:\n"
                 "- Top 100 stocks with all scores\n"
                 "- Market intelligence dashboard\n"
-                "- Sector & Industry rotation analysis\n"
+                "- Sector rotation analysis\n"
                 "- Pattern frequency analysis\n"
                 "- Wave Radar signals\n"
                 "- Summary statistics"
@@ -4782,7 +4789,7 @@ if len(volume_surges) > 0:
         
         export_stats = {
             "Total Stocks": len(filtered_df),
-            "Average Score": f"{filtered_df['master_score'].mean():.1f}" if not filtered_df.empty and 'master_score' in filtered_df.columns else "N/A",
+            "Average Score": f"{filtered_df['master_score'].mean():.1f}" if not filtered_df.empty else "N/A",
             "Stocks with Patterns": (filtered_df['patterns'] != '').sum() if 'patterns' in filtered_df.columns else 0,
             "High RVOL (>2x)": (filtered_df['rvol'] > 2).sum() if 'rvol' in filtered_df.columns else 0,
             "Positive 30D Returns": (filtered_df['ret_30d'] > 0).sum() if 'ret_30d' in filtered_df.columns else 0,
@@ -4794,9 +4801,9 @@ if len(volume_surges) > 0:
             with stat_cols[i % 3]:
                 UIComponents.render_metric_card(label, value)
     
-    # Tab 6: About
+    # Tab 6: About (moved from 7)
     with tabs[6]:
-        st.markdown("### ℹ️ About Wave Detection Ultimate 3.0")
+        st.markdown("### ℹ️ About Wave Detection Ultimate 3.0 - Final Production Version")
         
         col1, col2 = st.columns([2, 1])
         
@@ -4804,13 +4811,13 @@ if len(volume_surges) > 0:
             st.markdown("""
             #### 🌊 Welcome to Wave Detection Ultimate 3.0
             
-            The most advanced stock ranking system designed to catch momentum waves early.
-            This professional-grade tool combines technical analysis, volume dynamics, 
-            advanced metrics, and smart pattern recognition to identify high-potential stocks.
+            The FINAL production version of the most advanced stock ranking system designed to catch momentum waves early.
+            This professional-grade tool combines technical analysis, volume dynamics, advanced metrics, and 
+            smart pattern recognition to identify high-potential stocks before they peak.
             
-            #### 🎯 Core Features
+            #### 🎯 Core Features - LOCKED IN PRODUCTION
             
-            **Master Score 3.0** - Proprietary ranking algorithm:
+            **Master Score 3.0** - Proprietary ranking algorithm (DO NOT MODIFY):
             - **Position Analysis (30%)** - 52-week range positioning
             - **Volume Dynamics (25%)** - Multi-timeframe volume patterns
             - **Momentum Tracking (15%)** - 30-day price momentum
@@ -4818,37 +4825,70 @@ if len(volume_surges) > 0:
             - **Breakout Probability (10%)** - Technical breakout readiness
             - **RVOL Integration (10%)** - Real-time relative volume
             
-            **Advanced Metrics**:
+            **Advanced Metrics** - NEW IN FINAL VERSION:
             - **Money Flow** - Price × Volume × RVOL in millions
             - **VMI (Volume Momentum Index)** - Weighted volume trend score
             - **Position Tension** - Range position stress indicator
             - **Momentum Harmony** - Multi-timeframe alignment (0-4)
             - **Wave State** - Real-time momentum classification
-            - **Overall Wave Strength** - Composite wave score
+            - **Overall Wave Strength** - Composite score for wave filter
             
-            **25 Pattern Detection**:
+            **Wave Radar™** - Enhanced detection system:
+            - Momentum shift detection with signal counting
+            - Smart money flow tracking by category
+            - Pattern emergence alerts with distance metrics
+            - Market regime detection (Risk-ON/OFF/Neutral)
+            - Sensitivity controls (Conservative/Balanced/Aggressive)
+            
+            **25 Pattern Detection** - Complete set:
             - 11 Technical patterns
             - 5 Fundamental patterns (Hybrid mode)
             - 6 Price range patterns
-            - 3 Intelligence patterns (Stealth, Vampire, Perfect Storm)
+            - 3 NEW intelligence patterns (Stealth, Vampire, Perfect Storm)
             
             #### 💡 How to Use
             
-            1. **Data Source** - Use default Google Sheets or upload CSV
+            1. **Data Source** - Google Sheets (default) or CSV upload
             2. **Quick Actions** - Instant filtering for common scenarios
-            3. **Smart Filters** - Interconnected filtering system
+            3. **Smart Filters** - Interconnected filtering system, including new Wave filters
             4. **Display Modes** - Technical or Hybrid (with fundamentals)
             5. **Wave Radar** - Monitor early momentum signals
             6. **Export Templates** - Customized for trading styles
             
-            #### 🔧 Technical Details
+            #### 🔧 Production Features
             
             - **Performance Optimized** - Sub-2 second processing
             - **Memory Efficient** - Handles 2000+ stocks smoothly
             - **Error Resilient** - Graceful degradation
             - **Data Validation** - Comprehensive quality checks
-            - **Smart Caching** - 15-minute intelligent cache
+            - **Smart Caching** - 1-hour intelligent cache
             - **Mobile Responsive** - Works on all devices
+            
+            #### 📊 Data Processing Pipeline
+            
+            1. Load from Google Sheets or CSV
+            2. Validate and clean all 41 columns
+            3. Calculate 6 component scores
+            4. Generate Master Score 3.0
+            5. Calculate advanced metrics
+            6. Detect all 25 patterns
+            7. Classify into tiers
+            8. Apply smart ranking
+            
+            #### 🎨 Display Modes
+            
+            **Technical Mode** (Default)
+            - Pure momentum analysis
+            - Technical indicators only
+            - Pattern detection
+            - Volume dynamics
+            
+            **Hybrid Mode**
+            - All technical features
+            - PE ratio analysis
+            - EPS growth tracking
+            - Fundamental patterns
+            - Value indicators
             """)
         
         with col2:
@@ -4876,12 +4916,12 @@ if len(volume_surges) > 0:
             - 🔀 MOMENTUM DIVERGE
             - 🎯 RANGE COMPRESS
             
-            **Intelligence**
+            **NEW Intelligence**
             - 🤫 STEALTH
             - 🧛 VAMPIRE
             - ⛈️ PERFECT STORM
             
-            **Fundamental**
+            **Fundamental** (Hybrid)
             - 💎 VALUE MOMENTUM
             - 📊 EARNINGS ROCKET
             - 🏆 QUALITY LEADER
@@ -4898,9 +4938,24 @@ if len(volume_surges) > 0:
             
             #### 🔒 Production Status
             
-            **Version**: 3.1.0-PRO_FINAL
+            **Version**: 3.0.7-FINAL-COMPLETE
+            **Last Updated**: July 2025
             **Status**: PRODUCTION
+            **Updates**: LOCKED
+            **Testing**: COMPLETE
             **Optimization**: MAXIMUM
+            
+            #### 💬 Credits
+            
+            Developed for professional traders
+            requiring reliable, fast, and
+            comprehensive market analysis.
+            
+            This is the FINAL version.
+            No further updates will be made.
+            All features are permanent.
+            
+            ---
             
             **Indian Market Optimized**
             - ₹ Currency formatting
@@ -4951,8 +5006,8 @@ if len(volume_surges) > 0:
     st.markdown(
         """
         <div style="text-align: center; color: #666; padding: 1rem;">
-            🌊 Wave Detection Ultimate 3.0 - Professional Version<br>
-            <small>Advanced Stock Ranking System • All Features Complete • Performance Optimized</small>
+            🌊 Wave Detection Ultimate 3.0 - Final Production Version<br>
+            <small>Professional Stock Ranking System • All Features Complete • Performance Optimized • Permanently Locked</small>
         </div>
         """,
         unsafe_allow_html=True
@@ -4978,8 +5033,3 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
-
-
-
-
-
