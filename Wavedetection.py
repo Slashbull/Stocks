@@ -4257,9 +4257,6 @@ if len(volume_surges) > 0:
                     st.caption(f"• {cat}: {count} stocks")
         else:
             st.info(f"No volume surges detected with {sensitivity} sensitivity (requires RVOL ≥ {rvol_threshold}x).")
-        
-        else:
-            st.warning(f"No data available for Wave Radar analysis with {wave_timeframe} timeframe.")
     
     # Tab 3: Analysis
     with tabs[3]:
@@ -4981,6 +4978,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
