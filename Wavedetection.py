@@ -4181,79 +4181,82 @@ def main():
                 st.info(f"No patterns emerging within {pattern_distance}% threshold.")
             
             # 5. VOLUME SURGE DETECTION
-            st.markdown("#### 🌊 Volume Surges - Unusual Activity NOW")
-            
-            # Set RVOL threshold based on sensitivity
-            rvol_threshold = {"Conservative": 3.0, "Balanced": 2.0, "Aggressive": 1.5}[sensitivity]
-            
-            volume_surges = wave_filtered_df[wave_filtered_df['rvol'] >= rvol_threshold].copy()
-            
-            if len(volume_surges) > 0:
-                # Calculate surge score
-                volume_surges['surge_score'] = (
-                    volume_surges['rvol_score'] * 0.5 +
-                    volume_surges['volume_score'] * 0.3 +
-                    volume_surges['momentum_score'] * 0.2
-                )
-                
-                top_surges = volume_surges.nlargest(15, 'surge_score')
-                
-                col1, col2 = st.columns([2, 1])
-                
-                with col1:
-                    display_cols = ['ticker', 'company_name', 'rvol', 'price', 'money_flow_mm', 'wave_state', 'category']
-                    
-                    if 'ret_1d' in top_surges.columns:
-                        display_cols.insert(3, 'ret_1d')
-                    
-                    surge_display = top_surges[[col for col in display_cols if col in top_surges.columns]].copy()
-                    
-                    # Add surge type
-                    surge_display['Type'] = surge_display['rvol'].apply(
-                        lambda x: "🔥🔥🔥" if x > 5 else "🔥🔥" if x > 3 else "🔥"
-                    )
-                    
-                    # Format columns
-                    if 'ret_1d' in surge_display.columns:
-                        surge_display['ret_1d'] = surge_display['ret_1d'].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else '-')
-                    
-                    if 'rvol' in surge_display.columns:
-                        surge_display['RVOL'] = surge_display['rvol'].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else '-')
-                    
-                    if 'money_flow_mm' in surge_display.columns:
-                        surge_display['money_flow_mm'] = surge_display['money_flow_mm'].apply(lambda x: f"₹{x:.1f}M" if pd.notna(x) else '-')
-                    
-                    surge_display['price'] = surge_display['price'].apply(lambda x: f"₹{x:,.0f}" if pd.notna(x) else '-')
+st.markdown("#### 🌊 Volume Surges - Unusual Activity NOW")
 
-                    # Rename columns
-                    rename_dict = {
-                        'ticker': 'Ticker',
-                        'company_name': 'Company',
-                        'rvol': 'RVOL',
-                        'price': 'Price',
-                        'money_flow_mm': 'Money Flow',
-                        'wave_state': 'Wave',
-                        'category': 'Category',
-                        'ret_1d': '1D Ret'
-                    }
-                    surge_display = surge_display.rename(columns=rename_dict)
-                    
-                    st.dataframe(surge_display, use_container_width=True, hide_index=True)
-                
-                with col2:
-                    UIComponents.render_metric_card("Active Surges", len(volume_surges))
-                    UIComponents.render_metric_card("Extreme (>5x)", len(volume_surges[volume_surges['rvol'] > 5]))
-                    UIComponents.render_metric_card("High (>3x)", len(volume_surges[volume_surges['rvol'] > 3]))
-                    
-                    # Surge distribution by category
-                    if 'category' in volume_surges.columns:
-                        st.markdown("**📊 Surge by Category:**")
-                        surge_categories = volume_surges['category'].value_counts()
-                        if len(surge_categories) > 0:
-                            for cat, count in surge_categories.head(3).items():
-                                st.caption(f"• {cat}: {count} stocks")
-            else:
-                st.info(f"No volume surges detected with {sensitivity} sensitivity (requires RVOL ≥ {rvol_threshold}x).")
+# Set RVOL threshold based on sensitivity
+rvol_threshold = {"Conservative": 3.0, "Balanced": 2.0, "Aggressive": 1.5}[sensitivity]
+
+volume_surges = wave_filtered_df[wave_filtered_df['rvol'] >= rvol_threshold].copy()
+
+if len(volume_surges) > 0:
+    # Calculate surge score
+    volume_surges['surge_score'] = (
+        volume_surges['rvol_score'] * 0.5 +
+        volume_surges['volume_score'] * 0.3 +
+        volume_surges['momentum_score'] * 0.2
+    )
+    
+    top_surges = volume_surges.nlargest(15, 'surge_score')
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        display_cols = ['ticker', 'company_name', 'rvol', 'price', 'money_flow_mm', 'wave_state', 'category']
+        
+        if 'ret_1d' in top_surges.columns:
+            display_cols.insert(3, 'ret_1d')
+        
+        surge_display = top_surges[[col for col in display_cols if col in top_surges.columns]].copy()
+        
+        # Add surge type
+        surge_display['Type'] = surge_display['rvol'].apply(
+            lambda x: "🔥🔥🔥" if x > 5 else "🔥🔥" if x > 3 else "🔥"
+        )
+        
+        # Format columns
+        if 'ret_1d' in surge_display.columns:
+            surge_display['ret_1d'] = surge_display['ret_1d'].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else '-')
+        
+        if 'rvol' in surge_display.columns:
+            surge_display['RVOL'] = surge_display['rvol'].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else '-')
+            surge_display = surge_display.drop('rvol', axis=1)
+
+        if 'money_flow_mm' in surge_display.columns:
+            surge_display['money_flow_mm'] = surge_display['money_flow_mm'].apply(lambda x: f"₹{x:.1f}M" if pd.notna(x) else '-')
+        
+        surge_display['price'] = surge_display['price'].apply(lambda x: f"₹{x:,.0f}" if pd.notna(x) else '-')
+        
+        # Rename columns
+        rename_dict = {
+            'ticker': 'Ticker',
+            'company_name': 'Company',
+            'price': 'Price',
+            'money_flow_mm': 'Money Flow',
+            'wave_state': 'Wave',
+            'category': 'Category',
+            'ret_1d': '1D Ret'
+        }
+        surge_display = surge_display.rename(columns=rename_dict)
+        
+        if 'signal_count' in surge_display.columns:
+            surge_display = surge_display.drop('signal_count', axis=1)
+        
+        st.dataframe(surge_display, use_container_width=True, hide_index=True)
+    
+    with col2:
+        UIComponents.render_metric_card("Active Surges", len(volume_surges))
+        UIComponents.render_metric_card("Extreme (>5x)", len(volume_surges[volume_surges['rvol'] > 5]))
+        UIComponents.render_metric_card("High (>3x)", len(volume_surges[volume_surges['rvol'] > 3]))
+        
+        # Surge distribution by category
+        if 'category' in volume_surges.columns:
+            st.markdown("**📊 Surge by Category:**")
+            surge_categories = volume_surges['category'].value_counts()
+            if len(surge_categories) > 0:
+                for cat, count in surge_categories.head(3).items():
+                    st.caption(f"• {cat}: {count} stocks")
+else:
+    st.info(f"No volume surges detected with {sensitivity} sensitivity (requires RVOL ≥ {rvol_threshold}x).")
         
         else:
             st.warning(f"No data available for Wave Radar analysis with {wave_timeframe} timeframe.")
@@ -4978,4 +4981,5 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
