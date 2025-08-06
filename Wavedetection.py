@@ -5,8 +5,8 @@ Professional Stock Ranking System with Advanced Analytics
 All bugs fixed, optimized for Streamlit Community Cloud
 Enhanced with all valuable features from previous versions
 
-Version: 3.0.7-HYBRID-PRODUCTION
-Last Updated: July 2025
+Version: 3.0.7-HYBRID-PRODUCTION-FIXED
+Last Updated: August 2025
 Status: PRODUCTION READY - Feature Complete
 """
 
@@ -50,7 +50,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============================================
-# CONFIGURATION AND CONSTANTS (FROM V1)
+# CONFIGURATION AND CONSTANTS (FROM V1 - ENHANCED FOR INDUSTRY)
 # ============================================
 
 @dataclass(frozen=True)
@@ -82,12 +82,12 @@ class Config:
     CRITICAL_COLUMNS: List[str] = field(default_factory=lambda: ['ticker', 'price', 'volume_1d'])
 
     # Important columns (degraded experience without)
-    # Correctly identifies columns from your CSV
+    # Correctly identifies columns from your CSV, including 'industry'
     IMPORTANT_COLUMNS: List[str] = field(default_factory=lambda: [
         'ret_30d', 'from_low_pct', 'from_high_pct',
         'vol_ratio_1d_90d', 'vol_ratio_7d_90d', 'vol_ratio_30d_90d',
         'vol_ratio_1d_180d', 'vol_ratio_7d_180d', 'vol_ratio_30d_180d',
-        'vol_ratio_90d_180d', 'category', 'sector', 'industry'
+        'vol_ratio_90d_180d', 'category', 'sector', 'industry' # 'industry' included here
     ])
 
     # All percentage columns for consistent handling
@@ -188,7 +188,7 @@ class Config:
 CONFIG = Config()
 
 # ============================================
-# PERFORMANCE MONITORING
+# PERFORMANCE MONITORING (FROM V2)
 # ============================================
 
 class PerformanceMonitor:
@@ -439,7 +439,8 @@ class DataProcessor:
         initial_count = len(df)
 
         # Process numeric columns with vectorization
-        numeric_cols = [col for col in df.columns if col not in ['ticker', 'company_name', 'category', 'sector', 'year', 'market_cap']]
+        # Ensure 'industry' is not treated as numeric unless it contains numeric data
+        numeric_cols = [col for col in df.columns if col not in ['ticker', 'company_name', 'category', 'sector', 'industry', 'year', 'market_cap']]
 
         for col in numeric_cols:
             if col in df.columns:
@@ -461,8 +462,8 @@ class DataProcessor:
                 # Vectorized cleaning
                 df[col] = df[col].apply(lambda x: DataValidator.clean_numeric_value(x, is_pct, bounds))
 
-        # Process categorical columns
-        string_cols = ['ticker', 'company_name', 'category', 'sector']
+        # Process categorical columns, including 'industry'
+        string_cols = ['ticker', 'company_name', 'category', 'sector', 'industry'] # 'industry' included here
         for col in string_cols:
             if col in df.columns:
                 df[col] = df[col].apply(DataValidator.sanitize_string)
@@ -530,6 +531,10 @@ class DataProcessor:
         volume_cols = [col for col in df.columns if col.startswith('volume_')]
         for col in volume_cols:
             df[col] = df[col].fillna(0)
+        
+        # Ensure 'industry' column has no NaN values after string sanitization
+        if 'industry' in df.columns:
+            df['industry'] = df['industry'].fillna("Unknown")
 
         return df
 
@@ -1297,7 +1302,7 @@ class PatternDetector:
         return patterns
 
 # ============================================
-# MARKET INTELLIGENCE (FROM V1)
+# MARKET INTELLIGENCE (FROM V1 - ENHANCED FOR INDUSTRY)
 # ============================================
 
 class MarketIntelligence:
@@ -1447,6 +1452,80 @@ class MarketIntelligence:
         sector_metrics['rank'] = sector_metrics['flow_score'].rank(ascending=False)
 
         return sector_metrics.sort_values('flow_score', ascending=False)
+    
+    @staticmethod
+    def detect_industry_performance(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Detect industry rotation patterns with normalized analysis and dynamic sampling.
+        Uses dynamic sampling based on industry size.
+        """
+        
+        if 'industry' not in df.columns or df.empty:
+            return pd.DataFrame()
+        
+        industry_dfs = []
+        
+        for industry in df['industry'].unique():
+            if industry != 'Unknown':
+                industry_df = df[df['industry'] == industry].copy()
+                industry_size = len(industry_df)
+                
+                # Dynamic sampling based on industry size
+                if industry_size <= 5:
+                    sample_count = industry_size
+                elif industry_size <= 20:
+                    sample_count = max(1, int(industry_size * 0.80))
+                elif industry_size <= 50:
+                    sample_count = max(1, int(industry_size * 0.60))
+                elif industry_size <= 100:
+                    sample_count = max(1, int(industry_size * 0.40))
+                else:
+                    sample_count = min(50, int(industry_size * 0.25))
+                
+                if sample_count > 0:
+                    industry_df = industry_df.nlargest(sample_count, 'master_score')
+                else:
+                    industry_df = pd.DataFrame() # No stocks selected
+                
+                if not industry_df.empty:
+                    industry_dfs.append(industry_df)
+                                
+        if industry_dfs:
+            normalized_df_industry = pd.concat(industry_dfs, ignore_index=True)
+        else:
+            # If no valid industries after sampling, return empty
+            return pd.DataFrame()
+        
+        industry_metrics = normalized_df_industry.groupby('industry').agg({
+            'master_score': ['mean', 'median', 'std', 'count'],
+            'momentum_score': 'mean',
+            'volume_score': 'mean',
+            'ret_30d': 'mean',
+            'money_flow_mm': 'sum' if 'money_flow_mm' in normalized_df_industry.columns else lambda x: 0
+        }).round(2)
+        
+        # Flatten column names
+        col_names = ['avg_score', 'median_score', 'std_score', 'count', 'avg_momentum', 'avg_volume', 'avg_ret_30d']
+        if 'money_flow_mm' in normalized_df_industry.columns:
+            col_names.append('total_money_flow')
+        industry_metrics.columns = col_names
+        
+        # Add original industry size for reference
+        original_counts = df.groupby('industry').size().rename('total_stocks')
+        industry_metrics = industry_metrics.join(original_counts, how='left')
+        industry_metrics['analyzed_stocks'] = industry_metrics['count']
+        
+        industry_metrics['flow_score'] = (
+            industry_metrics['avg_score'] * 0.4 +
+            industry_metrics['median_score'] * 0.3 +
+            industry_metrics['avg_momentum'] * 0.15 +
+            industry_metrics['avg_volume'] * 0.15
+        )
+        
+        industry_metrics['rank'] = industry_metrics['flow_score'].rank(ascending=False)
+        
+        return industry_metrics.sort_values('flow_score', ascending=False)
+
 
 # ============================================
 # VISUALIZATION ENGINE (FROM V2)
@@ -1580,7 +1659,7 @@ class Visualizer:
             return go.Figure()
 
 # ============================================
-# FILTER ENGINE - OPTIMIZED (FROM V2)
+# FILTER ENGINE - OPTIMIZED (FROM V2 - ENHANCED FOR INDUSTRY)
 # ============================================
 
 class FilterEngine:
@@ -1603,6 +1682,11 @@ class FilterEngine:
         sectors = filters.get('sectors', [])
         if sectors and 'All' not in sectors:
             mask &= df['sector'].isin(sectors)
+        
+        # NEW: Industry filter application
+        industries = filters.get('industries', [])
+        if industries and 'All' not in industries:
+            mask &= df['industry'].isin(industries)
 
         min_score = filters.get('min_score', 0)
         if min_score > 0:
@@ -1668,6 +1752,7 @@ class FilterEngine:
         filter_key_map = {
             'category': 'categories',
             'sector': 'sectors',
+            'industry': 'industries', # NEW: Industry filter key map
             'eps_tier': 'eps_tiers',
             'pe_tier': 'pe_tiers',
             'price_tier': 'price_tiers',
@@ -1677,10 +1762,13 @@ class FilterEngine:
         if column in filter_key_map:
             temp_filters.pop(filter_key_map[column], None)
 
-        filtered_df = FilterEngine.apply_filters(df, temp_filters)
+        # Apply remaining filters to get the relevant subset of data
+        filtered_df_for_options = FilterEngine.apply_filters(df, temp_filters)
 
-        values = filtered_df[column].dropna().unique()
+        # Get unique values from the relevant subset
+        values = filtered_df_for_options[column].dropna().unique()
 
+        # Exclude 'Unknown' and empty values
         values = [v for v in values if str(v).strip() not in ['Unknown', 'unknown', '', 'nan', 'NaN']]
 
         return sorted(values)
@@ -1757,20 +1845,20 @@ class ExportEngine:
             'day_trader': {
                 'columns': ['rank', 'ticker', 'company_name', 'master_score', 'rvol',
                            'momentum_score', 'acceleration_score', 'ret_1d', 'ret_7d',
-                           'volume_score', 'vmi', 'wave_state', 'patterns', 'category'],
+                           'volume_score', 'vmi', 'wave_state', 'patterns', 'category', 'sector', 'industry'], # Added sector, industry
                 'focus': 'Intraday momentum and volume'
             },
             'swing_trader': {
                 'columns': ['rank', 'ticker', 'company_name', 'master_score',
                            'breakout_score', 'position_score', 'position_tension',
                            'from_high_pct', 'from_low_pct', 'trend_quality',
-                           'momentum_harmony', 'patterns'],
+                           'momentum_harmony', 'patterns', 'category', 'sector', 'industry'], # Added sector, industry
                 'focus': 'Position and breakout setups'
             },
             'investor': {
                 'columns': ['rank', 'ticker', 'company_name', 'master_score', 'pe',
                            'eps_current', 'eps_change_pct', 'ret_1y', 'ret_3y',
-                           'long_term_strength', 'money_flow_mm', 'category', 'sector'],
+                           'long_term_strength', 'money_flow_mm', 'category', 'sector', 'industry'], # Added sector, industry
                 'focus': 'Fundamentals and long-term performance'
             },
             'full': {
@@ -1834,6 +1922,11 @@ class ExportEngine:
                 sector_rotation = MarketIntelligence.detect_sector_rotation(df)
                 if not sector_rotation.empty:
                     sector_rotation.to_excel(writer, sheet_name='Sector Rotation')
+                
+                # NEW: Industry Performance export to Excel
+                industry_performance = MarketIntelligence.detect_industry_performance(df)
+                if not industry_performance.empty:
+                    industry_performance.to_excel(writer, sheet_name='Industry Performance')
 
                 pattern_counts = {}
                 for patterns in df['patterns'].dropna():
@@ -1857,7 +1950,7 @@ class ExportEngine:
                 if len(wave_signals) > 0:
                     wave_cols = ['ticker', 'company_name', 'master_score',
                                 'momentum_score', 'acceleration_score', 'rvol',
-                                'wave_state', 'patterns', 'category']
+                                'wave_state', 'patterns', 'category', 'sector', 'industry'] # Added sector, industry
                     available_wave_cols = [col for col in wave_cols if col in wave_signals.columns]
 
                     wave_signals[available_wave_cols].to_excel(
@@ -1899,7 +1992,7 @@ class ExportEngine:
             'ret_1d', 'ret_7d', 'ret_30d', 'ret_3m', 'ret_6m', 'ret_1y',
             'rvol', 'vmi', 'money_flow_mm', 'position_tension',
             'momentum_harmony', 'wave_state', 'patterns',
-            'category', 'sector', 'eps_tier', 'pe_tier', 'overall_wave_strength'
+            'category', 'sector', 'industry', 'eps_tier', 'pe_tier', 'overall_wave_strength' # Added 'industry'
         ]
 
         available_cols = [col for col in export_cols if col in df.columns]
@@ -2154,7 +2247,7 @@ class UIComponents:
             st.write(strength_meter)
 
 # ============================================
-# SESSION STATE MANAGER (FROM V2)
+# SESSION STATE MANAGER (FROM V2 - ENHANCED FOR INDUSTRY)
 # ============================================
 
 class SessionStateManager:
@@ -2184,6 +2277,7 @@ class SessionStateManager:
 
             'category_filter': [],
             'sector_filter': [],
+            'industry_filter': [], # NEW: Industry filter state
             'min_score': 0,
             'patterns': [],
             'trend_filter': "All Trends",
@@ -2211,7 +2305,8 @@ class SessionStateManager:
         """Clear all filter states properly"""
 
         filter_keys = [
-            'category_filter', 'sector_filter', 'eps_tier_filter',
+            'category_filter', 'sector_filter', 'industry_filter', # NEW: Industry filter key
+            'eps_tier_filter',
             'pe_tier_filter', 'price_tier_filter', 'patterns',
             'min_score', 'trend_filter', 'min_eps_change',
             'min_pe', 'max_pe', 'require_fundamental_data',
@@ -3809,86 +3904,40 @@ def main():
 
             st.markdown("---")
             st.markdown("#### Industry Performance (Dynamically Sampled)")
-            
-            # Start of new industry performance logic
-            if 'industry' in filtered_df.columns:
-                
-                # Dynamic sampling function for industries
-                def detect_industry_performance(df: pd.DataFrame) -> pd.DataFrame:
-                    if df.empty:
-                        return pd.DataFrame()
-                    
-                    industry_dfs = []
-                    
-                    for industry in df['industry'].unique():
-                        if industry != 'Unknown':
-                            industry_df = df[df['industry'] == industry].copy()
-                            industry_size = len(industry_df)
-                            
-                            # Use dynamic sampling based on industry size
-                            if industry_size <= 5:
-                                sample_count = industry_size
-                            elif industry_size <= 20:
-                                sample_count = max(1, int(industry_size * 0.80))
-                            elif industry_size <= 50:
-                                sample_count = max(1, int(industry_size * 0.60))
-                            elif industry_size <= 100:
-                                sample_count = max(1, int(industry_size * 0.40))
-                            else:
-                                sample_count = min(50, int(industry_size * 0.25))
-                            
-                            if sample_count > 0:
-                                industry_df = industry_df.nlargest(sample_count, 'master_score')
-                            
-                            if not industry_df.empty:
-                                industry_dfs.append(industry_df)
-                                
-                    if industry_dfs:
-                        normalized_df_industry = pd.concat(industry_dfs, ignore_index=True)
-                    else:
-                        return pd.DataFrame()
-                    
-                    industry_metrics = normalized_df_industry.groupby('industry').agg({
-                        'master_score': ['mean', 'median', 'std', 'count'],
-                        'momentum_score': 'mean',
-                        'volume_score': 'mean',
-                        'ret_30d': 'mean',
-                        'money_flow_mm': 'sum' if 'money_flow_mm' in normalized_df_industry.columns else lambda x: 0
-                    }).round(2)
-                    
-                    col_names = ['avg_score', 'median_score', 'std_score', 'count', 'avg_momentum', 'avg_volume', 'avg_ret_30d', 'total_money_flow']
-                    if 'money_flow_mm' not in normalized_df_industry.columns:
-                        col_names.remove('total_money_flow')
-                    industry_metrics.columns = col_names
-                    
-                    original_counts = df.groupby('industry').size().rename('total_stocks')
-                    industry_metrics = industry_metrics.join(original_counts, how='left')
-                    industry_metrics['analyzed_stocks'] = industry_metrics['count']
-                    
-                    industry_metrics['flow_score'] = (
-                        industry_metrics['avg_score'] * 0.4 +
-                        industry_metrics['median_score'] * 0.3 +
-                        industry_metrics['avg_momentum'] * 0.15 +
-                        industry_metrics['avg_volume'] * 0.15
-                    )
-                    
-                    industry_metrics['rank'] = industry_metrics['flow_score'].rank(ascending=False)
-                    
-                    return industry_metrics.sort_values('flow_score', ascending=False)
-                
-                industry_overview_df_local = detect_industry_performance(filtered_df)
-                
+
+            if 'industry' in filtered_df.columns and not filtered_df.empty:
+                industry_overview_df_local = MarketIntelligence.detect_industry_performance(filtered_df)
+
                 if not industry_overview_df_local.empty:
+                    display_cols_overview = ['flow_score', 'avg_score', 'median_score', 'avg_momentum',
+                                             'avg_volume', 'avg_ret_30d', 'analyzed_stocks', 'total_stocks']
+
+                    available_overview_cols = [col for col in display_cols_overview if col in industry_overview_df_local.columns]
+
+                    industry_overview_display = industry_overview_df_local[available_overview_cols].copy()
+
+                    industry_overview_display.columns = [
+                        'Flow Score', 'Avg Score', 'Median Score', 'Avg Momentum',
+                        'Avg Volume', 'Avg 30D Ret', 'Analyzed Stocks', 'Total Stocks'
+                    ]
+                    
+                    industry_overview_display['Coverage %'] = (
+                        (industry_overview_display['Analyzed Stocks'] / industry_overview_display['Total Stocks'] * 100)
+                        .replace([np.inf, -np.inf], np.nan)
+                        .fillna(0)
+                        .round(1)
+                        .apply(lambda x: f"{x}%")
+                    )
+
                     st.dataframe(
-                        industry_overview_df_local[['flow_score', 'avg_score', 'median_score', 'avg_momentum', 'avg_volume', 'avg_ret_30d']].style.background_gradient(subset=['flow_score', 'avg_score']),
+                        industry_overview_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
                         use_container_width=True
                     )
                     st.info("📊 **Normalized Analysis**: Industry performance is measured by dynamically sampling the best stocks from each industry to ensure a fair comparison across groups of different sizes.")
                 else:
                     st.info("No industry data available in the filtered dataset for analysis.")
             else:
-                st.info("Industry column not available in data.")
-            # End of new industry performance logic
+                st.info("Industry column not available in data or filtered data is empty.")
 
             st.markdown("---")
             st.markdown("#### Category Performance")
