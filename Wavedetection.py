@@ -1,15 +1,3 @@
-"""
-Wave Detection Ultimate 3.0 - FINAL ENHANCED PRODUCTION VERSION
-===============================================================
-Professional Stock Ranking System with Advanced Analytics
-All bugs fixed, optimized for Streamlit Community Cloud
-Enhanced with all valuable features from previous versions
-
-Version: 3.0.8-FINAL-ENHANCED
-Last Updated: December 2024
-Status: PRODUCTION READY - Feature Complete with Industry Support
-"""
-
 # ============================================
 # IMPORTS AND SETUP
 # ============================================
@@ -1147,20 +1135,8 @@ class PatternDetector:
             df['patterns'] = [''] * len(df)
             return df
 
-        # Get all pattern definitions as boolean masks
-        patterns_with_masks_raw = PatternDetector._get_all_pattern_definitions(df)
+        patterns_with_masks = PatternDetector._get_all_pattern_definitions(df)
         
-        # Prepare patterns with consistently structured tuples
-        patterns_with_masks = []
-        pattern_names_ordered = []
-        for item in patterns_with_masks_raw:
-            if isinstance(item[0], str):
-                patterns_with_masks.append(item)
-                pattern_names_ordered.append(item[0])
-            else:
-                patterns_with_masks.append((item[1], item[0]))
-                pattern_names_ordered.append(item[1])
-
         # Pre-allocate a NumPy array for pattern presence
         num_patterns = len(patterns_with_masks)
         if num_patterns == 0:
@@ -1168,6 +1144,7 @@ class PatternDetector:
             return df
 
         pattern_matrix = np.zeros((len(df), num_patterns), dtype=bool)
+        pattern_names_ordered = [item[0] for item in patterns_with_masks]
         
         # Populate the boolean matrix
         for i, (pattern_name, mask) in enumerate(patterns_with_masks):
@@ -2664,6 +2641,7 @@ def main():
                         use_container_width=True):
                 st.session_state.data_source = "sheet"
                 st.rerun()
+        
         with data_source_col2:
             if st.button("📁 Upload CSV", 
                         type="primary" if st.session_state.data_source == "upload" else "secondary", 
@@ -4271,8 +4249,8 @@ def main():
                 )
                 st.info("""
                 📊 **Smart Dynamic Sampling**: 
-                • Single stock: 100% | 2-5: 100% | 6-10: 80% | 11-25: 60% | 26-50: 40% | 
-                51-100: 30% | 101-250: 20% | 251-550: 15% | 550+: 10% (max 75)
+                • Single stock: 100% | 2-5: 100% | 6-10: 80% (min 3) | 11-25: 60% (min 5) | 26-50: 40% (min 10) | 
+                51-100: 30% (min 15) | 101-250: 20% (min 25) | 251-550: 15% (min 40) | 550+: 10% (max 75)
                 """)
             else:
                 st.info("No industry data available in the filtered dataset for analysis.")
