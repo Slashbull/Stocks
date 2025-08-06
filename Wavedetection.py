@@ -4182,6 +4182,7 @@ def main():
             
             # 5. VOLUME SURGE DETECTION
 st.markdown("#### 🌊 Volume Surges - Unusual Activity NOW")
+st.markdown("*Catch waves as they form, not after they've peaked!*")
 
 # Set RVOL threshold based on sensitivity
 rvol_threshold = {"Conservative": 3.0, "Balanced": 2.0, "Aggressive": 1.5}[sensitivity]
@@ -4219,14 +4220,13 @@ if len(volume_surges) > 0:
         
         if 'rvol' in surge_display.columns:
             surge_display['RVOL'] = surge_display['rvol'].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else '-')
-            surge_display = surge_display.drop('rvol', axis=1)
-
+        
         if 'money_flow_mm' in surge_display.columns:
             surge_display['money_flow_mm'] = surge_display['money_flow_mm'].apply(lambda x: f"₹{x:.1f}M" if pd.notna(x) else '-')
         
         surge_display['price'] = surge_display['price'].apply(lambda x: f"₹{x:,.0f}" if pd.notna(x) else '-')
-        
-        # Rename columns
+
+        # Rename columns, making sure to handle the new 'RVOL' column
         rename_dict = {
             'ticker': 'Ticker',
             'company_name': 'Company',
@@ -4981,5 +4981,6 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
