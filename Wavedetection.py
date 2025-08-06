@@ -2828,7 +2828,7 @@ def main():
         
         # Category filter
         categories = FilterEngine.get_filter_options(ranked_df, 'category', filters) # Use ranked_df for full options
-        st.session_state.category_filter = st.multiselect( # Widget updates session state directly
+        st.multiselect( # Widget updates session state directly
             "Market Cap Category",
             options=categories,
             default=st.session_state.get('category_filter', []),
@@ -2838,7 +2838,7 @@ def main():
         
         # Sector filter
         sectors = FilterEngine.get_filter_options(ranked_df, 'sector', filters) # Use ranked_df for full options
-        st.session_state.sector_filter = st.multiselect( # Widget updates session state directly
+        st.multiselect( # Widget updates session state directly
             "Sector",
             options=sectors,
             default=st.session_state.get('sector_filter', []),
@@ -2848,7 +2848,7 @@ def main():
         
         # Industry filter (FIXED: Now correctly populating)
         industries = FilterEngine.get_filter_options(ranked_df, 'industry', filters) # Use ranked_df for full options
-        st.session_state.industry_filter = st.multiselect( # Widget updates session state directly
+        st.multiselect( # Widget updates session state directly
             "Industry",
             options=industries,
             default=st.session_state.get('industry_filter', []),
@@ -2857,7 +2857,7 @@ def main():
         )
         
         # Minimum Master Score filter
-        st.session_state.min_score = st.slider(
+        st.slider(
             "Minimum Master Score",
             min_value=0,
             max_value=100,
@@ -2874,7 +2874,7 @@ def main():
                 all_patterns.update(patterns_str.split(' | '))
         
         if all_patterns:
-            st.session_state.patterns = st.multiselect( # Widget updates session state directly
+            st.multiselect( # Widget updates session state directly
                 "Patterns",
                 options=sorted(all_patterns),
                 default=st.session_state.get('patterns', []),
@@ -2900,7 +2900,7 @@ def main():
             current_trend_index = 0
             st.session_state.trend_filter = "All Trends" # Reset to default if invalid
             
-        st.session_state.trend_filter = st.selectbox( # Widget updates session state directly
+        st.selectbox( # Widget updates session state directly
             "Trend Quality",
             options=list(trend_options.keys()),
             index=current_trend_index,
@@ -2912,7 +2912,7 @@ def main():
         # Wave Filters
         st.markdown("#### 🌊 Wave Filters")
         wave_states_options = FilterEngine.get_filter_options(ranked_df, 'wave_state', filters)
-        st.session_state.wave_states_filter = st.multiselect( # Widget updates session state directly
+        st.multiselect( # Widget updates session state directly
             "Wave State",
             options=wave_states_options,
             default=st.session_state.get('wave_states_filter', []),
@@ -2932,7 +2932,7 @@ def main():
             current_slider_value = (max(slider_min_val, min(slider_max_val, current_slider_value[0])),
                                     max(slider_min_val, min(slider_max_val, current_slider_value[1])))
             
-            st.session_state.wave_strength_range_slider = st.slider( # Widget updates session state directly
+            st.slider( # Widget updates session state directly
                 "Overall Wave Strength",
                 min_value=slider_min_val,
                 max_value=slider_max_val,
@@ -2953,7 +2953,7 @@ def main():
             ]:
                 if col_name in ranked_df.columns:
                     tier_options = FilterEngine.get_filter_options(ranked_df, col_name, filters)
-                    st.session_state[tier_type_key] = st.multiselect( # Widget updates session state directly
+                    st.multiselect( # Widget updates session state directly
                         f"{col_name.replace('_', ' ').title()}",
                         options=tier_options,
                         default=st.session_state.get(tier_type_key, []),
@@ -2963,7 +2963,7 @@ def main():
             
             # EPS change filter
             if 'eps_change_pct' in ranked_df.columns:
-                st.session_state.min_eps_change = st.text_input( # Widget updates session state directly
+                st.text_input( # Widget updates session state directly
                     "Min EPS Change %",
                     value=st.session_state.get('min_eps_change', ""),
                     placeholder="e.g. -50 or leave empty",
@@ -2976,21 +2976,21 @@ def main():
                 st.markdown("**🔍 Fundamental Filters**")
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.session_state.min_pe = st.text_input( # Widget updates session state directly
+                    st.text_input( # Widget updates session state directly
                         "Min PE Ratio",
                         value=st.session_state.get('min_pe', ""),
                         placeholder="e.g. 10",
                         key="min_pe"
                     )
                 with col2:
-                    st.session_state.max_pe = st.text_input( # Widget updates session state directly
+                    st.text_input( # Widget updates session state directly
                         "Max PE Ratio",
                         value=st.session_state.get('max_pe', ""),
                         placeholder="e.g. 30",
                         key="max_pe"
                     )
                 
-                st.session_state.require_fundamental_data = st.checkbox( # Widget updates session state directly
+                st.checkbox( # Widget updates session state directly
                     "Only show stocks with PE and EPS data",
                     value=st.session_state.get('require_fundamental_data', False),
                     key="require_fundamental_data"
@@ -3394,7 +3394,7 @@ def main():
         radar_col1, radar_col2, radar_col3, radar_col4 = st.columns([2, 2, 2, 1])
         
         with radar_col1:
-            st.session_state.wave_timeframe_select = st.selectbox(
+            st.selectbox( # Widget updates session state directly
                 "Wave Detection Timeframe",
                 options=[
                     "All Waves",
@@ -3415,7 +3415,7 @@ def main():
             )
         
         with radar_col2:
-            st.session_state.wave_sensitivity = st.select_slider(
+            st.select_slider( # Widget updates session state directly
                 "Detection Sensitivity",
                 options=["Conservative", "Balanced", "Aggressive"],
                 value=st.session_state.get('wave_sensitivity', "Balanced"),
@@ -3423,7 +3423,7 @@ def main():
                 help="Conservative = Stronger signals, Aggressive = More signals"
             )
             
-            st.session_state.show_sensitivity_details = st.checkbox(
+            st.checkbox( # Widget updates session state directly
                 "Show thresholds",
                 value=st.session_state.get('show_sensitivity_details', False),
                 key="show_sensitivity_details",
@@ -3431,7 +3431,7 @@ def main():
             )
         
         with radar_col3:
-            st.session_state.show_market_regime = st.checkbox(
+            st.checkbox( # Widget updates session state directly
                 "📊 Market Regime Analysis",
                 value=st.session_state.get('show_market_regime', True),
                 key="show_market_regime",
