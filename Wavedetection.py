@@ -4503,606 +4503,607 @@ with tabs[3]:
             else:
                 st.info("No data available for analysis.")
     
-   # Tab 4: Search
-    with tabs[4]:
-        st.markdown("### 🔍 Advanced Stock Search")
-        
-        # Search interface
-        col1, col2 = st.columns([4, 1])
-        
-        with col1:
-            search_query = st.text_input(
-                "Search stocks",
-                placeholder="Enter ticker or company name...",
-                help="Search by ticker symbol or company name",
-                key="search_input"
-            )
-        
-        with col2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            search_clicked = st.button("🔎 Search", type="primary", use_container_width=True)
-        
-        # Perform search
-        if search_query or search_clicked:
-            with st.spinner("Searching..."):
-                search_results = SearchEngine.search_stocks(filtered_df, search_query)
+       # Tab 4: Search
+        with tabs[4]:
+            st.markdown("### 🔍 Advanced Stock Search")
             
-            if not search_results.empty:
-                st.success(f"Found {len(search_results)} matching stock(s)")
+            # Search interface
+            col1, col2 = st.columns([4, 1])
+            
+            with col1:
+                search_query = st.text_input(
+                    "Search stocks",
+                    placeholder="Enter ticker or company name...",
+                    help="Search by ticker symbol or company name",
+                    key="search_input"
+                )
+            
+            with col2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                search_clicked = st.button("🔎 Search", type="primary", use_container_width=True)
+            
+            # Perform search
+            if search_query or search_clicked:
+                with st.spinner("Searching..."):
+                    search_results = SearchEngine.search_stocks(filtered_df, search_query)
                 
-                # Display each result
-                for idx, stock in search_results.iterrows():
-                    with st.expander(
-                        f"📊 {stock['ticker']} - {stock['company_name']} "
-                        f"(Rank #{int(stock['rank'])})",
-                        expanded=True
-                    ):
-                        # Header metrics
-                        metric_cols = st.columns(6)
-                        
-                        with metric_cols[0]:
-                            UIComponents.render_metric_card(
-                                "Master Score",
-                                f"{stock['master_score']:.1f}",
-                                f"Rank #{int(stock['rank'])}"
-                            )
-                        
-                        with metric_cols[1]:
-                            price_value = f"₹{stock['price']:,.0f}" if pd.notna(stock.get('price')) else "N/A"
-                            ret_1d_value = f"{stock['ret_1d']:+.1f}%" if pd.notna(stock.get('ret_1d')) else None
-                            UIComponents.render_metric_card("Price", price_value, ret_1d_value)
-                        
-                        with metric_cols[2]:
-                            UIComponents.render_metric_card(
-                                "From Low",
-                                f"{stock['from_low_pct']:.0f}%",
-                                "52-week range position"
-                            )
-                        
-                        with metric_cols[3]:
-                            ret_30d = stock.get('ret_30d', 0)
-                            UIComponents.render_metric_card(
-                                "30D Return",
-                                f"{ret_30d:+.1f}%",
-                                "↑" if ret_30d > 0 else "↓"
-                            )
-                        
-                        with metric_cols[4]:
-                            rvol = stock.get('rvol', 1)
-                            UIComponents.render_metric_card(
-                                "RVOL",
-                                f"{rvol:.1f}x",
-                                "High" if rvol > 2 else "Normal"
-                            )
-                        
-                        with metric_cols[5]:
-                            UIComponents.render_metric_card(
-                                "Wave State",
-                                stock.get('wave_state', 'N/A'),
-                                stock['category']
-                            )
-                        
-                        # Score breakdown
-                        st.markdown("#### 📈 Score Components")
-                        score_cols = st.columns(6)
-                        
-                        components = [
-                            ("Position", stock['position_score'], CONFIG.POSITION_WEIGHT),
-                            ("Volume", stock['volume_score'], CONFIG.VOLUME_WEIGHT),
-                            ("Momentum", stock['momentum_score'], CONFIG.MOMENTUM_WEIGHT),
-                            ("Acceleration", stock['acceleration_score'], CONFIG.ACCELERATION_WEIGHT),
-                            ("Breakout", stock['breakout_score'], CONFIG.BREAKOUT_WEIGHT),
-                            ("RVOL", stock['rvol_score'], CONFIG.RVOL_WEIGHT)
-                        ]
-                        
-                        for i, (name, score, weight) in enumerate(components):
-                            with score_cols[i]:
-                                # Color coding
-                                if pd.isna(score):
-                                    color = "⚪"
-                                    display_score = "N/A"
-                                elif score >= 80:
-                                    color = "🟢"
-                                    display_score = f"{score:.0f}"
-                                elif score >= 60:
-                                    color = "🟡"
-                                    display_score = f"{score:.0f}"
-                                else:
-                                    color = "🔴"
-                                    display_score = f"{score:.0f}"
-                                
-                                st.markdown(
-                                    f"**{name}**<br>"
-                                    f"{color} {display_score}<br>"
-                                    f"<small>Weight: {weight:.0%}</small>",
-                                    unsafe_allow_html=True
+                if not search_results.empty:
+                    st.success(f"Found {len(search_results)} matching stock(s)")
+                    
+                    # Display each result
+                    for idx, stock in search_results.iterrows():
+                        with st.expander(
+                            f"📊 {stock['ticker']} - {stock['company_name']} "
+                            f"(Rank #{int(stock['rank'])})",
+                            expanded=True
+                        ):
+                            # Header metrics
+                            metric_cols = st.columns(6)
+                            
+                            with metric_cols[0]:
+                                UIComponents.render_metric_card(
+                                    "Master Score",
+                                    f"{stock['master_score']:.1f}",
+                                    f"Rank #{int(stock['rank'])}"
                                 )
-                        
-                        # Patterns
-                        if stock.get('patterns'):
-                            st.markdown(f"**🎯 Patterns:** {stock['patterns']}")
-                        
-                        # Additional details - Reorganized layout
-                        
-                        st.markdown("---")
-                        # First row: Classification & Fundamentals (col1), Performance (col2)
-                        # Second row: Technicals + Trading Position (col3)
-                        # Third row: Advanced Metrics (col4)
-                        
-                        # Use a container for logical grouping and then columns within it
-                        st.container()
-                        detail_cols_top = st.columns([1, 1])
-                        
-                        with detail_cols_top[0]:
-                            st.markdown("**📊 Classification**")
-                            st.text(f"Sector: {stock.get('sector', 'Unknown')}")
-                            st.text(f"Category: {stock.get('category', 'Unknown')}")
-                            st.text(f"industry: {stock.get('industry', 'Unknown')}")
                             
-                            if show_fundamentals:
-                                st.markdown("**💰 Fundamentals**")
-                                
-                                # PE Ratio
-                                if 'pe' in stock and pd.notna(stock['pe']):
-                                    pe_val = stock['pe']
-                                    if pe_val <= 0:
-                                        st.text("PE Ratio: 🔴 Loss")
-                                    elif pe_val < 15:
-                                        st.text(f"PE Ratio: 🟢 {pe_val:.1f}x")
-                                    elif pe_val < 25:
-                                        st.text(f"PE Ratio: 🟡 {pe_val:.1f}x")
-                                    else:
-                                        st.text(f"PE Ratio: 🔴 {pe_val:.1f}x")
-                                else:
-                                    st.text("PE Ratio: N/A")
-                                
-                                # EPS Current
-                                if 'eps_current' in stock and pd.notna(stock['eps_current']):
-                                    st.text(f"EPS Current: ₹{stock['eps_current']:.2f}")
-                                else:
-                                    st.text("EPS Current: N/A")
-
-                                # EPS Change
-                                if 'eps_change_pct' in stock and pd.notna(stock['eps_change_pct']):
-                                    eps_chg = stock['eps_change_pct']
-                                    if eps_chg >= 100:
-                                        st.text(f"EPS Growth: 🚀 {eps_chg:+.0f}%")
-                                    elif eps_chg >= 50:
-                                        st.text(f"EPS Growth: 🔥 {eps_chg:+.1f}%")
-                                    elif eps_chg >= 0:
-                                        st.text(f"EPS Growth: 📈 {eps_chg:+.1f}%")
-                                    else:
-                                        st.text(f"EPS Growth: 📉 {eps_chg:+.1f}%")
-                                else:
-                                    st.text("EPS Growth: N/A")
-                        
-                        with detail_cols_top[1]:
-                            st.markdown("**📈 Performance**")
-                            for period, col in [
-                                ("1 Day", 'ret_1d'),
-                                ("7 Days", 'ret_7d'),
-                                ("30 Days", 'ret_30d'),
-                                ("3 Months", 'ret_3m'),
-                                ("6 Months", 'ret_6m'),
-                                ("1 Year", 'ret_1y')
-                            ]:
-                                if col in stock.index and pd.notna(stock[col]):
-                                    st.text(f"{period}: {stock[col]:+.1f}%")
-                                else:
-                                    st.text(f"{period}: N/A")
-                        
-                        # Technicals and Trading Position (next row)
-                        st.markdown("---")
-                        detail_cols_tech = st.columns([1,1])
-                        
-                        with detail_cols_tech[0]: # This will contain 52W info and Trading Position
-                            st.markdown("**🔍 Technicals**")
+                            with metric_cols[1]:
+                                price_value = f"₹{stock['price']:,.0f}" if pd.notna(stock.get('price')) else "N/A"
+                                ret_1d_value = f"{stock['ret_1d']:+.1f}%" if pd.notna(stock.get('ret_1d')) else None
+                                UIComponents.render_metric_card("Price", price_value, ret_1d_value)
                             
-                            # 52-week range details
-                            if all(col in stock.index for col in ['low_52w', 'high_52w']):
-                                st.text(f"52W Low: ₹{stock.get('low_52w', 0):,.0f}")
-                                st.text(f"52W High: ₹{stock.get('high_52w', 0):,.0f}")
-                            else:
-                                st.text("52W Range: N/A")
-
-                            st.text(f"From High: {stock.get('from_high_pct', 0):.0f}%")
-                            st.text(f"From Low: {stock.get('from_low_pct', 0):.0f}%")
+                            with metric_cols[2]:
+                                UIComponents.render_metric_card(
+                                    "From Low",
+                                    f"{stock['from_low_pct']:.0f}%",
+                                    "52-week range position"
+                                )
                             
-                            st.markdown("**📊 Trading Position**")
-                            tp_col1, tp_col2, tp_col3 = st.columns(3)
-
-                            current_price = stock.get('price', 0)
+                            with metric_cols[3]:
+                                ret_30d = stock.get('ret_30d', 0)
+                                UIComponents.render_metric_card(
+                                    "30D Return",
+                                    f"{ret_30d:+.1f}%",
+                                    "↑" if ret_30d > 0 else "↓"
+                                )
                             
-                            sma_checks = [
-                                ('sma_20d', '20DMA'),
-                                ('sma_50d', '50DMA'),
-                                ('sma_200d', '200DMA')
+                            with metric_cols[4]:
+                                rvol = stock.get('rvol', 1)
+                                UIComponents.render_metric_card(
+                                    "RVOL",
+                                    f"{rvol:.1f}x",
+                                    "High" if rvol > 2 else "Normal"
+                                )
+                            
+                            with metric_cols[5]:
+                                UIComponents.render_metric_card(
+                                    "Wave State",
+                                    stock.get('wave_state', 'N/A'),
+                                    stock['category']
+                                )
+                            
+                            # Score breakdown
+                            st.markdown("#### 📈 Score Components")
+                            score_cols = st.columns(6)
+                            
+                            components = [
+                                ("Position", stock['position_score'], CONFIG.POSITION_WEIGHT),
+                                ("Volume", stock['volume_score'], CONFIG.VOLUME_WEIGHT),
+                                ("Momentum", stock['momentum_score'], CONFIG.MOMENTUM_WEIGHT),
+                                ("Acceleration", stock['acceleration_score'], CONFIG.ACCELERATION_WEIGHT),
+                                ("Breakout", stock['breakout_score'], CONFIG.BREAKOUT_WEIGHT),
+                                ("RVOL", stock['rvol_score'], CONFIG.RVOL_WEIGHT)
                             ]
                             
-                            for i, (sma_col, sma_label) in enumerate(sma_checks):
-                                display_col = [tp_col1, tp_col2, tp_col3][i]
-                                with display_col:
-                                    if sma_col in stock.index and pd.notna(stock[sma_col]) and stock[sma_col] > 0:
-                                        sma_value = stock[sma_col]
-                                        if current_price > sma_value:
-                                            pct_diff = ((current_price - sma_value) / sma_value) * 100
-                                            st.markdown(f"**{sma_label}**: <span style='color:green'>↑{pct_diff:.1f}%</span>", unsafe_allow_html=True)
-                                        else:
-                                            pct_diff = ((sma_value - current_price) / sma_value) * 100
-                                            st.markdown(f"**{sma_label}**: <span style='color:red'>↓{pct_diff:.1f}%</span>", unsafe_allow_html=True)
+                            for i, (name, score, weight) in enumerate(components):
+                                with score_cols[i]:
+                                    # Color coding
+                                    if pd.isna(score):
+                                        color = "⚪"
+                                        display_score = "N/A"
+                                    elif score >= 80:
+                                        color = "🟢"
+                                        display_score = f"{score:.0f}"
+                                    elif score >= 60:
+                                        color = "🟡"
+                                        display_score = f"{score:.0f}"
                                     else:
-                                        st.markdown(f"**{sma_label}**: N/A")
+                                        color = "🔴"
+                                        display_score = f"{score:.0f}"
+                                    
+                                    st.markdown(
+                                        f"**{name}**<br>"
+                                        f"{color} {display_score}<br>"
+                                        f"<small>Weight: {weight:.0%}</small>",
+                                        unsafe_allow_html=True
+                                    )
                             
-                        with detail_cols_tech[1]: # This will contain Trend Analysis and Advanced Metrics
-                            st.markdown("**📈 Trend Analysis**")
-                            if 'trend_quality' in stock.index:
-                                tq = stock['trend_quality']
-                                if tq >= 80:
-                                    st.markdown(f"🔥 Strong Uptrend ({tq:.0f})")
-                                elif tq >= 60:
-                                    st.markdown(f"✅ Good Uptrend ({tq:.0f})")
-                                elif tq >= 40:
-                                    st.markdown(f"➡️ Neutral Trend ({tq:.0f})")
-                                else:
-                                    st.markdown(f"⚠️ Weak/Downtrend ({tq:.0f})")
-                            else:
-                                st.markdown("Trend: N/A")
-
-                            # NEW: Advanced Metrics - Reorganized into 4 columns
+                            # Patterns
+                            if stock.get('patterns'):
+                                st.markdown(f"**🎯 Patterns:** {stock['patterns']}")
+                            
+                            # Additional details - Reorganized layout
+                            
                             st.markdown("---")
-                            st.markdown("#### 🎯 Advanced Metrics")
-                            adv_col1, adv_col2 = st.columns(2)
+                            # First row: Classification & Fundamentals (col1), Performance (col2)
+                            # Second row: Technicals + Trading Position (col3)
+                            # Third row: Advanced Metrics (col4)
                             
-                            with adv_col1:
-                                if 'vmi' in stock and pd.notna(stock['vmi']):
-                                    st.metric("VMI", f"{stock['vmi']:.2f}")
-                                else:
-                                    st.metric("VMI", "N/A")
-                                
-                                if 'momentum_harmony' in stock and pd.notna(stock['momentum_harmony']):
-                                    harmony_val = stock['momentum_harmony']
-                                    harmony_emoji = "🟢" if harmony_val >= 3 else "🟡" if harmony_val >= 2 else "🔴"
-                                    st.metric("Harmony", f"{harmony_emoji} {int(harmony_val)}/4")
-                                else:
-                                    st.metric("Harmony", "N/A")
+                            # Use a container for logical grouping and then columns within it
+                            st.container()
+                            detail_cols_top = st.columns([1, 1])
                             
-                            with adv_col2:
-                                if 'position_tension' in stock and pd.notna(stock['position_tension']):
-                                    st.metric("Position Tension", f"{stock['position_tension']:.0f}")
-                                else:
-                                    st.metric("Position Tension", "N/A")
+                            with detail_cols_top[0]:
+                                st.markdown("**📊 Classification**")
+                                st.text(f"Sector: {stock.get('sector', 'Unknown')}")
+                                st.text(f"Category: {stock.get('category', 'Unknown')}")
+                                st.text(f"industry: {stock.get('industry', 'Unknown')}")
                                 
-                                if 'money_flow_mm' in stock and pd.notna(stock['money_flow_mm']):
-                                    st.metric("Money Flow", f"₹{stock['money_flow_mm']:.1f}M")
+                                if show_fundamentals:
+                                    st.markdown("**💰 Fundamentals**")
+                                    
+                                    # PE Ratio
+                                    if 'pe' in stock and pd.notna(stock['pe']):
+                                        pe_val = stock['pe']
+                                        if pe_val <= 0:
+                                            st.text("PE Ratio: 🔴 Loss")
+                                        elif pe_val < 15:
+                                            st.text(f"PE Ratio: 🟢 {pe_val:.1f}x")
+                                        elif pe_val < 25:
+                                            st.text(f"PE Ratio: 🟡 {pe_val:.1f}x")
+                                        else:
+                                            st.text(f"PE Ratio: 🔴 {pe_val:.1f}x")
+                                    else:
+                                        st.text("PE Ratio: N/A")
+                                    
+                                    # EPS Current
+                                    if 'eps_current' in stock and pd.notna(stock['eps_current']):
+                                        st.text(f"EPS Current: ₹{stock['eps_current']:.2f}")
+                                    else:
+                                        st.text("EPS Current: N/A")
+    
+                                    # EPS Change
+                                    if 'eps_change_pct' in stock and pd.notna(stock['eps_change_pct']):
+                                        eps_chg = stock['eps_change_pct']
+                                        if eps_chg >= 100:
+                                            st.text(f"EPS Growth: 🚀 {eps_chg:+.0f}%")
+                                        elif eps_chg >= 50:
+                                            st.text(f"EPS Growth: 🔥 {eps_chg:+.1f}%")
+                                        elif eps_chg >= 0:
+                                            st.text(f"EPS Growth: 📈 {eps_chg:+.1f}%")
+                                        else:
+                                            st.text(f"EPS Growth: 📉 {eps_chg:+.1f}%")
+                                    else:
+                                        st.text("EPS Growth: N/A")
+                            
+                            with detail_cols_top[1]:
+                                st.markdown("**📈 Performance**")
+                                for period, col in [
+                                    ("1 Day", 'ret_1d'),
+                                    ("7 Days", 'ret_7d'),
+                                    ("30 Days", 'ret_30d'),
+                                    ("3 Months", 'ret_3m'),
+                                    ("6 Months", 'ret_6m'),
+                                    ("1 Year", 'ret_1y')
+                                ]:
+                                    if col in stock.index and pd.notna(stock[col]):
+                                        st.text(f"{period}: {stock[col]:+.1f}%")
+                                    else:
+                                        st.text(f"{period}: N/A")
+                            
+                            # Technicals and Trading Position (next row)
+                            st.markdown("---")
+                            detail_cols_tech = st.columns([1,1])
+                            
+                            with detail_cols_tech[0]: # This will contain 52W info and Trading Position
+                                st.markdown("**🔍 Technicals**")
+                                
+                                # 52-week range details
+                                if all(col in stock.index for col in ['low_52w', 'high_52w']):
+                                    st.text(f"52W Low: ₹{stock.get('low_52w', 0):,.0f}")
+                                    st.text(f"52W High: ₹{stock.get('high_52w', 0):,.0f}")
                                 else:
-                                    st.metric("Money Flow", "N/A")
-
-            else:
-                st.warning("No stocks found matching your search criteria.")    
-    with tabs[5]:
-        st.markdown("### 📥 Export Data")
-        
-        st.markdown("#### 📋 Export Templates")
-        export_template = st.radio(
-            "Choose export template:",
-            options=[
-                "Full Analysis (All Data)",
-                "Day Trader Focus",
-                "Swing Trader Focus",
-                "Investor Focus"
-            ],
-            key="export_template_radio",
-            help="Select a template based on your trading style"
-        )
-        
-        template_map = {
-            "Full Analysis (All Data)": "full",
-            "Day Trader Focus": "day_trader",
-            "Swing Trader Focus": "swing_trader",
-            "Investor Focus": "investor"
-        }
-        
-        selected_template = template_map[export_template]
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### 📊 Excel Report")
-            st.markdown(
-                "Comprehensive multi-sheet report including:\n"
-                "- Top 100 stocks with all scores\n"
-                "- Market intelligence dashboard\n"
-                "- Sector rotation analysis\n"
-                "- Pattern frequency analysis\n"
-                "- Wave Radar signals\n"
-                "- Summary statistics"
+                                    st.text("52W Range: N/A")
+    
+                                st.text(f"From High: {stock.get('from_high_pct', 0):.0f}%")
+                                st.text(f"From Low: {stock.get('from_low_pct', 0):.0f}%")
+                                
+                                st.markdown("**📊 Trading Position**")
+                                tp_col1, tp_col2, tp_col3 = st.columns(3)
+    
+                                current_price = stock.get('price', 0)
+                                
+                                sma_checks = [
+                                    ('sma_20d', '20DMA'),
+                                    ('sma_50d', '50DMA'),
+                                    ('sma_200d', '200DMA')
+                                ]
+                                
+                                for i, (sma_col, sma_label) in enumerate(sma_checks):
+                                    display_col = [tp_col1, tp_col2, tp_col3][i]
+                                    with display_col:
+                                        if sma_col in stock.index and pd.notna(stock[sma_col]) and stock[sma_col] > 0:
+                                            sma_value = stock[sma_col]
+                                            if current_price > sma_value:
+                                                pct_diff = ((current_price - sma_value) / sma_value) * 100
+                                                st.markdown(f"**{sma_label}**: <span style='color:green'>↑{pct_diff:.1f}%</span>", unsafe_allow_html=True)
+                                            else:
+                                                pct_diff = ((sma_value - current_price) / sma_value) * 100
+                                                st.markdown(f"**{sma_label}**: <span style='color:red'>↓{pct_diff:.1f}%</span>", unsafe_allow_html=True)
+                                        else:
+                                            st.markdown(f"**{sma_label}**: N/A")
+                                
+                            with detail_cols_tech[1]: # This will contain Trend Analysis and Advanced Metrics
+                                st.markdown("**📈 Trend Analysis**")
+                                if 'trend_quality' in stock.index:
+                                    tq = stock['trend_quality']
+                                    if tq >= 80:
+                                        st.markdown(f"🔥 Strong Uptrend ({tq:.0f})")
+                                    elif tq >= 60:
+                                        st.markdown(f"✅ Good Uptrend ({tq:.0f})")
+                                    elif tq >= 40:
+                                        st.markdown(f"➡️ Neutral Trend ({tq:.0f})")
+                                    else:
+                                        st.markdown(f"⚠️ Weak/Downtrend ({tq:.0f})")
+                                else:
+                                    st.markdown("Trend: N/A")
+    
+                                # NEW: Advanced Metrics - Reorganized into 4 columns
+                                st.markdown("---")
+                                st.markdown("#### 🎯 Advanced Metrics")
+                                adv_col1, adv_col2 = st.columns(2)
+                                
+                                with adv_col1:
+                                    if 'vmi' in stock and pd.notna(stock['vmi']):
+                                        st.metric("VMI", f"{stock['vmi']:.2f}")
+                                    else:
+                                        st.metric("VMI", "N/A")
+                                    
+                                    if 'momentum_harmony' in stock and pd.notna(stock['momentum_harmony']):
+                                        harmony_val = stock['momentum_harmony']
+                                        harmony_emoji = "🟢" if harmony_val >= 3 else "🟡" if harmony_val >= 2 else "🔴"
+                                        st.metric("Harmony", f"{harmony_emoji} {int(harmony_val)}/4")
+                                    else:
+                                        st.metric("Harmony", "N/A")
+                                
+                                with adv_col2:
+                                    if 'position_tension' in stock and pd.notna(stock['position_tension']):
+                                        st.metric("Position Tension", f"{stock['position_tension']:.0f}")
+                                    else:
+                                        st.metric("Position Tension", "N/A")
+                                    
+                                    if 'money_flow_mm' in stock and pd.notna(stock['money_flow_mm']):
+                                        st.metric("Money Flow", f"₹{stock['money_flow_mm']:.1f}M")
+                                    else:
+                                        st.metric("Money Flow", "N/A")
+    
+                else:
+                    st.warning("No stocks found matching your search criteria.")    
+        with tabs[5]:
+            st.markdown("### 📥 Export Data")
+            
+            st.markdown("#### 📋 Export Templates")
+            export_template = st.radio(
+                "Choose export template:",
+                options=[
+                    "Full Analysis (All Data)",
+                    "Day Trader Focus",
+                    "Swing Trader Focus",
+                    "Investor Focus"
+                ],
+                key="export_template_radio",
+                help="Select a template based on your trading style"
             )
             
-            if st.button("Generate Excel Report", type="primary", use_container_width=True):
-                if len(filtered_df) == 0:
-                    st.error("No data to export. Please adjust your filters.")
-                else:
-                    with st.spinner("Creating Excel report..."):
+            template_map = {
+                "Full Analysis (All Data)": "full",
+                "Day Trader Focus": "day_trader",
+                "Swing Trader Focus": "swing_trader",
+                "Investor Focus": "investor"
+            }
+            
+            selected_template = template_map[export_template]
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("#### 📊 Excel Report")
+                st.markdown(
+                    "Comprehensive multi-sheet report including:\n"
+                    "- Top 100 stocks with all scores\n"
+                    "- Market intelligence dashboard\n"
+                    "- Sector rotation analysis\n"
+                    "- Pattern frequency analysis\n"
+                    "- Wave Radar signals\n"
+                    "- Summary statistics"
+                )
+                
+                if st.button("Generate Excel Report", type="primary", use_container_width=True):
+                    if len(filtered_df) == 0:
+                        st.error("No data to export. Please adjust your filters.")
+                    else:
+                        with st.spinner("Creating Excel report..."):
+                            try:
+                                excel_file = ExportEngine.create_excel_report(
+                                    filtered_df, template=selected_template
+                                )
+                                
+                                st.download_button(
+                                    label="📥 Download Excel Report",
+                                    data=excel_file,
+                                    file_name=f"wave_detection_report_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                )
+                                
+                                st.success("Excel report generated successfully!")
+                                
+                            except Exception as e:
+                                st.error(f"Error generating Excel report: {str(e)}")
+                                logger.error(f"Excel export error: {str(e)}", exc_info=True)
+            
+            with col2:
+                st.markdown("#### 📄 CSV Export")
+                st.markdown(
+                    "Enhanced CSV format with:\n"
+                    "- All ranking scores\n"
+                    "- Advanced metrics (VMI, Money Flow)\n"
+                    "- Pattern detections\n"
+                    "- Wave states\n"
+                    "- Category classifications\n"
+                    "- Optimized for further analysis"
+                )
+                
+                if st.button("Generate CSV Export", use_container_width=True):
+                    if len(filtered_df) == 0:
+                        st.error("No data to export. Please adjust your filters.")
+                    else:
                         try:
-                            excel_file = ExportEngine.create_excel_report(
-                                filtered_df, template=selected_template
-                            )
+                            csv_data = ExportEngine.create_csv_export(filtered_df)
                             
                             st.download_button(
-                                label="📥 Download Excel Report",
-                                data=excel_file,
-                                file_name=f"wave_detection_report_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                label="📥 Download CSV File",
+                                data=csv_data,
+                                file_name=f"wave_detection_data_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv"
                             )
                             
-                            st.success("Excel report generated successfully!")
+                            st.success("CSV export generated successfully!")
                             
                         except Exception as e:
-                            st.error(f"Error generating Excel report: {str(e)}")
-                            logger.error(f"Excel export error: {str(e)}", exc_info=True)
-        
-        with col2:
-            st.markdown("#### 📄 CSV Export")
-            st.markdown(
-                "Enhanced CSV format with:\n"
-                "- All ranking scores\n"
-                "- Advanced metrics (VMI, Money Flow)\n"
-                "- Pattern detections\n"
-                "- Wave states\n"
-                "- Category classifications\n"
-                "- Optimized for further analysis"
-            )
+                            st.error(f"Error generating CSV: {str(e)}")
+                            logger.error(f"CSV export error: {str(e)}", exc_info=True)
             
-            if st.button("Generate CSV Export", use_container_width=True):
-                if len(filtered_df) == 0:
-                    st.error("No data to export. Please adjust your filters.")
-                else:
-                    try:
-                        csv_data = ExportEngine.create_csv_export(filtered_df)
-                        
-                        st.download_button(
-                            label="📥 Download CSV File",
-                            data=csv_data,
-                            file_name=f"wave_detection_data_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv",
-                            mime="text/csv"
-                        )
-                        
-                        st.success("CSV export generated successfully!")
-                        
-                    except Exception as e:
-                        st.error(f"Error generating CSV: {str(e)}")
-                        logger.error(f"CSV export error: {str(e)}", exc_info=True)
+            st.markdown("---")
+            st.markdown("#### 📊 Export Preview")
+            
+            export_stats = {
+                "Total Stocks": len(filtered_df),
+                "Average Score": f"{filtered_df['master_score'].mean():.1f}" if not filtered_df.empty else "N/A",
+                "Stocks with Patterns": (filtered_df['patterns'] != '').sum() if 'patterns' in filtered_df.columns else 0,
+                "High RVOL (>2x)": (filtered_df['rvol'] > 2).sum() if 'rvol' in filtered_df.columns else 0,
+                "Positive 30D Returns": (filtered_df['ret_30d'] > 0).sum() if 'ret_30d' in filtered_df.columns else 0,
+                "Data Quality": f"{st.session_state.data_quality.get('completeness', 0):.1f}%"
+            }
+            
+            stat_cols = st.columns(3)
+            for i, (label, value) in enumerate(export_stats.items()):
+                with stat_cols[i % 3]:
+                    UIComponents.render_metric_card(label, value)
+        
+        with tabs[6]:
+            st.markdown("### ℹ️ About Wave Detection Ultimate 3.0 - Final Production Version")
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown("""
+                #### 🌊 Welcome to Wave Detection Ultimate 3.0
+                
+                The FINAL production version of the most advanced stock ranking system designed to catch momentum waves early.
+                This professional-grade tool combines technical analysis, volume dynamics, advanced metrics, and 
+                smart pattern recognition to identify high-potential stocks before they peak.
+                
+                #### 🎯 Core Features - LOCKED IN PRODUCTION
+                
+                **Master Score 3.0** - Proprietary ranking algorithm (DO NOT MODIFY):
+                - **Position Analysis (30%)** - 52-week range positioning
+                - **Volume Dynamics (25%)** - Multi-timeframe volume patterns
+                - **Momentum Tracking (15%)** - 30-day price momentum
+                - **Acceleration Detection (10%)** - Momentum acceleration signals
+                - **Breakout Probability (10%)** - Technical breakout readiness
+                - **RVOL Integration (10%)** - Real-time relative volume
+                
+                **Advanced Metrics** - NEW IN FINAL VERSION:
+                - **Money Flow** - Price × Volume × RVOL in millions
+                - **VMI (Volume Momentum Index)** - Weighted volume trend score
+                - **Position Tension** - Range position stress indicator
+                - **Momentum Harmony** - Multi-timeframe alignment (0-4)
+                - **Wave State** - Real-time momentum classification
+                - **Overall Wave Strength** - Composite score for wave filter
+                
+                **25 Pattern Detection** - Complete set:
+                - 11 Technical patterns
+                - 5 Fundamental patterns (Hybrid mode)
+                - 6 Price range patterns
+                - 3 NEW intelligence patterns (Stealth, Vampire, Perfect Storm)
+                
+                #### 💡 How to Use
+                
+                1. **Data Source** - Google Sheets (default) or CSV upload
+                2. **Quick Actions** - Instant filtering for common scenarios
+                3. **Smart Filters** - Interconnected filtering system, including new Wave filters
+                4. **Display Modes** - Technical or Hybrid (with fundamentals)
+                5. **Wave Radar** - Monitor early momentum signals
+                6. **Export Templates** - Customized for trading styles
+                
+                #### 🔧 Production Features
+                
+                - **Performance Optimized** - Sub-2 second processing
+                - **Memory Efficient** - Handles 2000+ stocks smoothly
+                - **Error Resilient** - Graceful degradation
+                - **Data Validation** - Comprehensive quality checks
+                - **Smart Caching** - 1-hour intelligent cache
+                - **Mobile Responsive** - Works on all devices
+                
+                #### 📊 Data Processing Pipeline
+                
+                1. Load from Google Sheets or CSV
+                2. Validate and clean all 41 columns
+                3. Calculate 6 component scores
+                4. Generate Master Score 3.0
+                5. Calculate advanced metrics
+                6. Detect all 25 patterns
+                7. Classify into tiers
+                8. Apply smart ranking
+                
+                #### 🎨 Display Modes
+                
+                **Technical Mode** (Default)
+                - Pure momentum analysis
+                - Technical indicators only
+                - Pattern detection
+                - Volume dynamics
+                
+                **Hybrid Mode**
+                - All technical features
+                - PE ratio analysis
+                - EPS growth tracking
+                - Fundamental patterns
+                - Value indicators
+                """)
+            
+            with col2:
+                st.markdown("""
+                #### 📈 Pattern Groups
+                
+                **Technical Patterns**
+                - 🔥 CAT LEADER
+                - 💎 HIDDEN GEM
+                - 🚀 ACCELERATING
+                - 🏦 INSTITUTIONAL
+                - ⚡ VOL EXPLOSION
+                - 🎯 BREAKOUT
+                - 👑 MARKET LEADER
+                - 🌊 MOMENTUM WAVE
+                - 💰 LIQUID LEADER
+                - 💪 LONG STRENGTH
+                - 📈 QUALITY TREND
+                
+                **Range Patterns**
+                - 🎯 52W HIGH APPROACH
+                - 🔄 52W LOW BOUNCE
+                - 👑 GOLDEN ZONE
+                - 📊 VOL ACCUMULATION
+                - 🔀 MOMENTUM DIVERGE
+                - 🎯 RANGE COMPRESS
+                
+                **NEW Intelligence**
+                - 🤫 STEALTH
+                - 🧛 VAMPIRE
+                - ⛈️ PERFECT STORM
+                
+                **Fundamental** (Hybrid)
+                - 💎 VALUE MOMENTUM
+                - 📊 EARNINGS ROCKET
+                - 🏆 QUALITY LEADER
+                - ⚡ TURNAROUND
+                - ⚠️ HIGH PE
+                
+                #### ⚡ Performance
+                
+                - Initial load: <2 seconds
+                - Filtering: <200ms
+                - Pattern detection: <500ms
+                - Search: <50ms
+                - Export: <1 second
+                
+                #### 🔒 Production Status
+                
+                **Version**: 3.0.7-FINAL-COMPLETE
+                **Last Updated**: July 2025
+                **Status**: PRODUCTION
+                **Updates**: LOCKED
+                **Testing**: COMPLETE
+                **Optimization**: MAXIMUM
+                
+                #### 💬 Credits
+                
+                Developed for professional traders
+                requiring reliable, fast, and
+                comprehensive market analysis.
+                
+                This is the FINAL version.
+                No further updates will be made.
+                All features are permanent.
+                
+                ---
+                
+                **Indian Market Optimized**
+                - ₹ Currency formatting
+                - IST timezone aware
+                - NSE/BSE categories
+                - Local number formats
+                """)
+            
+            # System stats
+            st.markdown("---")
+            st.markdown("#### 📊 Current Session Statistics")
+            
+            stats_cols = st.columns(4)
+            
+            with stats_cols[0]:
+                UIComponents.render_metric_card(
+                    "Total Stocks Loaded",
+                    f"{len(ranked_df):,}" if 'ranked_df' in locals() else "0"
+                )
+            
+            with stats_cols[1]:
+                UIComponents.render_metric_card(
+                    "Currently Filtered",
+                    f"{len(filtered_df):,}" if 'filtered_df' in locals() else "0"
+                )
+            
+            with stats_cols[2]:
+                data_quality = st.session_state.data_quality.get('completeness', 0)
+                quality_emoji = "🟢" if data_quality > 80 else "🟡" if data_quality > 60 else "🔴"
+                UIComponents.render_metric_card(
+                    "Data Quality",
+                    f"{quality_emoji} {data_quality:.1f}%"
+                )
+            
+            with stats_cols[3]:
+                cache_time = datetime.now(timezone.utc) - st.session_state.last_refresh
+                minutes = int(cache_time.total_seconds() / 60)
+                cache_status = "Fresh" if minutes < 60 else "Stale"
+                cache_emoji = "🟢" if minutes < 60 else "🔴"
+                UIComponents.render_metric_card(
+                    "Cache Age",
+                    f"{cache_emoji} {minutes} min",
+                    cache_status
+                )
         
         st.markdown("---")
-        st.markdown("#### 📊 Export Preview")
-        
-        export_stats = {
-            "Total Stocks": len(filtered_df),
-            "Average Score": f"{filtered_df['master_score'].mean():.1f}" if not filtered_df.empty else "N/A",
-            "Stocks with Patterns": (filtered_df['patterns'] != '').sum() if 'patterns' in filtered_df.columns else 0,
-            "High RVOL (>2x)": (filtered_df['rvol'] > 2).sum() if 'rvol' in filtered_df.columns else 0,
-            "Positive 30D Returns": (filtered_df['ret_30d'] > 0).sum() if 'ret_30d' in filtered_df.columns else 0,
-            "Data Quality": f"{st.session_state.data_quality.get('completeness', 0):.1f}%"
-        }
-        
-        stat_cols = st.columns(3)
-        for i, (label, value) in enumerate(export_stats.items()):
-            with stat_cols[i % 3]:
-                UIComponents.render_metric_card(label, value)
+        st.markdown(
+            """
+            <div style="text-align: center; color: #666; padding: 1rem;">
+                🌊 Wave Detection Ultimate 3.0 - Final Production Version<br>
+                <small>Professional Stock Ranking System • All Features Complete • Performance Optimized • Permanently Locked</small>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
     
-    with tabs[6]:
-        st.markdown("### ℹ️ About Wave Detection Ultimate 3.0 - Final Production Version")
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.markdown("""
-            #### 🌊 Welcome to Wave Detection Ultimate 3.0
+    if __name__ == "__main__":
+        try:
+            main()
+        except Exception as e:
+            st.error(f"Critical Application Error: {str(e)}")
+            logger.error(f"Application crashed: {str(e)}", exc_info=True)
             
-            The FINAL production version of the most advanced stock ranking system designed to catch momentum waves early.
-            This professional-grade tool combines technical analysis, volume dynamics, advanced metrics, and 
-            smart pattern recognition to identify high-potential stocks before they peak.
+            if st.button("🔄 Restart Application"):
+                st.cache_data.clear()
+                st.rerun()
             
-            #### 🎯 Core Features - LOCKED IN PRODUCTION
-            
-            **Master Score 3.0** - Proprietary ranking algorithm (DO NOT MODIFY):
-            - **Position Analysis (30%)** - 52-week range positioning
-            - **Volume Dynamics (25%)** - Multi-timeframe volume patterns
-            - **Momentum Tracking (15%)** - 30-day price momentum
-            - **Acceleration Detection (10%)** - Momentum acceleration signals
-            - **Breakout Probability (10%)** - Technical breakout readiness
-            - **RVOL Integration (10%)** - Real-time relative volume
-            
-            **Advanced Metrics** - NEW IN FINAL VERSION:
-            - **Money Flow** - Price × Volume × RVOL in millions
-            - **VMI (Volume Momentum Index)** - Weighted volume trend score
-            - **Position Tension** - Range position stress indicator
-            - **Momentum Harmony** - Multi-timeframe alignment (0-4)
-            - **Wave State** - Real-time momentum classification
-            - **Overall Wave Strength** - Composite score for wave filter
-            
-            **25 Pattern Detection** - Complete set:
-            - 11 Technical patterns
-            - 5 Fundamental patterns (Hybrid mode)
-            - 6 Price range patterns
-            - 3 NEW intelligence patterns (Stealth, Vampire, Perfect Storm)
-            
-            #### 💡 How to Use
-            
-            1. **Data Source** - Google Sheets (default) or CSV upload
-            2. **Quick Actions** - Instant filtering for common scenarios
-            3. **Smart Filters** - Interconnected filtering system, including new Wave filters
-            4. **Display Modes** - Technical or Hybrid (with fundamentals)
-            5. **Wave Radar** - Monitor early momentum signals
-            6. **Export Templates** - Customized for trading styles
-            
-            #### 🔧 Production Features
-            
-            - **Performance Optimized** - Sub-2 second processing
-            - **Memory Efficient** - Handles 2000+ stocks smoothly
-            - **Error Resilient** - Graceful degradation
-            - **Data Validation** - Comprehensive quality checks
-            - **Smart Caching** - 1-hour intelligent cache
-            - **Mobile Responsive** - Works on all devices
-            
-            #### 📊 Data Processing Pipeline
-            
-            1. Load from Google Sheets or CSV
-            2. Validate and clean all 41 columns
-            3. Calculate 6 component scores
-            4. Generate Master Score 3.0
-            5. Calculate advanced metrics
-            6. Detect all 25 patterns
-            7. Classify into tiers
-            8. Apply smart ranking
-            
-            #### 🎨 Display Modes
-            
-            **Technical Mode** (Default)
-            - Pure momentum analysis
-            - Technical indicators only
-            - Pattern detection
-            - Volume dynamics
-            
-            **Hybrid Mode**
-            - All technical features
-            - PE ratio analysis
-            - EPS growth tracking
-            - Fundamental patterns
-            - Value indicators
-            """)
-        
-        with col2:
-            st.markdown("""
-            #### 📈 Pattern Groups
-            
-            **Technical Patterns**
-            - 🔥 CAT LEADER
-            - 💎 HIDDEN GEM
-            - 🚀 ACCELERATING
-            - 🏦 INSTITUTIONAL
-            - ⚡ VOL EXPLOSION
-            - 🎯 BREAKOUT
-            - 👑 MARKET LEADER
-            - 🌊 MOMENTUM WAVE
-            - 💰 LIQUID LEADER
-            - 💪 LONG STRENGTH
-            - 📈 QUALITY TREND
-            
-            **Range Patterns**
-            - 🎯 52W HIGH APPROACH
-            - 🔄 52W LOW BOUNCE
-            - 👑 GOLDEN ZONE
-            - 📊 VOL ACCUMULATION
-            - 🔀 MOMENTUM DIVERGE
-            - 🎯 RANGE COMPRESS
-            
-            **NEW Intelligence**
-            - 🤫 STEALTH
-            - 🧛 VAMPIRE
-            - ⛈️ PERFECT STORM
-            
-            **Fundamental** (Hybrid)
-            - 💎 VALUE MOMENTUM
-            - 📊 EARNINGS ROCKET
-            - 🏆 QUALITY LEADER
-            - ⚡ TURNAROUND
-            - ⚠️ HIGH PE
-            
-            #### ⚡ Performance
-            
-            - Initial load: <2 seconds
-            - Filtering: <200ms
-            - Pattern detection: <500ms
-            - Search: <50ms
-            - Export: <1 second
-            
-            #### 🔒 Production Status
-            
-            **Version**: 3.0.7-FINAL-COMPLETE
-            **Last Updated**: July 2025
-            **Status**: PRODUCTION
-            **Updates**: LOCKED
-            **Testing**: COMPLETE
-            **Optimization**: MAXIMUM
-            
-            #### 💬 Credits
-            
-            Developed for professional traders
-            requiring reliable, fast, and
-            comprehensive market analysis.
-            
-            This is the FINAL version.
-            No further updates will be made.
-            All features are permanent.
-            
-            ---
-            
-            **Indian Market Optimized**
-            - ₹ Currency formatting
-            - IST timezone aware
-            - NSE/BSE categories
-            - Local number formats
-            """)
-        
-        # System stats
-        st.markdown("---")
-        st.markdown("#### 📊 Current Session Statistics")
-        
-        stats_cols = st.columns(4)
-        
-        with stats_cols[0]:
-            UIComponents.render_metric_card(
-                "Total Stocks Loaded",
-                f"{len(ranked_df):,}" if 'ranked_df' in locals() else "0"
-            )
-        
-        with stats_cols[1]:
-            UIComponents.render_metric_card(
-                "Currently Filtered",
-                f"{len(filtered_df):,}" if 'filtered_df' in locals() else "0"
-            )
-        
-        with stats_cols[2]:
-            data_quality = st.session_state.data_quality.get('completeness', 0)
-            quality_emoji = "🟢" if data_quality > 80 else "🟡" if data_quality > 60 else "🔴"
-            UIComponents.render_metric_card(
-                "Data Quality",
-                f"{quality_emoji} {data_quality:.1f}%"
-            )
-        
-        with stats_cols[3]:
-            cache_time = datetime.now(timezone.utc) - st.session_state.last_refresh
-            minutes = int(cache_time.total_seconds() / 60)
-            cache_status = "Fresh" if minutes < 60 else "Stale"
-            cache_emoji = "🟢" if minutes < 60 else "🔴"
-            UIComponents.render_metric_card(
-                "Cache Age",
-                f"{cache_emoji} {minutes} min",
-                cache_status
-            )
+            if st.button("📧 Report Issue"):
+                st.info("Please take a screenshot and report this error.")
     
-    st.markdown("---")
-    st.markdown(
-        """
-        <div style="text-align: center; color: #666; padding: 1rem;">
-            🌊 Wave Detection Ultimate 3.0 - Final Production Version<br>
-            <small>Professional Stock Ranking System • All Features Complete • Performance Optimized • Permanently Locked</small>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        st.error(f"Critical Application Error: {str(e)}")
-        logger.error(f"Application crashed: {str(e)}", exc_info=True)
-        
-        if st.button("🔄 Restart Application"):
-            st.cache_data.clear()
-            st.rerun()
-        
-        if st.button("📧 Report Issue"):
-            st.info("Please take a screenshot and report this error.")
