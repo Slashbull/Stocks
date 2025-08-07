@@ -4471,7 +4471,7 @@ def main():
                             st.markdown("**📊 Classification**")
                             st.text(f"Sector: {stock.get('sector', 'Unknown')}")
                             st.text(f"Category: {stock.get('category', 'Unknown')}")
-                            st.text(f"industry: {stock.get('industries', 'Unknown')}")
+                            st.text(f"industry: {stock.get('industry', 'Unknown')}")
                             
                             if show_fundamentals:
                                 st.markdown("**💰 Fundamentals**")
@@ -4949,5 +4949,6 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
