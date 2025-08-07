@@ -672,8 +672,8 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
         # Calculate all scores and rankings
         df = RankingEngine.calculate_all_scores(df)
         
-        # Detect patterns
-        df = PatternDetector.detect_all_patterns(df)
+        # Corrected method call here
+        df = PatternDetector.detect_all_patterns_optimized(df)
         
         # Add advanced metrics
         df = AdvancedMetrics.calculate_all_metrics(df)
@@ -708,7 +708,7 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
         logger.error(f"Failed to load and process data: {str(e)}")
         metadata['errors'].append(str(e))
         raise
-
+        
 # ============================================
 # DATA PROCESSING ENGINE
 # ============================================
@@ -5145,6 +5145,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
