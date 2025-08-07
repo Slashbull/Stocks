@@ -939,6 +939,24 @@ class AdvancedMetrics:
         
         if 'ret_3m' in df.columns:
             df['momentum_harmony'] += (df['ret_3m'].fillna(0) > 0).astype(int)
+
+        # Calculate momentum decay to identify accelerating vs decelerating momentum
+        if 'ret_7d' in df.columns and 'ret_30d' in df.columns:
+            daily_7d = df['ret_7d'].fillna(0) / 7
+            daily_30d = df['ret_30d'].fillna(0) / 30
+            
+            # Momentum decay ratio - higher means accelerating
+            df['momentum_decay'] = np.where(
+                daily_30d != 0,
+                daily_7d / daily_30d,
+                1.0
+            )
+            
+            # Flag stocks with accelerating momentum
+            df['momentum_accelerating'] = df['momentum_decay'] > 1.2
+        else:
+            df['momentum_decay'] = 1.0
+            df['momentum_accelerating'] = False
         
         # Wave State
         df['wave_state'] = df.apply(AdvancedMetrics._get_wave_state, axis=1)
@@ -5184,5 +5202,6 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
