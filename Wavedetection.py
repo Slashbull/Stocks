@@ -4779,6 +4779,7 @@ with tabs[3]:
     
                 else:
                     st.warning("No stocks found matching your search criteria.")    
+                    
         with tabs[5]:
             st.markdown("### 📥 Export Data")
             
@@ -5107,3 +5108,4 @@ with tabs[3]:
             if st.button("📧 Report Issue"):
                 st.info("Please take a screenshot and report this error.")
     
+
