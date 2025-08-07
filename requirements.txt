@@ -7,7 +7,7 @@ requests>=2.31.0
 urllib3>=2.2.0
 # Statistical functions
 scipy==1.14.1
-
+numba
 # Optional but recommended for better performance
 # pyarrow==17.0.0  # For faster parquet operations if needed
 
