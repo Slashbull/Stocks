@@ -5093,7 +5093,7 @@ st.markdown(
             unsafe_allow_html=True
         )
     
-    if __name__ == "__main__":
+if __name__ == "__main__":
         try:
             main()
         except Exception as e:
