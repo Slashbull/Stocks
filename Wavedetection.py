@@ -3854,7 +3854,7 @@ with tabs[1]:
             else:
                 st.warning("No stocks match the selected filters.")
         
-    with tabs[2]:
+        with tabs[2]:
             st.markdown("### 🌊 Wave Radar - Early Momentum Detection System")
             st.markdown("*Catch waves as they form, not after they've peaked!*")
             
@@ -4797,8 +4797,7 @@ with tabs[1]:
         
         template_map = {
             "Full Analysis (All Data)": "full",
-            "Day Trader Focus":
-                "day_trader",
+            "Day Trader Focus": "day_trader",
             "Swing Trader Focus": "swing_trader",
             "Investor Focus": "investor"
         }
@@ -5107,4 +5106,3 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
-
