@@ -1430,7 +1430,7 @@ class PatternDetector:
         '🎯 RANGE COMPRESS': {'importance_weight': 5},
         '🤫 STEALTH': {'importance_weight': 10},
         '🧛 VAMPIRE': {'importance_weight': 10},
-        '⛈️ PERFECT STORM': {'importance_weight': 20}
+        '⛈️ PERFECT STORM': {'importance_weight': 20},
         '🏆 EXTREME OPP': {'importance_weight': 25}  # V3.5 NEW: Highest weight for extreme opportunities
     }
 
@@ -5163,3 +5163,4 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
