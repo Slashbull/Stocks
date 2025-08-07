@@ -865,7 +865,7 @@ class DataProcessor:
             df['price_tier'] = df['price'].apply(lambda x: classify_tier(x, CONFIG.TIERS['price']))
         
         return df
-        
+
 # ============================================
 # ADVANCED METRICS CALCULATOR
 # ============================================
