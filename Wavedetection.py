@@ -2534,7 +2534,7 @@ class UIComponents:
             
             if not sector_overview_df_local.empty:
                 display_cols_overview = ['flow_score', 'avg_score', 'median_score', 'avg_momentum', 
-                                         'avg_volume', 'avg_rvol', 'avg_ret_30d', 'analyzed_stocks', 'total_stocks', 'sampling_pct']
+                                         'avg_volume', 'avg_rvol', 'avg_ret_30d', 'analyzed_stocks', 'total_stocks']
                 
                 available_overview_cols = [col for col in display_cols_overview if col in sector_overview_df_local.columns]
                 
@@ -2542,9 +2542,17 @@ class UIComponents:
                 
                 sector_overview_display.columns = [
                     'Flow Score', 'Avg Score', 'Median Score', 'Avg Momentum', 
-                    'Avg Volume', 'Avg RVOL', 'Avg 30D Ret', 'Analyzed Stocks', 'Total Stocks', 'Sample %'
+                    'Avg Volume', 'Avg RVOL', 'Avg 30D Ret', 'Analyzed Stocks', 'Total Stocks'
                 ]
                 
+                sector_overview_display['Coverage %'] = (
+                    (sector_overview_display['Analyzed Stocks'] / sector_overview_display['Total Stocks'] * 100)
+                    .replace([np.inf, -np.inf], np.nan)
+                    .fillna(0)
+                    .round(1)
+                    .apply(lambda x: f"{x}%")
+                )
+
                 st.dataframe(
                     sector_overview_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
                     use_container_width=True
@@ -2735,40 +2743,22 @@ class UIComponents:
                             st.markdown("**📊 Classification**")
                             st.text(f"Sector: {stock.get('sector', 'Unknown')}")
                             st.text(f"Category: {stock.get('category', 'Unknown')}")
+                            st.text(f"Industry: {stock.get('industry', 'Unknown')}")
                             
                             if show_fundamentals:
                                 st.markdown("**💰 Fundamentals**")
                                 
                                 if 'pe' in stock and pd.notna(stock['pe']):
-                                    pe_val = stock['pe']
-                                    if pe_val <= 0:
-                                        st.text("PE Ratio: 🔴 Loss")
-                                    elif pe_val < 15:
-                                        st.text(f"PE Ratio: 🟢 {pe_val:.1f}x")
-                                    elif pe_val < 25:
-                                        st.text(f"PE Ratio: 🟡 {pe_val:.1f}x")
-                                    else:
-                                        st.text(f"PE Ratio: 🔴 {pe_val:.1f}x")
-                                else:
-                                    st.text("PE Ratio: N/A")
+                                    st.text(f"PE Ratio: {UIComponents.format_pe_value(stock['pe'])}")
+                                else: st.text("PE Ratio: N/A")
                                 
                                 if 'eps_current' in stock and pd.notna(stock['eps_current']):
                                     st.text(f"EPS Current: ₹{stock['eps_current']:.2f}")
-                                else:
-                                    st.text("EPS Current: N/A")
+                                else: st.text("EPS Current: N/A")
                                 
                                 if 'eps_change_pct' in stock and pd.notna(stock['eps_change_pct']):
-                                    eps_chg = stock['eps_change_pct']
-                                    if eps_chg >= 100:
-                                        st.text(f"EPS Growth: 🚀 {eps_chg:+.0f}%")
-                                    elif eps_chg >= 50:
-                                        st.text(f"EPS Growth: 🔥 {eps_chg:+.1f}%")
-                                    elif eps_chg >= 0:
-                                        st.text(f"EPS Growth: 📈 {eps_chg:+.1f}%")
-                                    else:
-                                        st.text(f"EPS Growth: 📉 {eps_chg:+.1f}%")
-                                else:
-                                    st.text("EPS Growth: N/A")
+                                    st.text(f"EPS Growth: {UIComponents.format_eps_change_value(stock['eps_change_pct'])}")
+                                else: st.text("EPS Growth: N/A")
                         
                         with detail_cols_top[1]:
                             st.markdown("**📈 Performance**")
@@ -2782,8 +2772,7 @@ class UIComponents:
                             ]:
                                 if col in stock.index and pd.notna(stock[col]):
                                     st.text(f"{period}: {stock[col]:+.1f}%")
-                                else:
-                                    st.text(f"{period}: N/A")
+                                else: st.text(f"{period}: N/A")
                         
                         st.markdown("---")
                         detail_cols_tech = st.columns([1,1])
@@ -2794,9 +2783,8 @@ class UIComponents:
                             if all(col in stock.index for col in ['low_52w', 'high_52w']):
                                 st.text(f"52W Low: ₹{stock.get('low_52w', 0):,.0f}")
                                 st.text(f"52W High: ₹{stock.get('high_52w', 0):,.0f}")
-                            else:
-                                st.text("52W Range: N/A")
-
+                            else: st.text("52W Range: N/A")
+                            
                             st.text(f"From High: {stock.get('from_high_pct', 0):.0f}%")
                             st.text(f"From Low: {stock.get('from_low_pct', 0):.0f}%")
                             
@@ -2816,30 +2804,18 @@ class UIComponents:
                                 with display_col:
                                     if sma_col in stock.index and pd.notna(stock[sma_col]) and stock[sma_col] > 0:
                                         sma_value = stock[sma_col]
-                                        if current_price > sma_value:
-                                            pct_diff = ((current_price - sma_value) / sma_value) * 100
-                                            st.markdown(f"**{sma_label}**: <span style='color:green'>↑{pct_diff:.1f}%</span>", unsafe_allow_html=True)
-                                        else:
-                                            pct_diff = ((sma_value - current_price) / sma_value) * 100
-                                            st.markdown(f"**{sma_label}**: <span style='color:red'>↓{pct_diff:.1f}%</span>", unsafe_allow_html=True)
-                                    else:
-                                        st.markdown(f"**{sma_label}**: N/A")
-                            
+                                        pct_diff = ((current_price - sma_value) / sma_value) * 100
+                                        color_style = 'green' if current_price > sma_value else 'red'
+                                        st.markdown(f"**{sma_label}**: <span style='color:{color_style}'>{'↑' if current_price > sma_value else '↓'}{pct_diff:.1f}%</span>", unsafe_allow_html=True)
+                                    else: st.markdown(f"**{sma_label}**: N/A")
+                        
                         with detail_cols_tech[1]:
                             st.markdown("**📈 Trend Analysis**")
                             if 'trend_quality' in stock.index:
                                 tq = stock['trend_quality']
-                                if tq >= 80:
-                                    st.markdown(f"🔥 Strong Uptrend ({tq:.0f})")
-                                elif tq >= 60:
-                                    st.markdown(f"✅ Good Uptrend ({tq:.0f})")
-                                elif tq >= 40:
-                                    st.markdown(f"➡️ Neutral Trend ({tq:.0f})")
-                                else:
-                                    st.markdown(f"⚠️ Weak/Downtrend ({tq:.0f})")
-                            else:
-                                st.markdown("Trend: N/A")
-
+                                st.markdown(f"{UIComponents.get_trend_indicator_emoji(tq)} {tq:.0f} (Quality Score)")
+                            else: st.markdown("Trend: N/A")
+                            
                             st.markdown("---")
                             st.markdown("#### 🎯 Advanced Metrics")
                             adv_col1, adv_col2 = st.columns(2)
@@ -2847,26 +2823,22 @@ class UIComponents:
                             with adv_col1:
                                 if 'vmi' in stock and pd.notna(stock['vmi']):
                                     st.metric("VMI", f"{stock['vmi']:.2f}")
-                                else:
-                                st.metric("VMI", "N/A")
+                                else: st.metric("VMI", "N/A")
                                 
                                 if 'momentum_harmony' in stock and pd.notna(stock['momentum_harmony']):
                                     harmony_val = stock['momentum_harmony']
                                     harmony_emoji = "🟢" if harmony_val >= 3 else "🟡" if harmony_val >= 2 else "🔴"
                                     st.metric("Harmony", f"{harmony_emoji} {int(harmony_val)}/4")
-                                else:
-                                    st.metric("Harmony", "N/A")
+                                else: st.metric("Harmony", "N/A")
                             
                             with adv_col2:
                                 if 'position_tension' in stock and pd.notna(stock['position_tension']):
                                     st.metric("Position Tension", f"{stock['position_tension']:.0f}")
-                                else:
-                                    st.metric("Position Tension", "N/A")
+                                else: st.metric("Position Tension", "N/A")
                                 
                                 if 'money_flow_mm' in stock and pd.notna(stock['money_flow_mm']):
                                     st.metric("Money Flow", f"₹{stock['money_flow_mm']:.1f}M")
-                                else:
-                                    st.metric("Money Flow", "N/A")
+                                else: st.metric("Money Flow", "N/A")
 
             else:
                 st.warning("No stocks found matching your search criteria.")
