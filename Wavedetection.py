@@ -2487,7 +2487,7 @@ class UIComponents:
             st.write(strength_meter)
 
 # ============================================
-# SESSION STATE MANAGER - ROBUST
+# SESSION STATE MANAGER
 # ============================================
 
 class SessionStateManager:
@@ -2640,7 +2640,7 @@ class SessionStateManager:
         
         st.session_state.active_filter_count = 0
         logger.info("All filters cleared successfully.")
-
+        
 # ============================================
 # MAIN APPLICATION
 # ============================================
@@ -4912,6 +4912,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
