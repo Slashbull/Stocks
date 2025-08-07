@@ -338,130 +338,188 @@ class DataValidator:
         return cleaned
         
 # ============================================
-# SMART CACHING WITH VERSIONING
+# INTELLIGENT DATA LOADING AND PROCESSING
 # ============================================
 
-def extract_spreadsheet_id(url_or_id: str) -> str:
-    """Extract spreadsheet ID from URL or return as-is if already an ID"""
-    if not url_or_id:
-        return ""
+def get_smart_requests_session(
+    retries: int = 5,
+    backoff_factor: float = 0.5,
+    status_forcelist: Tuple[int, ...] = (408, 429, 500, 502, 503, 504),
+    session: Optional[requests.Session] = None
+) -> requests.Session:
+    """Configures a robust requests session with advanced retry logic."""
+    session = session or requests.Session()
     
-    # If it's already just an ID (no slashes), return it
-    if '/' not in url_or_id:
-        return url_or_id.strip()
+    retry = Retry(
+        total=retries,
+        read=retries,
+        connect=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist,
+        allowed_methods=["HEAD", "GET", "OPTIONS"],
+        raise_on_status=False
+    )
     
-    # Try to extract from URL
-    # Pattern: /spreadsheets/d/{ID}/
-    pattern = r'/spreadsheets/d/([a-zA-Z0-9-_]+)'
-    match = re.search(pattern, url_or_id)
-    if match:
-        return match.group(1)
+    adapter = HTTPAdapter(
+        max_retries=retry,
+        pool_connections=10,
+        pool_maxsize=20
+    )
     
-    # If no match, assume it's an ID
-    return url_or_id.strip()
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    
+    session.headers.update({
+        'User-Agent': 'Wave Detection Ultimate 3.0',
+        'Accept': 'text/csv,application/csv,text/plain',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive'
+    })
+    
+    return session
 
-@st.cache_data(ttl=CONFIG.CACHE_TTL, show_spinner=False)
-def load_and_process_data(source_type: str = "sheet", file_data=None, 
-                         sheet_url: str = None, gid: str = None,
-                         cache_key: str = None) -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
-    """Load and process data with smart caching and versioning"""
+@st.cache_data(persist="disk", show_spinner=False)
+def load_and_process_data_smart(
+    source_type: str = "sheet",
+    file_data=None,
+    data_version: str = "1.0"
+) -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
+    """
+    Smart data loading with advanced error handling and daily caching.
+    
+    This function intelligently fetches data from a specified source,
+    processes it through the entire pipeline, and stores the result.
+    The cache key is versioned daily to ensure data freshness.
+
+    Args:
+        source_type (str): "sheet" for Google Sheets or "upload" for a CSV file.
+        file_data (Optional): The uploaded file object if source_type is "upload".
+        data_version (str): A unique key to bust the cache (e.g., hash of date + sheet ID).
+
+    Returns:
+        Tuple[pd.DataFrame, datetime, Dict[str, Any]]: A tuple containing the processed DataFrame,
+        the processing timestamp, and metadata about the process.
+    """
     
     start_time = time.perf_counter()
     metadata = {
         'source_type': source_type,
-        'cache_key': cache_key,
+        'data_version': data_version,
         'processing_start': datetime.now(timezone.utc),
         'errors': [],
-        'warnings': []
+        'warnings': [],
+        'performance': {}
     }
     
     try:
-        # Load data based on source
         if source_type == "upload" and file_data is not None:
             logger.info("Loading data from uploaded CSV")
-            df = pd.read_csv(file_data, low_memory=False)
-            metadata['source'] = "User Upload"
+            try:
+                df = pd.read_csv(file_data, low_memory=False)
+                metadata['source'] = "User Upload"
+            except UnicodeDecodeError:
+                for encoding in ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']:
+                    try:
+                        file_data.seek(0)
+                        df = pd.read_csv(file_data, low_memory=False, encoding=encoding)
+                        metadata['warnings'].append(f"Used {encoding} encoding")
+                        break
+                    except:
+                        continue
+                else:
+                    raise ValueError("Unable to decode CSV file")
+        
         else:
-            # Use defaults if not provided
-            if not sheet_url:
-                sheet_url = CONFIG.DEFAULT_SHEET_URL
-            if not gid:
-                gid = CONFIG.DEFAULT_GID
+            sheet_id = st.session_state.get('user_spreadsheet_id')
+            if not sheet_id or len(sheet_id) != CONFIG.SPREADSHEET_ID_LENGTH or not sheet_id.isalnum():
+                raise ValueError("Invalid Google Spreadsheet ID provided.")
             
-            # Extract clean ID from URL if needed
-            if 'spreadsheets/d/' in sheet_url:
-                clean_sheet_id = extract_spreadsheet_id(sheet_url)
-                base_url = f"https://docs.google.com/spreadsheets/d/{clean_sheet_id}"
-            else:
-                base_url = sheet_url.split('/edit')[0]
+            gid = st.session_state.get('gid', CONFIG.DEFAULT_GID)
+            csv_url = CONFIG.CSV_URL_TEMPLATE.format(sheet_id=sheet_id, gid=gid)
             
-            # Construct CSV URL
-            csv_url = f"{base_url}/export?format=csv&gid={gid}"
+            logger.info(f"Loading data from Google Sheets ID: {sheet_id[:8]}...")
             
-            logger.info(f"Loading data from Google Sheets")
+            session = get_smart_requests_session()
+            response = session.get(csv_url, timeout=30)
             
             try:
-                df = pd.read_csv(csv_url, low_memory=False)
-                metadata['source'] = "Google Sheets"
-            except Exception as e:
+                response.raise_for_status()
+                if len(response.content) < 100:
+                    raise ValueError("Response too small, likely an error page.")
+                df = pd.read_csv(BytesIO(response.content), low_memory=False)
+                metadata['source'] = f"Google Sheets (ID: {sheet_id[:8]}..., GID: {gid})"
+            except requests.exceptions.RequestException as e:
                 logger.error(f"Failed to load from Google Sheets: {str(e)}")
                 metadata['errors'].append(f"Sheet load error: {str(e)}")
                 
-                # Try to use cached data as fallback
-                if 'last_good_data' in st.session_state:
-                    logger.info("Using cached data as fallback")
-                    df, timestamp, old_metadata = st.session_state.last_good_data
-                    metadata['warnings'].append("Using cached data due to load failure")
+                # Fallback to last good data if available
+                last_good_data = st.session_state.get('last_good_data')
+                if last_good_data:
+                    logger.info("Using cached data as fallback due to network/HTTP error.")
+                    df, timestamp, old_metadata = last_good_data
+                    metadata['warnings'].append("Using cached data due to load failure.")
                     metadata['cache_used'] = True
                     return df, timestamp, metadata
                 raise
+            except Exception as e:
+                logger.error(f"CSV parsing failed: {str(e)}")
+                metadata['errors'].append(f"CSV parsing error: {str(e)}")
+                
+                last_good_data = st.session_state.get('last_good_data')
+                if last_good_data:
+                    logger.info("Using cached data as fallback due to data format error.")
+                    df, timestamp, old_metadata = last_good_data
+                    metadata['warnings'].append("Using cached data due to data format error.")
+                    metadata['cache_used'] = True
+                    return df, timestamp, metadata
+                raise
+
+        metadata['performance']['load_time'] = time.perf_counter() - load_start
         
-        # Validate loaded data
+        # --- Subsequent Processing Phases ---
+        
+        # 1. Data Validation and Cleaning
         is_valid, validation_msg = DataValidator.validate_dataframe(df, CONFIG.CRITICAL_COLUMNS, "Initial load")
         if not is_valid:
             raise ValueError(validation_msg)
-        
-        # Process the data
         df = DataProcessor.process_dataframe(df, metadata)
         
-        # Calculate all scores and rankings
+        # 2. Scoring and Ranking
         df = RankingEngine.calculate_all_scores(df)
         
-        # Detect patterns
-        df = PatternDetector.detect_all_patterns(df)
+        # 3. Pattern Detection
+        df = PatternDetector.detect_all_patterns_optimized(df)
         
-        # Add advanced metrics
+        # 4. Advanced Metrics
         df = AdvancedMetrics.calculate_all_metrics(df)
         
-        # Final validation
+        # 5. Final Validation and Cleanup
         is_valid, validation_msg = DataValidator.validate_dataframe(df, ['master_score', 'rank'], "Final processed")
         if not is_valid:
             raise ValueError(validation_msg)
         
-        # Store as last good data
         timestamp = datetime.now(timezone.utc)
         st.session_state.last_good_data = (df.copy(), timestamp, metadata)
         
-        # Record processing time
-        processing_time = time.perf_counter() - start_time
-        metadata['processing_time'] = processing_time
-        metadata['processing_end'] = datetime.now(timezone.utc)
+        total_time = time.perf_counter() - start_time
+        metadata['performance']['total_time'] = total_time
         
-        logger.info(f"Data processing complete: {len(df)} stocks in {processing_time:.2f}s")
-        
-        # Periodic cleanup
-        if 'last_cleanup' not in st.session_state:
-            st.session_state.last_cleanup = datetime.now(timezone.utc)
-        
-        if (datetime.now(timezone.utc) - st.session_state.last_cleanup).total_seconds() > 300:
-            gc.collect()
-            st.session_state.last_cleanup = datetime.now(timezone.utc)
+        logger.info(f"Data pipeline completed in {total_time:.2f}s.")
+        gc.collect()
         
         return df, timestamp, metadata
-        
+
     except Exception as e:
-        logger.error(f"Failed to load and process data: {str(e)}")
+        logger.error(f"load_and_process_data_smart failed: {str(e)}")
         metadata['errors'].append(str(e))
+        
+        last_good_data = st.session_state.get('last_good_data')
+        if last_good_data:
+            df, timestamp, old_metadata = last_good_data
+            metadata['warnings'].append("Using cached data due to unrecoverable error.")
+            metadata['original_error'] = str(e)
+            return df, timestamp, metadata
+        
         raise
 
 # ============================================
@@ -4907,6 +4965,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
