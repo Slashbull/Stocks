@@ -1650,7 +1650,7 @@ class PatternDetector:
         if all(col in df.columns for col in ['master_score', 'rvol', 'momentum_harmony', 'from_high_pct']):
             mask = (
                 (get_col_safe('master_score', 0) > CONFIG.PATTERN_THRESHOLDS['extreme_opp']) &
-                (get_col_safe('rvol', 0) > 3) &
+                (get_col_safe('rvol', 0) > 1) &
                 (get_col_safe('momentum_harmony', 0) >= 3) &
                 (get_col_safe('from_high_pct', -100) > -10)
             )
@@ -5202,6 +5202,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
