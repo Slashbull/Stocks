@@ -4155,7 +4155,7 @@ with tabs[2]:
                 st.warning(f"No data available for Wave Radar analysis with {wave_timeframe} timeframe.")
     
 @staticmethod
-    def render_market_analysis(df: pd.DataFrame):
+ def render_market_analysis(df: pd.DataFrame):
         """Renders the Market Analysis tab with various charts and tables."""
         st.markdown("### 📊 Market Analysis")
         if not df.empty:
@@ -4901,4 +4901,5 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
