@@ -685,17 +685,16 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
         if not is_valid:
             raise ValueError(validation_msg)
         
-        # Process the data
+        # Process the raw data first
         df = DataProcessor.process_dataframe(df, metadata)
         
-        # Calculate all scores and rankings
-        df = RankingEngine.calculate_all_scores(df)
-        
-        # Detect all patterns (including new EXTREME OPP)
+        # Detect patterns and calculate advanced metrics BEFORE ranking
+        # This is the correct order of operations to resolve dependencies
         df = PatternDetector.detect_all_patterns_optimized(df)
-        
-        # Add advanced metrics (including momentum decay)
         df = AdvancedMetrics.calculate_all_metrics(df)
+        
+        # Now, calculate all scores and rankings, as all dependencies are met
+        df = RankingEngine.calculate_all_scores(df)
         
         # Final validation
         is_valid, validation_msg = DataValidator.validate_dataframe(df, ['master_score', 'rank'], "Final processed")
@@ -5229,5 +5228,6 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
