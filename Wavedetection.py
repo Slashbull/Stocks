@@ -895,18 +895,14 @@ class AdvancedMetrics:
             return df
         
         # Money Flow (in millions)
-        # Calculates institutional money flow by combining price, volume, and volume activity (RVOL).
         if all(col in df.columns for col in ['price', 'volume_1d', 'rvol']):
-            # Use .fillna() to prevent NaN propagation from a single missing value.
             df['money_flow'] = df['price'].fillna(0) * df['volume_1d'].fillna(0) * df['rvol'].fillna(1.0)
             df['money_flow_mm'] = df['money_flow'] / 1_000_000
         else:
-            df['money_flow_mm'] = np.nan
+            df['money_flow_mm'] = pd.Series(np.nan, index=df.index)
         
         # Volume Momentum Index (VMI)
-        # A weighted average of various volume ratios to quantify sustained volume interest.
         if all(col in df.columns for col in ['vol_ratio_1d_90d', 'vol_ratio_7d_90d', 'vol_ratio_30d_90d', 'vol_ratio_90d_180d']):
-            # Fill NaNs with 1.0 (indicating no volume change) for robust calculation.
             df['vmi'] = (
                 df['vol_ratio_1d_90d'].fillna(1.0) * 4 +
                 df['vol_ratio_7d_90d'].fillna(1.0) * 3 +
@@ -914,44 +910,39 @@ class AdvancedMetrics:
                 df['vol_ratio_90d_180d'].fillna(1.0) * 1
             ) / 10
         else:
-            df['vmi'] = np.nan
+            df['vmi'] = pd.Series(np.nan, index=df.index)
         
         # Position Tension
-        # Measures a stock's readiness for a significant move based on its position
-        # within its 52-week high and low range.
         if all(col in df.columns for col in ['from_low_pct', 'from_high_pct']):
             df['position_tension'] = df['from_low_pct'].fillna(50) + abs(df['from_high_pct'].fillna(-50))
         else:
-            df['position_tension'] = np.nan
+            df['position_tension'] = pd.Series(np.nan, index=df.index)
         
         # Momentum Harmony
-        # A score from 0-4 indicating the consistency of momentum across different timeframes.
-        df['momentum_harmony'] = 0
+        df['momentum_harmony'] = pd.Series(0, index=df.index, dtype=int)
         
         if 'ret_1d' in df.columns:
             df['momentum_harmony'] += (df['ret_1d'].fillna(0) > 0).astype(int)
         
         if all(col in df.columns for col in ['ret_7d', 'ret_30d']):
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_ret_7d = np.where(df['ret_7d'].fillna(0) != 0, df['ret_7d'].fillna(0) / 7, np.nan)
-                daily_ret_30d = np.where(df['ret_30d'].fillna(0) != 0, df['ret_30d'].fillna(0) / 30, np.nan)
+                daily_ret_7d = pd.Series(np.where(df['ret_7d'].fillna(0) != 0, df['ret_7d'].fillna(0) / 7, np.nan), index=df.index)
+                daily_ret_30d = pd.Series(np.where(df['ret_30d'].fillna(0) != 0, df['ret_30d'].fillna(0) / 30, np.nan), index=df.index)
             df['momentum_harmony'] += ((daily_ret_7d.fillna(-np.inf) > daily_ret_30d.fillna(-np.inf))).astype(int)
         
         if all(col in df.columns for col in ['ret_30d', 'ret_3m']):
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_ret_30d_comp = np.where(df['ret_30d'].fillna(0) != 0, df['ret_30d'].fillna(0) / 30, np.nan)
-                daily_ret_3m_comp = np.where(df['ret_3m'].fillna(0) != 0, df['ret_3m'].fillna(0) / 90, np.nan)
+                daily_ret_30d_comp = pd.Series(np.where(df['ret_30d'].fillna(0) != 0, df['ret_30d'].fillna(0) / 30, np.nan), index=df.index)
+                daily_ret_3m_comp = pd.Series(np.where(df['ret_3m'].fillna(0) != 0, df['ret_3m'].fillna(0) / 90, np.nan), index=df.index)
             df['momentum_harmony'] += ((daily_ret_30d_comp.fillna(-np.inf) > daily_ret_3m_comp.fillna(-np.inf))).astype(int)
         
         if 'ret_3m' in df.columns:
             df['momentum_harmony'] += (df['ret_3m'].fillna(0) > 0).astype(int)
         
         # Wave State
-        # A categorical indicator of a stock's momentum phase (e.g., FORMING, BUILDING, CRESTING).
         df['wave_state'] = df.apply(AdvancedMetrics._get_wave_state, axis=1)
 
         # Overall Wave Strength
-        # A composite score combining core momentum-related scores for a single, high-level indicator.
         score_cols = ['momentum_score', 'acceleration_score', 'rvol_score', 'breakout_score']
         if all(col in df.columns for col in score_cols):
             df['overall_wave_strength'] = (
@@ -961,7 +952,7 @@ class AdvancedMetrics:
                 df['breakout_score'].fillna(50) * 0.2
             )
         else:
-            df['overall_wave_strength'] = np.nan
+            df['overall_wave_strength'] = pd.Series(np.nan, index=df.index)
         
         return df
     
@@ -969,7 +960,6 @@ class AdvancedMetrics:
     def _get_wave_state(row: pd.Series) -> str:
         """
         Determines the `wave_state` for a single stock based on a set of thresholds.
-        This method is designed for row-wise application.
         """
         signals = 0
         
@@ -990,7 +980,7 @@ class AdvancedMetrics:
             return "🌊 FORMING"
         else:
             return "💥 BREAKING"
-            
+        
 # ============================================
 # RANKING ENGINE - OPTIMIZED
 # ============================================
@@ -5146,6 +5136,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
