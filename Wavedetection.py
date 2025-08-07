@@ -2573,15 +2573,27 @@ class UIComponents:
             st.write(strength_meter)
 
 # ============================================
-# SESSION STATE MANAGER
+# ROBUST SESSION STATE MANAGER
 # ============================================
 
-class SessionStateManager:
+class RobustSessionState:
     """
     A robust manager for Streamlit's session state.
     This class ensures all state variables are properly initialized,
     preventing runtime errors and managing filter states consistently.
     """
+    
+    @staticmethod
+    def safe_get(key: str, default: Any = None) -> Any:
+        """Safely get a session state value with fallback"""
+        if key not in st.session_state:
+            st.session_state[key] = default
+        return st.session_state[key]
+    
+    @staticmethod
+    def safe_set(key: str, value: Any) -> None:
+        """Safely set a session state value"""
+        st.session_state[key] = value
 
     @staticmethod
     def initialize():
@@ -4982,4 +4994,5 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
