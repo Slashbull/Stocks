@@ -5082,8 +5082,8 @@ with tabs[6]:
                     cache_status
                 )
         
-        st.markdown("---")
-        st.markdown(
+st.markdown("---")
+st.markdown(
             """
             <div style="text-align: center; color: #666; padding: 1rem;">
                 🌊 Wave Detection Ultimate 3.0 - Final Production Version<br>
@@ -5106,3 +5106,4 @@ with tabs[6]:
             
             if st.button("📧 Report Issue"):
                 st.info("Please take a screenshot and report this error.")
+
