@@ -248,18 +248,45 @@ class PerformanceMonitor:
 # ============================================
 
 class DataValidator:
-    """Comprehensive data validation and sanitization"""
+    """
+    Comprehensive data validation and sanitization with intelligent tracking.
+    This class ensures data integrity, handles missing or invalid values gracefully,
+    and reports on all correction actions taken.
+    """
     
+    # Static attribute to store clipping statistics across function calls within a session.
+    _clipping_counts = {}
+
+    @staticmethod
+    def get_clipping_counts() -> Dict[str, int]:
+        """
+        Returns the clipping counts collected during data processing.
+        Counts are reset after each retrieval.
+        """
+        counts = DataValidator._clipping_counts.copy()
+        DataValidator._clipping_counts.clear()
+        return counts
+
     @staticmethod
     def validate_dataframe(df: pd.DataFrame, required_cols: List[str], context: str) -> Tuple[bool, str]:
-        """Validate dataframe structure and data quality"""
+        """
+        Validates the structure and basic quality of a DataFrame.
+
+        Args:
+            df (pd.DataFrame): The DataFrame to validate.
+            required_cols (List[str]): A list of columns that must be present.
+            context (str): A descriptive string for logging and error messages.
+
+        Returns:
+            Tuple[bool, str]: A boolean indicating validity and a message.
+        """
         if df is None:
             return False, f"{context}: DataFrame is None"
         
         if df.empty:
             return False, f"{context}: DataFrame is empty"
         
-        # Check critical columns
+        # Check for critical columns defined in CONFIG
         missing_critical = [col for col in CONFIG.CRITICAL_COLUMNS if col not in df.columns]
         if missing_critical:
             return False, f"{context}: Missing critical columns: {missing_critical}"
@@ -269,7 +296,7 @@ class DataValidator:
         if duplicates > 0:
             logger.warning(f"{context}: Found {duplicates} duplicate tickers")
         
-        # Calculate data quality metrics
+        # Calculate data completeness
         total_cells = len(df) * len(df.columns)
         filled_cells = df.notna().sum().sum()
         completeness = (filled_cells / total_cells * 100) if total_cells > 0 else 0
@@ -277,11 +304,9 @@ class DataValidator:
         if completeness < 50:
             logger.warning(f"{context}: Low data completeness ({completeness:.1f}%)")
         
-        # Store quality metrics
-        if 'data_quality' not in st.session_state:
-            st.session_state.data_quality = {}
-        
-        st.session_state.data_quality.update({
+        # Update session state with data quality metrics for the UI
+        data_quality = RobustSessionState.safe_get('data_quality', {})
+        data_quality.update({
             'completeness': completeness,
             'total_rows': len(df),
             'total_columns': len(df.columns),
@@ -289,38 +314,54 @@ class DataValidator:
             'context': context,
             'timestamp': datetime.now(timezone.utc)
         })
+        RobustSessionState.safe_set('data_quality', data_quality)
         
         logger.info(f"{context}: Validated {len(df)} rows, {len(df.columns)} columns, {completeness:.1f}% complete")
         return True, "Valid"
-    
+
     @staticmethod
-    def clean_numeric_value(value: Any, is_percentage: bool = False, bounds: Optional[Tuple[float, float]] = None) -> Optional[float]:
-        """Clean and convert numeric values with bounds checking"""
+    def clean_numeric_value(value: Any, col_name: str, is_percentage: bool = False, bounds: Optional[Tuple[float, float]] = None) -> Optional[float]:
+        """
+        Cleans, converts, and validates a single numeric value.
+        
+        Args:
+            value (Any): The value to clean.
+            col_name (str): The name of the column for logging purposes.
+            is_percentage (bool): Flag to handle percentage symbols.
+            bounds (Optional[Tuple[float, float]]): A tuple (min, max) to clip the value.
+            
+        Returns:
+            Optional[float]: The cleaned float value, or np.nan if invalid.
+        """
         if pd.isna(value) or value == '' or value is None:
             return np.nan
         
         try:
-            # Convert to string for cleaning
             cleaned = str(value).strip()
             
-            # Check for invalid values
+            # Identify and handle invalid string representations
             if cleaned.upper() in ['', '-', 'N/A', 'NA', 'NAN', 'NONE', '#VALUE!', '#ERROR!', '#DIV/0!', 'INF', '-INF']:
                 return np.nan
             
-            # Remove common symbols and spaces
+            # Remove symbols and spaces
             cleaned = cleaned.replace('₹', '').replace('$', '').replace(',', '').replace(' ', '').replace('%', '')
             
-            # Convert to float
             result = float(cleaned)
             
-            # Apply bounds if specified
+            # Apply bounds and log any clipping events
             if bounds:
                 min_val, max_val = bounds
-                if result < min_val or result > max_val:
-                    logger.debug(f"Value {result} outside bounds [{min_val}, {max_val}]")
-                    result = np.clip(result, min_val, max_val)
+                original_result = result
+                
+                if result < min_val:
+                    result = min_val
+                    logger.warning(f"Value clipped for column '{col_name}': Original {original_result:.2f} clipped to min {min_val:.2f}.")
+                    DataValidator._clipping_counts[col_name] = DataValidator._clipping_counts.get(col_name, 0) + 1
+                elif result > max_val:
+                    result = max_val
+                    logger.warning(f"Value clipped for column '{col_name}': Original {original_result:.2f} clipped to max {max_val:.2f}.")
+                    DataValidator._clipping_counts[col_name] = DataValidator._clipping_counts.get(col_name, 0) + 1
             
-            # Check for unreasonable values
             if np.isnan(result) or np.isinf(result):
                 return np.nan
             
@@ -331,7 +372,9 @@ class DataValidator:
     
     @staticmethod
     def sanitize_string(value: Any, default: str = "Unknown") -> str:
-        """Sanitize string values"""
+        """
+        Cleans and sanitizes a string value, returning a default if invalid.
+        """
         if pd.isna(value) or value is None:
             return default
         
@@ -339,7 +382,6 @@ class DataValidator:
         if cleaned.upper() in ['', 'N/A', 'NA', 'NAN', 'NONE', 'NULL', '-']:
             return default
         
-        # Remove excessive whitespace
         cleaned = ' '.join(cleaned.split())
         
         return cleaned
@@ -4940,3 +4982,4 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
