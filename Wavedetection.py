@@ -267,9 +267,8 @@ class DataValidator:
         filled_cells = df.notna().sum().sum()
         completeness = (filled_cells / total_cells * 100) if total_cells > 0 else 0
         
-        # Don't fail on low completeness, just warn
-        if completeness < 30:
-            logger.warning(f"{context}: Very low data completeness ({completeness:.1f}%)")
+        if completeness < 50:
+            logger.warning(f"{context}: Low data completeness ({completeness:.1f}%)")
         
         # Store quality metrics
         if 'data_quality' not in st.session_state:
@@ -289,7 +288,7 @@ class DataValidator:
     
     @staticmethod
     def clean_numeric_value(value: Any, is_percentage: bool = False, bounds: Optional[Tuple[float, float]] = None) -> Optional[float]:
-        """Clean and convert numeric values with intelligent bounds checking"""
+        """Clean and convert numeric values with bounds checking"""
         if pd.isna(value) or value == '' or value is None:
             return np.nan
         
@@ -307,20 +306,16 @@ class DataValidator:
             # Convert to float
             result = float(cleaned)
             
+            # Apply bounds if specified
+            if bounds:
+                min_val, max_val = bounds
+                if result < min_val or result > max_val:
+                    logger.debug(f"Value {result} outside bounds [{min_val}, {max_val}]")
+                    result = np.clip(result, min_val, max_val)
+            
             # Check for unreasonable values
             if np.isnan(result) or np.isinf(result):
                 return np.nan
-            
-            # Apply intelligent bounds - log outliers but don't clip aggressively
-            if bounds:
-                min_val, max_val = bounds
-                if result < min_val * 0.01:  # Way too low
-                    logger.debug(f"Extreme low value {result} detected, clipping to {min_val}")
-                    result = min_val
-                elif result > max_val * 100:  # Way too high
-                    logger.debug(f"Extreme high value {result} detected, clipping to {max_val}")
-                    result = max_val
-                # Otherwise keep the value even if outside normal bounds
             
             return result
             
@@ -341,7 +336,7 @@ class DataValidator:
         cleaned = ' '.join(cleaned.split())
         
         return cleaned
-
+        
 # ============================================
 # SMART CACHING WITH VERSIONING
 # ============================================
@@ -4949,6 +4944,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
