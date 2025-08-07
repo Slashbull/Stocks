@@ -341,13 +341,21 @@ class DataValidator:
         cleaned = ' '.join(cleaned.split())
         
         return cleaned
-        
+
 # ============================================
 # SMART CACHING WITH VERSIONING
 # ============================================
 
 def extract_spreadsheet_id(url_or_id: str) -> str:
-    """Extract spreadsheet ID from URL or return as-is if already an ID"""
+    """
+    Extracts the spreadsheet ID from a Google Sheets URL or returns the ID if it's already in the correct format.
+
+    Args:
+        url_or_id (str): A Google Sheets URL or just the spreadsheet ID.
+
+    Returns:
+        str: The extracted spreadsheet ID, or an empty string if not found.
+    """
     if not url_or_id:
         return ""
     
@@ -355,26 +363,42 @@ def extract_spreadsheet_id(url_or_id: str) -> str:
     if '/' not in url_or_id:
         return url_or_id.strip()
     
-    # Try to extract from URL
-    # Pattern: /spreadsheets/d/{ID}/
+    # Try to extract from URL using a regular expression
     pattern = r'/spreadsheets/d/([a-zA-Z0-9-_]+)'
     match = re.search(pattern, url_or_id)
     if match:
         return match.group(1)
     
-    # If no match, assume it's an ID
+    # If no match, return as is.
     return url_or_id.strip()
 
-@st.cache_data(ttl=CONFIG.CACHE_TTL, show_spinner=False)
+@st.cache_data(ttl=CONFIG.CACHE_TTL, persist="disk", show_spinner=False)
 def load_and_process_data(source_type: str = "sheet", file_data=None, 
-                         sheet_url: str = None, gid: str = None,
-                         cache_key: str = None) -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
-    """Load and process data with smart caching and versioning"""
+                         sheet_id: str = None, gid: str = None,
+                         data_version: str = "1.0") -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
+    """
+    Loads and processes data from a Google Sheet or CSV file with caching and versioning.
+
+    Args:
+        source_type (str): Specifies the data source, either "sheet" or "upload".
+        file_data (Optional): The uploaded CSV file object if `source_type` is "upload".
+        sheet_id (str): The Google Spreadsheet ID.
+        gid (str): The Google Sheet tab ID.
+        data_version (str): A unique key to bust the cache (e.g., hash of date + sheet ID).
+
+    Returns:
+        Tuple[pd.DataFrame, datetime, Dict[str, Any]]: A tuple containing the processed DataFrame,
+        the processing timestamp, and metadata about the process.
+    
+    Raises:
+        ValueError: If a valid Google Sheets ID is not provided.
+        Exception: If data loading or processing fails.
+    """
     
     start_time = time.perf_counter()
     metadata = {
         'source_type': source_type,
-        'cache_key': cache_key,
+        'data_version': data_version,
         'processing_start': datetime.now(timezone.utc),
         'errors': [],
         'warnings': []
@@ -384,26 +408,31 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
         # Load data based on source
         if source_type == "upload" and file_data is not None:
             logger.info("Loading data from uploaded CSV")
-            df = pd.read_csv(file_data, low_memory=False)
-            metadata['source'] = "User Upload"
+            try:
+                df = pd.read_csv(file_data, low_memory=False)
+                metadata['source'] = "User Upload"
+            except UnicodeDecodeError:
+                for encoding in ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']:
+                    try:
+                        file_data.seek(0)
+                        df = pd.read_csv(file_data, low_memory=False, encoding=encoding)
+                        metadata['warnings'].append(f"Used {encoding} encoding")
+                        break
+                    except:
+                        continue
+                else:
+                    raise ValueError("Unable to decode CSV file")
         else:
             # Use defaults if not provided
-            if not sheet_url:
-                sheet_url = CONFIG.DEFAULT_SHEET_URL
+            if not sheet_id:
+                raise ValueError("Please enter a Google Sheets ID")
             if not gid:
                 gid = CONFIG.DEFAULT_GID
             
-            # Extract clean ID from URL if needed
-            if 'spreadsheets/d/' in sheet_url:
-                clean_sheet_id = extract_spreadsheet_id(sheet_url)
-                base_url = f"https://docs.google.com/spreadsheets/d/{clean_sheet_id}"
-            else:
-                base_url = sheet_url.split('/edit')[0]
-            
             # Construct CSV URL
-            csv_url = f"{base_url}/export?format=csv&gid={gid}"
+            csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
             
-            logger.info(f"Loading data from Google Sheets")
+            logger.info(f"Loading data from Google Sheets ID: {sheet_id}")
             
             try:
                 df = pd.read_csv(csv_url, low_memory=False)
@@ -4912,6 +4941,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
