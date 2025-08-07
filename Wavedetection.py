@@ -1199,274 +1199,246 @@ class RankingEngine:
         return df
         
 # ============================================
-# PATTERN DETECTION ENGINE
+# PATTERN DETECTION ENGINE - FULLY OPTIMIZED
 # ============================================
 
 class PatternDetector:
-    """Detect all patterns using vectorized operations"""
-    
+    """
+    Advanced pattern detection using vectorized operations for maximum performance.
+    This class identifies a comprehensive set of 25 technical, fundamental,
+    and intelligent trading patterns.
+    """
+
+    # Pattern metadata for intelligent confidence scoring (e.g., importance, risk).
+    PATTERN_METADATA = {
+        '🔥 CAT LEADER': {'importance_weight': 10},
+        '💎 HIDDEN GEM': {'importance_weight': 10},
+        '🚀 ACCELERATING': {'importance_weight': 10},
+        '🏦 INSTITUTIONAL': {'importance_weight': 10},
+        '⚡ VOL EXPLOSION': {'importance_weight': 15},
+        '🎯 BREAKOUT': {'importance_weight': 10},
+        '👑 MARKET LEADER': {'importance_weight': 15},
+        '🌊 MOMENTUM WAVE': {'importance_weight': 10},
+        '💰 LIQUID LEADER': {'importance_weight': 5},
+        '💪 LONG STRENGTH': {'importance_weight': 5},
+        '📈 QUALITY TREND': {'importance_weight': 10},
+        '💎 VALUE MOMENTUM': {'importance_weight': 10},
+        '📊 EARNINGS ROCKET': {'importance_weight': 10},
+        '🏆 QUALITY LEADER': {'importance_weight': 10},
+        '⚡ TURNAROUND': {'importance_weight': 10},
+        '⚠️ HIGH PE': {'importance_weight': -5}, # Negative weight for a "warning" pattern
+        '🎯 52W HIGH APPROACH': {'importance_weight': 10},
+        '🔄 52W LOW BOUNCE': {'importance_weight': 10},
+        '👑 GOLDEN ZONE': {'importance_weight': 5},
+        '📊 VOL ACCUMULATION': {'importance_weight': 5},
+        '🔀 MOMENTUM DIVERGE': {'importance_weight': 10},
+        '🎯 RANGE COMPRESS': {'importance_weight': 5},
+        '🤫 STEALTH': {'importance_weight': 10},
+        '🧛 VAMPIRE': {'importance_weight': 10},
+        '⛈️ PERFECT STORM': {'importance_weight': 20}
+    }
+
     @staticmethod
-    @PerformanceMonitor.timer(target_time=0.5)
-    def detect_all_patterns(df: pd.DataFrame) -> pd.DataFrame:
-        """Detect all 25 patterns efficiently with consistent implementation"""
-        
+    @PerformanceMonitor.timer(target_time=0.3)
+    def detect_all_patterns_optimized(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Detects all trading patterns using highly efficient vectorized operations.
+        Returns a DataFrame with a new 'patterns' column and a `pattern_confidence` score.
+        """
         if df.empty:
-            df['patterns'] = [''] * len(df)
+            df['patterns'] = ''
+            df['pattern_confidence'] = 0.0
             return df
-
-        # Get all pattern definitions
-        patterns_list = PatternDetector._get_all_pattern_definitions(df)
         
-        # Pre-allocate pattern matrix
-        num_patterns = len(patterns_list)
-        if num_patterns == 0:
-            df['patterns'] = [''] * len(df)
-            return df
-
-        pattern_matrix = np.zeros((len(df), num_patterns), dtype=bool)
-        pattern_names = []
+        # Get all pattern definitions as a list of (name, mask) tuples.
+        patterns_with_masks = PatternDetector._get_all_pattern_definitions(df)
         
-        # Process patterns
-        for i, (pattern_name, mask) in enumerate(patterns_list):
-            pattern_names.append(pattern_name)
-            if mask is not None and not mask.empty and mask.any():
-                aligned_mask = mask.reindex(df.index, fill_value=False)
-                pattern_matrix[:, i] = aligned_mask.to_numpy()
+        # Create a boolean matrix from the masks for vectorized processing.
+        pattern_names = [name for name, _ in patterns_with_masks]
+        pattern_matrix = pd.DataFrame(False, index=df.index, columns=pattern_names)
         
-        # Convert to pattern strings
-        patterns_column = []
-        for row_idx in range(len(df)):
-            active_patterns = [
-                pattern_names[col_idx] 
-                for col_idx in range(num_patterns) 
-                if pattern_matrix[row_idx, col_idx]
-            ]
-            patterns_column.append(' | '.join(active_patterns) if active_patterns else '')
+        for name, mask in patterns_with_masks:
+            if mask is not None and not mask.empty:
+                pattern_matrix[name] = mask.reindex(df.index, fill_value=False)
         
-        df['patterns'] = patterns_column
+        # Combine the boolean columns into a single 'patterns' string column.
+        df['patterns'] = pattern_matrix.apply(
+            lambda row: ' | '.join(row.index[row].tolist()), axis=1
+        )
         
+        df['patterns'] = df['patterns'].fillna('')
+        
+        # Calculate a confidence score for the detected patterns.
+        df = PatternDetector._calculate_pattern_confidence(df)
+        
+        logger.info(f"Pattern detection completed for {len(df)} stocks.")
         return df
-    
+
     @staticmethod
-    def _get_all_pattern_definitions(df: pd.DataFrame) -> List[Tuple[str, Optional[pd.Series]]]:
-        """Get all pattern definitions with consistent tuple format (name, mask)"""
+    def _get_all_pattern_definitions(df: pd.DataFrame) -> List[Tuple[str, pd.Series]]:
+        """
+        Defines all 25 patterns using vectorized boolean masks.
+        This method is purely for defining the conditions, not for execution.
+        """
         patterns = []
         
+        def get_col_safe(col_name, default_value=np.nan):
+            if col_name in df.columns:
+                return df[col_name]
+            return pd.Series(default_value, index=df.index)
+
         # 1. Category Leader
-        if 'category_percentile' in df.columns:
-            mask = df['category_percentile'] >= CONFIG.PATTERN_THRESHOLDS['category_leader']
-            patterns.append(('🔥 CAT LEADER', mask))
+        mask = get_col_safe('category_percentile', 0) >= CONFIG.PATTERN_THRESHOLDS['category_leader']
+        patterns.append(('🔥 CAT LEADER', mask))
         
         # 2. Hidden Gem
-        if 'category_percentile' in df.columns and 'percentile' in df.columns:
-            mask = (
-                (df['category_percentile'] >= CONFIG.PATTERN_THRESHOLDS['hidden_gem']) & 
-                (df['percentile'] < 70)
-            )
-            patterns.append(('💎 HIDDEN GEM', mask))
+        mask = (get_col_safe('category_percentile', 0) >= CONFIG.PATTERN_THRESHOLDS['hidden_gem']) & (get_col_safe('percentile', 100) < 70)
+        patterns.append(('💎 HIDDEN GEM', mask))
         
         # 3. Accelerating
-        if 'acceleration_score' in df.columns:
-            mask = df['acceleration_score'] >= CONFIG.PATTERN_THRESHOLDS['acceleration']
-            patterns.append(('🚀 ACCELERATING', mask))
+        mask = get_col_safe('acceleration_score', 0) >= CONFIG.PATTERN_THRESHOLDS['acceleration']
+        patterns.append(('🚀 ACCELERATING', mask))
         
         # 4. Institutional
-        if 'volume_score' in df.columns and 'vol_ratio_90d_180d' in df.columns:
-            mask = (
-                (df['volume_score'] >= CONFIG.PATTERN_THRESHOLDS['institutional']) &
-                (df['vol_ratio_90d_180d'] > 1.1)
-            )
-            patterns.append(('🏦 INSTITUTIONAL', mask))
+        mask = (get_col_safe('volume_score', 0) >= CONFIG.PATTERN_THRESHOLDS['institutional']) & (get_col_safe('vol_ratio_90d_180d', 1) > 1.1)
+        patterns.append(('🏦 INSTITUTIONAL', mask))
         
         # 5. Volume Explosion
-        if 'rvol' in df.columns:
-            mask = df['rvol'] > 3
-            patterns.append(('⚡ VOL EXPLOSION', mask))
+        mask = get_col_safe('rvol', 0) > 3
+        patterns.append(('⚡ VOL EXPLOSION', mask))
         
         # 6. Breakout Ready
-        if 'breakout_score' in df.columns:
-            mask = df['breakout_score'] >= CONFIG.PATTERN_THRESHOLDS['breakout_ready']
-            patterns.append(('🎯 BREAKOUT', mask))
+        mask = get_col_safe('breakout_score', 0) >= CONFIG.PATTERN_THRESHOLDS['breakout_ready']
+        patterns.append(('🎯 BREAKOUT', mask))
         
         # 7. Market Leader
-        if 'percentile' in df.columns:
-            mask = df['percentile'] >= CONFIG.PATTERN_THRESHOLDS['market_leader']
-            patterns.append(('👑 MARKET LEADER', mask))
+        mask = get_col_safe('percentile', 0) >= CONFIG.PATTERN_THRESHOLDS['market_leader']
+        patterns.append(('👑 MARKET LEADER', mask))
         
         # 8. Momentum Wave
-        if 'momentum_score' in df.columns and 'acceleration_score' in df.columns:
-            mask = (
-                (df['momentum_score'] >= CONFIG.PATTERN_THRESHOLDS['momentum_wave']) &
-                (df['acceleration_score'] >= 70)
-            )
-            patterns.append(('🌊 MOMENTUM WAVE', mask))
+        mask = (get_col_safe('momentum_score', 0) >= CONFIG.PATTERN_THRESHOLDS['momentum_wave']) & (get_col_safe('acceleration_score', 0) >= 70)
+        patterns.append(('🌊 MOMENTUM WAVE', mask))
         
         # 9. Liquid Leader
-        if 'liquidity_score' in df.columns and 'percentile' in df.columns:
-            mask = (
-                (df['liquidity_score'] >= CONFIG.PATTERN_THRESHOLDS['liquid_leader']) &
-                (df['percentile'] >= CONFIG.PATTERN_THRESHOLDS['liquid_leader'])
-            )
-            patterns.append(('💰 LIQUID LEADER', mask))
+        mask = (get_col_safe('liquidity_score', 0) >= CONFIG.PATTERN_THRESHOLDS['liquid_leader']) & (get_col_safe('percentile', 0) >= CONFIG.PATTERN_THRESHOLDS['liquid_leader'])
+        patterns.append(('💰 LIQUID LEADER', mask))
         
         # 10. Long-term Strength
-        if 'long_term_strength' in df.columns:
-            mask = df['long_term_strength'] >= CONFIG.PATTERN_THRESHOLDS['long_strength']
-            patterns.append(('💪 LONG STRENGTH', mask))
+        mask = get_col_safe('long_term_strength', 0) >= CONFIG.PATTERN_THRESHOLDS['long_strength']
+        patterns.append(('💪 LONG STRENGTH', mask))
         
         # 11. Quality Trend
-        if 'trend_quality' in df.columns:
-            mask = df['trend_quality'] >= 80
-            patterns.append(('📈 QUALITY TREND', mask))
+        mask = get_col_safe('trend_quality', 0) >= 80
+        patterns.append(('📈 QUALITY TREND', mask))
         
         # 12. Value Momentum
-        if 'pe' in df.columns and 'percentile' in df.columns:
-            has_valid_pe = (df['pe'].notna() & (df['pe'] > 0) & (df['pe'] < 10000))
-            mask = has_valid_pe & (df['pe'] < 15) & (df['master_score'] >= 70)
-            patterns.append(('💎 VALUE MOMENTUM', mask))
+        pe = get_col_safe('pe')
+        mask = pe.notna() & (pe > 0) & (pe < 15) & (get_col_safe('master_score', 0) >= 70)
+        patterns.append(('💎 VALUE MOMENTUM', mask))
         
         # 13. Earnings Rocket
-        if 'eps_change_pct' in df.columns and 'acceleration_score' in df.columns:
-            has_eps_growth = df['eps_change_pct'].notna()
-            extreme_growth = has_eps_growth & (df['eps_change_pct'] > 1000)
-            normal_growth = has_eps_growth & (df['eps_change_pct'] > 50) & (df['eps_change_pct'] <= 1000)
-            
-            mask = (
-                (extreme_growth & (df['acceleration_score'] >= 80)) |
-                (normal_growth & (df['acceleration_score'] >= 70))
-            )
-            patterns.append(('📊 EARNINGS ROCKET', mask))
-        
+        eps_change_pct = get_col_safe('eps_change_pct')
+        mask = eps_change_pct.notna() & (eps_change_pct > 50) & (get_col_safe('acceleration_score', 0) >= 70)
+        patterns.append(('📊 EARNINGS ROCKET', mask))
+
         # 14. Quality Leader
         if all(col in df.columns for col in ['pe', 'eps_change_pct', 'percentile']):
-            has_complete_data = (
-                df['pe'].notna() & 
-                df['eps_change_pct'].notna() & 
-                (df['pe'] > 0) &
-                (df['pe'] < 10000)
-            )
-            mask = (
-                has_complete_data &
-                (df['pe'].between(10, 25)) &
-                (df['eps_change_pct'] > 20) &
-                (df['percentile'] >= 80)
-            )
+            pe, eps_change_pct, percentile = get_col_safe('pe'), get_col_safe('eps_change_pct'), get_col_safe('percentile')
+            mask = pe.notna() & eps_change_pct.notna() & (pe.between(10, 25)) & (eps_change_pct > 20) & (percentile >= 80)
             patterns.append(('🏆 QUALITY LEADER', mask))
         
         # 15. Turnaround Play
-        if 'eps_change_pct' in df.columns and 'volume_score' in df.columns:
-            has_eps = df['eps_change_pct'].notna()
-            mega_turnaround = has_eps & (df['eps_change_pct'] > 500) & (df['volume_score'] >= 60)
-            strong_turnaround = has_eps & (df['eps_change_pct'] > 100) & (df['eps_change_pct'] <= 500) & (df['volume_score'] >= 70)
-            
-            mask = mega_turnaround | strong_turnaround
-            patterns.append(('⚡ TURNAROUND', mask))
+        eps_change_pct = get_col_safe('eps_change_pct')
+        mask = eps_change_pct.notna() & (eps_change_pct > 100) & (get_col_safe('volume_score', 0) >= 60)
+        patterns.append(('⚡ TURNAROUND', mask))
         
         # 16. High PE Warning
-        if 'pe' in df.columns:
-            has_valid_pe = df['pe'].notna() & (df['pe'] > 0)
-            mask = has_valid_pe & (df['pe'] > 100)
-            patterns.append(('⚠️ HIGH PE', mask))
+        pe = get_col_safe('pe')
+        mask = pe.notna() & (pe > 100)
+        patterns.append(('⚠️ HIGH PE', mask))
         
         # 17. 52W High Approach
-        if 'from_high_pct' in df.columns and 'volume_score' in df.columns and 'momentum_score' in df.columns:
-            mask = (
-                (df['from_high_pct'] > -5) & 
-                (df['volume_score'] >= 70) & 
-                (df['momentum_score'] >= 60)
-            )
-            patterns.append(('🎯 52W HIGH APPROACH', mask))
+        mask = (get_col_safe('from_high_pct', -100) > -5) & (get_col_safe('volume_score', 0) >= 70) & (get_col_safe('momentum_score', 0) >= 60)
+        patterns.append(('🎯 52W HIGH APPROACH', mask))
         
         # 18. 52W Low Bounce
-        if all(col in df.columns for col in ['from_low_pct', 'acceleration_score', 'ret_30d']):
-            mask = (
-                (df['from_low_pct'] < 20) & 
-                (df['acceleration_score'] >= 80) & 
-                (df['ret_30d'] > 10)
-            )
-            patterns.append(('🔄 52W LOW BOUNCE', mask))
+        mask = (get_col_safe('from_low_pct', 100) < 20) & (get_col_safe('acceleration_score', 0) >= 80) & (get_col_safe('ret_30d', 0) > 10)
+        patterns.append(('🔄 52W LOW BOUNCE', mask))
         
         # 19. Golden Zone
-        if all(col in df.columns for col in ['from_low_pct', 'from_high_pct', 'trend_quality']):
-            mask = (
-                (df['from_low_pct'] > 60) & 
-                (df['from_high_pct'] > -40) & 
-                (df['trend_quality'] >= 70)
-            )
-            patterns.append(('👑 GOLDEN ZONE', mask))
+        mask = (get_col_safe('from_low_pct', 0) > 60) & (get_col_safe('from_high_pct', 0) > -40) & (get_col_safe('trend_quality', 0) >= 70)
+        patterns.append(('👑 GOLDEN ZONE', mask))
         
         # 20. Volume Accumulation
-        if all(col in df.columns for col in ['vol_ratio_30d_90d', 'vol_ratio_90d_180d', 'ret_30d']):
-            mask = (
-                (df['vol_ratio_30d_90d'] > 1.2) & 
-                (df['vol_ratio_90d_180d'] > 1.1) & 
-                (df['ret_30d'] > 5)
-            )
-            patterns.append(('📊 VOL ACCUMULATION', mask))
+        mask = (get_col_safe('vol_ratio_30d_90d', 1) > 1.2) & (get_col_safe('vol_ratio_90d_180d', 1) > 1.1) & (get_col_safe('ret_30d', 0) > 5)
+        patterns.append(('📊 VOL ACCUMULATION', mask))
         
-        # 21. Momentum Divergence with safe division
+        # 21. Momentum Divergence
         if all(col in df.columns for col in ['ret_7d', 'ret_30d', 'acceleration_score', 'rvol']):
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_7d_pace = df['ret_7d'] / 7
-                daily_30d_pace = df['ret_30d'] / 30
-                
-                daily_7d_pace = daily_7d_pace.replace([np.inf, -np.inf], 0).fillna(0)
-                daily_30d_pace = daily_30d_pace.replace([np.inf, -np.inf], 0).fillna(0)
-            
-            mask = (
-                (daily_7d_pace > daily_30d_pace * 1.5) & 
-                (df['acceleration_score'] >= 85) & 
-                (df['rvol'] > 2)
-            )
+                daily_7d_pace = np.where(df['ret_7d'].fillna(0) != 0, df['ret_7d'].fillna(0) / 7, np.nan)
+                daily_30d_pace = np.where(df['ret_30d'].fillna(0) != 0, df['ret_30d'].fillna(0) / 30, np.nan)
+            mask = daily_7d_pace.notna() & daily_30d_pace.notna() & (daily_7d_pace > daily_30d_pace * 1.5) & (get_col_safe('acceleration_score', 0) >= 85) & (get_col_safe('rvol', 0) > 2)
             patterns.append(('🔀 MOMENTUM DIVERGE', mask))
         
-        # 22. Range Compression with safe division
+        # 22. Range Compression
         if all(col in df.columns for col in ['high_52w', 'low_52w', 'from_low_pct']):
+            high, low, from_low_pct = get_col_safe('high_52w'), get_col_safe('low_52w'), get_col_safe('from_low_pct')
             with np.errstate(divide='ignore', invalid='ignore'):
-                range_pct = ((df['high_52w'] - df['low_52w']) / df['low_52w']) * 100
-                range_pct = range_pct.replace([np.inf, -np.inf], 100).fillna(100)
-            
-            mask = (range_pct < 50) & (df['from_low_pct'] > 30)
+                range_pct = np.where(low > 0, ((high - low) / low) * 100, 100)
+            mask = range_pct.notna() & (range_pct < 50) & (from_low_pct > 30)
             patterns.append(('🎯 RANGE COMPRESS', mask))
         
-        # 23. Stealth Accumulator with safe division
+        # 23. Stealth Accumulator
         if all(col in df.columns for col in ['vol_ratio_90d_180d', 'vol_ratio_30d_90d', 'from_low_pct', 'ret_7d', 'ret_30d']):
+            ret_7d, ret_30d = get_col_safe('ret_7d'), get_col_safe('ret_30d')
             with np.errstate(divide='ignore', invalid='ignore'):
-                ret_ratio = df['ret_7d'] / (df['ret_30d'] / 4)
-                ret_ratio = ret_ratio.replace([np.inf, -np.inf], 0).fillna(0)
-            
-            mask = (
-                (df['vol_ratio_90d_180d'] > 1.1) &
-                (df['vol_ratio_30d_90d'].between(0.9, 1.1)) &
-                (df['from_low_pct'] > 40) &
-                (ret_ratio > 1)
-            )
+                ret_ratio = np.where(ret_30d != 0, ret_7d / (ret_30d / 4), np.nan)
+            mask = get_col_safe('vol_ratio_90d_180d', 1) > 1.1 & get_col_safe('vol_ratio_30d_90d', 1).between(0.9, 1.1) & get_col_safe('from_low_pct', 0) > 40 & ret_ratio.notna() & (ret_ratio > 1)
             patterns.append(('🤫 STEALTH', mask))
-        
-        # 24. Momentum Vampire with safe division
+
+        # 24. Momentum Vampire
         if all(col in df.columns for col in ['ret_1d', 'ret_7d', 'rvol', 'from_high_pct', 'category']):
+            ret_1d, ret_7d, rvol, from_high_pct = get_col_safe('ret_1d'), get_col_safe('ret_7d'), get_col_safe('rvol'), get_col_safe('from_high_pct')
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_pace_ratio = df['ret_1d'] / (df['ret_7d'] / 7)
-                daily_pace_ratio = daily_pace_ratio.replace([np.inf, -np.inf], 0).fillna(0)
-            
-            mask = (
-                (daily_pace_ratio > 2) &
-                (df['rvol'] > 3) &
-                (df['from_high_pct'] > -15) &
-                (df['category'].isin(['Small Cap', 'Micro Cap']))
-            )
+                daily_pace_ratio = np.where(ret_7d != 0, ret_1d / (ret_7d / 7), np.nan)
+            mask = daily_pace_ratio.notna() & (daily_pace_ratio > 2) & (rvol > 3) & (from_high_pct > -15) & (df['category'].isin(['Small Cap', 'Micro Cap']))
             patterns.append(('🧛 VAMPIRE', mask))
         
         # 25. Perfect Storm
         if 'momentum_harmony' in df.columns and 'master_score' in df.columns:
-            mask = (
-                (df['momentum_harmony'] == 4) &
-                (df['master_score'] > 80)
-            )
+            mask = (get_col_safe('momentum_harmony', 0) == 4) & (get_col_safe('master_score', 0) > 80)
             patterns.append(('⛈️ PERFECT STORM', mask))
-        
+
         return patterns
 
+    @staticmethod
+    def _calculate_pattern_confidence(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Calculates a numerical confidence score for each stock based on the
+        quantity and importance of the patterns it exhibits.
+        """
+        if 'patterns' not in df.columns or df['patterns'].eq('').all():
+            df['pattern_confidence'] = 0.0
+            return df
+
+        pattern_list = df['patterns'].str.split(' | ').fillna(pd.Series([[]] * len(df), index=df.index))
+        
+        max_possible_score = sum(item['importance_weight'] for item in PatternDetector.PATTERN_METADATA.values())
+
+        if max_possible_score > 0:
+            df['pattern_confidence'] = pattern_list.apply(
+                lambda patterns: sum(
+                    PatternDetector.PATTERN_METADATA.get(p, {'importance_weight': 0})['importance_weight']
+                    for p in patterns
+                )
+            )
+            df['pattern_confidence'] = (df['pattern_confidence'] / max_possible_score * 100).clip(0, 100).round(2)
+        else:
+            df['pattern_confidence'] = 0.0
+
+        return df
+        
 # ============================================
 # MARKET INTELLIGENCE
 # ============================================
@@ -4967,6 +4939,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
