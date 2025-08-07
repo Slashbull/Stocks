@@ -132,8 +132,7 @@ class Config:
         "range_compress": 75,
         "stealth": 70,
         "vampire": 85,
-        "perfect_storm": 80,
-        "extreme_opp": 85 
+        "perfect_storm": 80
     })
     
     # Value bounds for data validation
@@ -939,24 +938,6 @@ class AdvancedMetrics:
         
         if 'ret_3m' in df.columns:
             df['momentum_harmony'] += (df['ret_3m'].fillna(0) > 0).astype(int)
-
-        # Calculate momentum decay to identify accelerating vs decelerating momentum
-        if 'ret_7d' in df.columns and 'ret_30d' in df.columns:
-            daily_7d = df['ret_7d'].fillna(0) / 7
-            daily_30d = df['ret_30d'].fillna(0) / 30
-            
-            # Momentum decay ratio - higher means accelerating
-            df['momentum_decay'] = np.where(
-                daily_30d != 0,
-                daily_7d / daily_30d,
-                1.0
-            )
-            
-            # Flag stocks with accelerating momentum
-            df['momentum_accelerating'] = df['momentum_decay'] > 1.2
-        else:
-            df['momentum_decay'] = 1.0
-            df['momentum_accelerating'] = False
         
         # Wave State
         df['wave_state'] = df.apply(AdvancedMetrics._get_wave_state, axis=1)
@@ -1053,6 +1034,20 @@ class RankingEngine:
         ])
 
         df['master_score'] = pd.Series(np.dot(scores_matrix, weights), index=df.index).clip(0, 100)
+
+        # Calculate ranks based on the master score.
+        df['rank'] = df['master_score'].rank(method='first', ascending=False, na_option='bottom')
+        df['rank'] = df['rank'].fillna(len(df) + 1).astype(int)
+
+        df['percentile'] = df['master_score'].rank(pct=True, ascending=True, na_option='bottom') * 100
+        df['percentile'] = df['percentile'].fillna(0)
+        
+        # Calculate ranks within each category.
+        df = RankingEngine._calculate_category_ranks(df)
+        
+        logger.info(f"Ranking complete: {len(df)} stocks processed")
+        
+        return df
 
     @staticmethod
     def _safe_rank(series: pd.Series, pct: bool = True, ascending: bool = True) -> pd.Series:
@@ -1435,8 +1430,7 @@ class PatternDetector:
         '🎯 RANGE COMPRESS': {'importance_weight': 5},
         '🤫 STEALTH': {'importance_weight': 10},
         '🧛 VAMPIRE': {'importance_weight': 10},
-        '⛈️ PERFECT STORM': {'importance_weight': 20},
-        '🏆 EXTREME OPP': {'importance_weight': 25}  # V3.5 NEW: Highest weight for extreme opportunities
+        '⛈️ PERFECT STORM': {'importance_weight': 20}
     }
 
     @staticmethod
@@ -1611,21 +1605,6 @@ class PatternDetector:
         if 'momentum_harmony' in df.columns and 'master_score' in df.columns:
             mask = (get_col_safe('momentum_harmony', 0) == 4) & (get_col_safe('master_score', 0) > 80)
             patterns.append(('⛈️ PERFECT STORM', mask))
-
-        # 26. Extreme Opportunity - The ultimate setup
-        if all(col in df.columns for col in ['master_score', 'rvol', 'momentum_harmony', 'from_high_pct']):
-            mask = (
-                (get_col_safe('master_score', 0) > CONFIG.PATTERN_THRESHOLDS['extreme_opp']) &
-                (get_col_safe('rvol', 0) > 1) &
-                (get_col_safe('momentum_harmony', 0) >= 3) &
-                (get_col_safe('from_high_pct', -100) > -10)
-            )
-            
-            # Add momentum acceleration check if available
-            if 'momentum_accelerating' in df.columns:
-                mask = mask & get_col_safe('momentum_accelerating', False)
-            
-            patterns.append(('🏆 EXTREME OPP', mask))
 
         return patterns
 
@@ -2623,27 +2602,16 @@ class UIComponents:
                 st.info("No momentum leaders found")
         
         with opp_col2:
-            # Check for EXTREME OPP pattern (V3.5)
-            extreme_opp_stocks = df[df['patterns'].str.contains('EXTREME OPP', na=False)].nlargest(5, 'master_score') if 'patterns' in df.columns else pd.DataFrame()
+            hidden_gems = df[df['patterns'].str.contains('HIDDEN GEM', na=False)].nlargest(5, 'master_score') if 'patterns' in df.columns else pd.DataFrame()
             
-            if len(extreme_opp_stocks) > 0:
-                st.markdown("**🏆 Extreme Opportunities**")
-                for _, stock in extreme_opp_stocks.iterrows():
+            st.markdown("**💎 Hidden Gems**")
+            if len(hidden_gems) > 0:
+                for _, stock in hidden_gems.iterrows():
                     company_name = stock.get('company_name', 'N/A')[:25]
                     st.write(f"• **{stock['ticker']}** - {company_name}")
-                    st.caption(f"Score: {stock['master_score']:.1f} | RVOL: {stock['rvol']:.1f}x")
+                    st.caption(f"Cat %ile: {stock.get('category_percentile', 0):.0f} | Score: {stock['master_score']:.1f}")
             else:
-                # Fallback to hidden gems
-                hidden_gems = df[df['patterns'].str.contains('HIDDEN GEM', na=False)].nlargest(5, 'master_score') if 'patterns' in df.columns else pd.DataFrame()
-                
-                st.markdown("**💎 Hidden Gems**")
-                if len(hidden_gems) > 0:
-                    for _, stock in hidden_gems.iterrows():
-                        company_name = stock.get('company_name', 'N/A')[:25]
-                        st.write(f"• **{stock['ticker']}** - {company_name}")
-                        st.caption(f"Cat %ile: {stock.get('category_percentile', 0):.0f} | Score: {stock['master_score']:.1f}")
-                else:
-                    st.info("No hidden gems today")
+                st.info("No hidden gems today")
         
         with opp_col3:
             volume_alerts = df[df['rvol'] > 3].nlargest(5, 'master_score') if 'rvol' in df.columns else pd.DataFrame()
@@ -5168,8 +5136,3 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
-
-
-
-
-
