@@ -1019,7 +1019,7 @@ class RankingEngine:
         
         logger.info("Starting optimized ranking calculations...")
 
-        # Calculate component scores, filling NaNs with a neutral score of 50.
+        # Calculate component scores, ensuring each result is a Series before filling NaNs.
         df['position_score'] = RankingEngine._calculate_position_score(df).fillna(50)
         df['volume_score'] = RankingEngine._calculate_volume_score(df).fillna(50)
         df['momentum_score'] = RankingEngine._calculate_momentum_score(df).fillna(50)
@@ -1027,7 +1027,7 @@ class RankingEngine:
         df['breakout_score'] = RankingEngine._calculate_breakout_score(df).fillna(50)
         df['rvol_score'] = RankingEngine._calculate_rvol_score(df).fillna(50)
         
-        # Calculate auxiliary scores, also filling NaNs with 50.
+        # Calculate auxiliary scores, also ensuring Series output.
         df['trend_quality'] = RankingEngine._calculate_trend_quality(df).fillna(50)
         df['long_term_strength'] = RankingEngine._calculate_long_term_strength(df).fillna(50)
         df['liquidity_score'] = RankingEngine._calculate_liquidity_score(df).fillna(50)
@@ -1073,6 +1073,7 @@ class RankingEngine:
             pd.Series: A new series with the calculated ranks.
         """
         if series is None or series.empty:
+            # Return an empty Series with a known index to avoid type errors
             return pd.Series(np.nan, dtype=float)
 
         series = series.replace([np.inf, -np.inf], np.nan)
@@ -1106,8 +1107,6 @@ class RankingEngine:
         rank_from_low = RankingEngine._safe_rank(from_low, pct=True, ascending=True)
         rank_from_high = RankingEngine._safe_rank(from_high, pct=True, ascending=False)
         
-        # Combine scores. If a component is NaN, fill it with 50 for the calculation,
-        # but the final score will be NaN if both components were NaN.
         combined_score = (rank_from_low.fillna(50) * 0.6 + rank_from_high.fillna(50) * 0.4)
         
         nan_mask = from_low.isna() & from_high.isna()
@@ -1140,7 +1139,6 @@ class RankingEngine:
         else:
             logger.warning("No volume ratio data available, returning NaN for scores.")
 
-        # If all components for a row were NaN, the final score should also be NaN.
         component_cols = [c for c, _ in vol_cols if c in df.columns]
         if component_cols:
             nan_mask = df[component_cols].isna().all(axis=1)
@@ -1306,7 +1304,6 @@ class RankingEngine:
         if len(available_smas) == 0:
             return trend_score
         
-        # Determine rows that have enough data to be scored
         rows_to_score = df.index[df[available_smas].notna().all(axis=1)]
         
         if len(rows_to_score) > 0:
@@ -5149,6 +5146,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
