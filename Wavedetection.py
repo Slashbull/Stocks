@@ -2595,7 +2595,7 @@ def main():
                 time.sleep(0.5)
                 st.rerun()
         
-        # Data source selection
+        # Data source selection - ENHANCED: Two prominent buttons
         st.markdown("---")
         st.markdown("### 📂 Data Source")
         
@@ -2627,7 +2627,13 @@ def main():
                 col1, col2 = st.columns(2)
                 with col1:
                     completeness = quality.get('completeness', 0)
-                    emoji = "🟢" if completeness > 80 else "🟡" if completeness > 60 else "🔴"
+                    if completeness > 80:
+                        emoji = "🟢"
+                    elif completeness > 60:
+                        emoji = "🟡"
+                    else:
+                        emoji = "🔴"
+                    
                     st.metric("Completeness", f"{emoji} {completeness:.1f}%")
                     st.metric("Total Stocks", f"{quality.get('total_rows', 0):,}")
                 
@@ -2649,9 +2655,16 @@ def main():
                 perf = st.session_state.performance_metrics
                 
                 total_time = sum(perf.values())
-                perf_emoji = "🟢" if total_time < 3 else "🟡" if total_time < 5 else "🔴"
+                if total_time < 3:
+                    perf_emoji = "🟢"
+                elif total_time < 5:
+                    perf_emoji = "🟡"
+                else:
+                    perf_emoji = "🔴"
+                
                 st.metric("Load Time", f"{perf_emoji} {total_time:.1f}s")
                 
+                # Show slowest operations
                 if len(perf) > 0:
                     slowest = sorted(perf.items(), key=lambda x: x[1], reverse=True)[:3]
                     for func_name, elapsed in slowest:
@@ -2667,6 +2680,7 @@ def main():
         if st.session_state.get('quick_filter_applied', False):
             active_filter_count += 1
         
+        # Check all filter states
         filter_checks = [
             ('category_filter', lambda x: x and len(x) > 0),
             ('sector_filter', lambda x: x and len(x) > 0),
@@ -2701,17 +2715,20 @@ def main():
             st.success("✅ All filters cleared!")
             st.rerun()
         
+        # Debug mode
         st.markdown("---")
-        show_debug = st.checkbox("🐛 Show Debug Info", 
-                               value=st.session_state.get('show_debug', False),
-                               key="show_debug")
+        st.checkbox("🐛 Show Debug Info", 
+                    value=st.session_state.get('show_debug', False),
+                    key="show_debug")
     
     # Data loading and processing
     try:
+        # Check if we need to load data
         if st.session_state.data_source == "upload" and uploaded_file is None:
             st.warning("Please upload a CSV file to continue")
             st.stop()
         
+        # Load and process data
         with st.spinner("📥 Loading and processing data..."):
             try:
                 if st.session_state.data_source == "upload" and uploaded_file is not None:
@@ -2721,7 +2738,7 @@ def main():
                 else:
                     ranked_df, data_timestamp, metadata = load_and_process_data(
                         "sheet", 
-                        sheet_url=CONFIG.DEFAULT_SHEET_URL, 
+                        sheet_url=st.session_state.sheet_url, 
                         gid=CONFIG.DEFAULT_GID
                     )
                 
@@ -2729,6 +2746,7 @@ def main():
                 st.session_state.data_timestamp = data_timestamp
                 st.session_state.last_refresh = datetime.now(timezone.utc)
                 
+                # Show any warnings or errors
                 if metadata.get('warnings'):
                     for warning in metadata['warnings']:
                         st.warning(warning)
@@ -2740,6 +2758,7 @@ def main():
             except Exception as e:
                 logger.error(f"Failed to load data: {str(e)}")
                 
+                # Try to use last good data
                 if 'last_good_data' in st.session_state:
                     ranked_df, data_timestamp, metadata = st.session_state.last_good_data
                     st.warning("Failed to load fresh data, using cached version")
@@ -2758,6 +2777,7 @@ def main():
     st.markdown("### ⚡ Quick Actions")
     qa_col1, qa_col2, qa_col3, qa_col4, qa_col5 = st.columns(5)
     
+    # Check for quick filter state
     quick_filter_applied = st.session_state.get('quick_filter_applied', False)
     quick_filter = st.session_state.get('quick_filter', None)
     
@@ -2811,7 +2831,6 @@ def main():
     # Sidebar filters (rendered within main() as per plan)
     with st.sidebar:
         # Get filters from session state
-        # This is built from st.session_state, which is updated by widgets
         filters = SessionStateManager.build_filter_dict()
         
         st.markdown("### 📊 Display Mode")
@@ -2828,31 +2847,31 @@ def main():
         st.markdown("---")
         
         # Category filter
-        categories = FilterEngine.get_filter_options(ranked_df_display, 'category', filters)
+        categories = FilterEngine.get_filter_options(ranked_df, 'category', filters)
         st.multiselect(
             "Market Cap Category",
             options=categories,
-            default=st.session_state.get('category_filter', []), # Persist filter state
+            default=st.session_state.get('category_filter', []),
             placeholder="Select categories (empty = All)",
             key="category_filter"
         )
         
         # Sector filter
-        sectors = FilterEngine.get_filter_options(ranked_df_display, 'sector', filters)
+        sectors = FilterEngine.get_filter_options(ranked_df, 'sector', filters)
         st.multiselect(
             "Sector",
             options=sectors,
-            default=st.session_state.get('sector_filter', []), # Persist filter state
+            default=st.session_state.get('sector_filter', []),
             placeholder="Select sectors (empty = All)",
             key="sector_filter"
         )
         
         # Industry filter (FIXED: Now correctly populating)
-        industries = FilterEngine.get_filter_options(ranked_df_display, 'industry', filters)
+        industries = FilterEngine.get_filter_options(ranked_df, 'industry', filters)
         st.multiselect(
             "Industry",
             options=industries,
-            default=st.session_state.get('industry_filter', []), # Persist filter state
+            default=st.session_state.get('industry_filter', []),
             placeholder="Select industries (empty = All)",
             key="industry_filter"
         )
@@ -2870,9 +2889,9 @@ def main():
         
         # Pattern filter
         all_patterns = set()
-        for patterns in ranked_df_display['patterns'].dropna():
-            if patterns:
-                all_patterns.update(patterns.split(' | '))
+        for patterns_str in ranked_df_display['patterns'].dropna():
+            if patterns_str:
+                all_patterns.update(patterns_str.split(' | '))
         
         if all_patterns:
             st.multiselect(
@@ -2894,13 +2913,11 @@ def main():
             "⚠️ Weak/Downtrend (<40)": (0, 39)
         }
         
-        # SAFELY get index for trend_filter (FIXED: Handling potential ValueError)
         default_trend_key = st.session_state.get('trend_filter', "All Trends")
         try:
             current_trend_index = list(trend_options.keys()).index(default_trend_key)
         except ValueError:
             current_trend_index = 0
-            st.session_state.trend_filter = "All Trends" # Reset to default if invalid
             
         st.selectbox(
             "Trend Quality",
@@ -2997,10 +3014,9 @@ def main():
                     key="require_fundamental_data"
                 )
     
-    # Re-build filters dictionary after all widgets have updated session state
+    # Apply filters
     filters = SessionStateManager.build_filter_dict()
     
-    # Apply filters to the main DataFrame
     if quick_filter_applied:
         filtered_df = FilterEngine.apply_filters(ranked_df_display, filters)
     else:
@@ -3439,8 +3455,7 @@ def main():
                 help="Show category rotation flow and market regime detection"
             )
         
-        # Initialize wave_filtered_df
-        wave_filtered_df = filtered_df.copy()
+        wave_filtered_df = filtered_df.copy() # Start with the already filtered data
         
         with radar_col4:
             if not wave_filtered_df.empty and 'overall_wave_strength' in wave_filtered_df.columns:
@@ -3457,16 +3472,16 @@ def main():
                         wave_emoji = "💤"
                         wave_color = "🔴"
                     
-                    UIComponents.render_metric_card(
+                    st.metric(
                         "Wave Strength",
                         f"{wave_emoji} {wave_strength_score:.0f}%",
                         f"{wave_color} Market"
                     )
                 except Exception as e:
                     logger.error(f"Error calculating wave strength: {str(e)}")
-                    UIComponents.render_metric_card("Wave Strength", "N/A", "Error")
+                    st.metric("Wave Strength", "N/A", "Error")
             else:
-                UIComponents.render_metric_card("Wave Strength", "N/A", "Data not available")
+                st.metric("Wave Strength", "N/A", "Data not available")
         
         if show_sensitivity_details:
             with st.expander("📊 Current Sensitivity Thresholds", expanded=True):
@@ -3548,11 +3563,17 @@ def main():
             
             # Set thresholds based on sensitivity
             if sensitivity == "Conservative":
-                momentum_threshold, acceleration_threshold, min_rvol = 60, 70, 3.0
+                momentum_threshold = 60
+                acceleration_threshold = 70
+                min_rvol = 3.0
             elif sensitivity == "Balanced":
-                momentum_threshold, acceleration_threshold, min_rvol = 50, 60, 2.0
+                momentum_threshold = 50
+                acceleration_threshold = 60
+                min_rvol = 2.0
             else:  # Aggressive
-                momentum_threshold, acceleration_threshold, min_rvol = 40, 50, 1.5
+                momentum_threshold = 40
+                acceleration_threshold = 50
+                min_rvol = 1.5
             
             # Find momentum shifts
             momentum_shifts = wave_filtered_df[
@@ -3590,7 +3611,7 @@ def main():
                 
                 display_columns.append('category')
                 
-                shift_display = top_shifts[[col for col in display_columns if col in top_shifts.columns]].copy()
+                shift_display = top_shifts[[col for col in display_columns if col in top_shifts.columns]].copy() # Ensure columns exist
                 
                 # Add signal indicator
                 shift_display['Signals'] = shift_display['signal_count'].apply(
@@ -3603,7 +3624,7 @@ def main():
                 
                 if 'rvol' in shift_display.columns:
                     shift_display['RVOL'] = shift_display['rvol'].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else '-')
-                    shift_display = shift_display.drop('rvol', axis=1)
+                    shift_display = shift_display.drop('rvol', axis=1) # Remove original 'rvol' column
                     
                 # Rename columns
                 shift_display = shift_display.rename(columns={
@@ -3815,7 +3836,7 @@ def main():
                 with col1:
                     st.dataframe(emergence_df, use_container_width=True, hide_index=True)
                 with col2:
-                    UIComponents.render_metric_card("Emerging Patterns", len(emergence_df))
+                    st.metric("Emerging Patterns", len(emergence_df))
             else:
                 st.info(f"No patterns emerging within {pattern_distance}% threshold.")
             
@@ -3872,9 +3893,9 @@ def main():
                     st.dataframe(surge_display, use_container_width=True, hide_index=True)
                 
                 with col2:
-                    UIComponents.render_metric_card("Active Surges", len(volume_surges))
-                    UIComponents.render_metric_card("Extreme (>5x)", len(volume_surges[volume_surges['rvol'] > 5]))
-                    UIComponents.render_metric_card("High (>3x)", len(volume_surges[volume_surges['rvol'] > 3]))
+                    st.metric("Active Surges", len(volume_surges))
+                    st.metric("Extreme (>5x)", len(volume_surges[volume_surges['rvol'] > 5]))
+                    st.metric("High (>3x)", len(volume_surges[volume_surges['rvol'] > 3]))
                     
                     if 'category' in volume_surges.columns:
                         st.markdown("**📊 Surge by Category:**")
@@ -4020,8 +4041,7 @@ def main():
                 if 'money_flow_mm' in filtered_df.columns:
                     category_df.columns = ['Avg Score', 'Count', 'Avg Cat %ile', 'Total Money Flow']
                 else:
-                    category_df.columns = ['Avg Score', 'Count', 'Avg Cat %ile', 'Dummy Flow']
-                    category_df = category_df.drop('Dummy Flow', axis=1)
+                    category_df.columns = ['Avg Score', 'Count', 'Avg Cat %ile']
                 
                 category_df = category_df.sort_values('Avg Score', ascending=False)
                 
@@ -4043,9 +4063,8 @@ def main():
         col1, col2 = st.columns([4, 1])
         
         with col1:
-            st.text_input(
+            search_query = st.text_input(
                 "Search stocks",
-                value=st.session_state.get('search_query', ""),
                 placeholder="Enter ticker or company name...",
                 help="Search by ticker symbol or company name",
                 key="search_input"
@@ -4155,8 +4174,6 @@ def main():
                         if stock.get('patterns'):
                             st.markdown(f"**🎯 Patterns:** {stock['patterns']}")
                         
-                        # Additional details - Reorganized layout
-                        
                         st.markdown("---")
                         
                         st.container()
@@ -4172,11 +4189,7 @@ def main():
                                 st.markdown("**💰 Fundamentals**")
                                 
                                 if 'pe' in stock and pd.notna(stock['pe']):
-                                    pe_val = stock['pe']
-                                    if pe_val <= 0: st.text("PE Ratio: 🔴 Loss")
-                                    elif pe_val < 15: st.text(f"PE Ratio: 🟢 {pe_val:.1f}x")
-                                    elif pe_val < 25: st.text(f"PE Ratio: 🟡 {pe_val:.1f}x")
-                                    else: st.text(f"PE Ratio: 🔴 {pe_val:.1f}x")
+                                    st.text(f"PE Ratio: {UIComponents.format_pe_value(stock['pe'])}")
                                 else: st.text("PE Ratio: N/A")
                                 
                                 if 'eps_current' in stock and pd.notna(stock['eps_current']):
@@ -4184,11 +4197,7 @@ def main():
                                 else: st.text("EPS Current: N/A")
                                 
                                 if 'eps_change_pct' in stock and pd.notna(stock['eps_change_pct']):
-                                    eps_chg = stock['eps_change_pct']
-                                    if eps_chg >= 100: st.text(f"EPS Growth: 🚀 {eps_chg:+.0f}%")
-                                    elif eps_chg >= 50: st.text(f"EPS Growth: 🔥 {eps_chg:+.1f}%")
-                                    elif eps_chg >= 0: st.text(f"EPS Growth: 📈 {eps_chg:+.1f}%")
-                                    else: st.text(f"EPS Growth: 📉 {eps_chg:+.1f}%")
+                                    st.text(f"EPS Growth: {UIComponents.format_eps_change_value(stock['eps_change_pct'])}")
                                 else: st.text("EPS Growth: N/A")
                         
                         with detail_cols_top[1]:
@@ -4287,6 +4296,7 @@ def main():
             key="export_template_radio",
             help="Select a template based on your trading style"
         )
+        st.session_state.export_template = export_template
         
         template_map = {
             "Full Analysis (All Data)": "full",
@@ -4305,6 +4315,7 @@ def main():
                 "- Top 100 stocks with all scores\n"
                 "- Market intelligence dashboard\n"
                 "- Sector rotation analysis\n"
+                "- Industry performance analysis (FIXED)\n"
                 "- Pattern frequency analysis\n"
                 "- Wave Radar signals\n"
                 "- Summary statistics"
@@ -4381,7 +4392,7 @@ def main():
         stat_cols = st.columns(3)
         for i, (label, value) in enumerate(export_stats.items()):
             with stat_cols[i % 3]:
-                st.metric(label, value)
+                UIComponents.render_metric_card(label, value)
     
     # Tab 6: About
     with tabs[6]:
@@ -4553,13 +4564,13 @@ def main():
         stats_cols = st.columns(4)
         
         with stats_cols[0]:
-            st.metric(
+            UIComponents.render_metric_card(
                 "Total Stocks Loaded",
                 f"{len(ranked_df):,}" if 'ranked_df' in locals() else "0"
             )
         
         with stats_cols[1]:
-            st.metric(
+            UIComponents.render_metric_card(
                 "Currently Filtered",
                 f"{len(filtered_df):,}" if 'filtered_df' in locals() else "0"
             )
@@ -4567,7 +4578,7 @@ def main():
         with stats_cols[2]:
             data_quality = st.session_state.data_quality.get('completeness', 0)
             quality_emoji = "🟢" if data_quality > 80 else "🟡" if data_quality > 60 else "🔴"
-            st.metric(
+            UIComponents.render_metric_card(
                 "Data Quality",
                 f"{quality_emoji} {data_quality:.1f}%"
             )
@@ -4577,7 +4588,7 @@ def main():
             minutes = int(cache_time.total_seconds() / 60)
             cache_status = "Fresh" if minutes < 60 else "Stale"
             cache_emoji = "🟢" if minutes < 60 else "🔴"
-            st.metric(
+            UIComponents.render_metric_card(
                 "Cache Age",
                 f"{cache_emoji} {minutes} min",
                 cache_status
@@ -4612,5 +4623,4 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
-
 
