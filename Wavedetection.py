@@ -4779,7 +4779,7 @@ with tabs[4]:
             else:
                 st.warning("No stocks found matching your search criteria.")
                     
-    with tabs[5]:
+with tabs[5]:
             st.markdown("### 📥 Export Data")
             
             st.markdown("#### 📋 Export Templates")
@@ -4888,9 +4888,9 @@ with tabs[4]:
             stat_cols = st.columns(3)
             for i, (label, value) in enumerate(export_stats.items()):
                 with stat_cols[i % 3]:
-                    UIComponents.render_metric_card(label, value)
+                    UIComponents.render_metric_card(label, value)    
         
-        with tabs[6]:
+with tabs[6]:
             st.markdown("### ℹ️ About Wave Detection Ultimate 3.0 - Final Production Version")
             
             col1, col2 = st.columns([2, 1])
@@ -5106,8 +5106,3 @@ with tabs[4]:
             
             if st.button("📧 Report Issue"):
                 st.info("Please take a screenshot and report this error.")
-    
-
-
-
-
