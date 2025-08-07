@@ -4309,148 +4309,146 @@ with tabs[2]:
             else:
                 st.warning(f"No data available for Wave Radar analysis with {wave_timeframe} timeframe.")
     
-@staticmethod
- def render_market_analysis(df: pd.DataFrame):
-        """Renders the Market Analysis tab with various charts and tables."""
-        st.markdown("### 📊 Market Analysis")
-        if not df.empty:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fig_dist = Visualizer.create_score_distribution(df)
-                st.plotly_chart(fig_dist, use_container_width=True)
-            
-            with col2:
-                pattern_counts = {}
-                for patterns in df['patterns'].dropna():
-                    if patterns:
-                        for p in patterns.split(' | '):
-                            pattern_counts[p] = pattern_counts.get(p, 0) + 1
+with tabs[3]:
+            st.markdown("### 📊 Market Analysis")
+            if not filtered_df.empty:
+                col1, col2 = st.columns(2)
                 
-                if pattern_counts:
-                    pattern_df = pd.DataFrame(
-                        list(pattern_counts.items()),
-                        columns=['Pattern', 'Count']
-                    ).sort_values('Count', ascending=True).tail(15)
+                with col1:
+                    fig_dist = Visualizer.create_score_distribution(filtered_df)
+                    st.plotly_chart(fig_dist, use_container_width=True)
+                
+                with col2:
+                    pattern_counts = {}
+                    for patterns in filtered_df['patterns'].dropna():
+                        if patterns:
+                            for p in patterns.split(' | '):
+                                pattern_counts[p] = pattern_counts.get(p, 0) + 1
                     
-                    fig_patterns = go.Figure([
-                        go.Bar(
-                            x=pattern_df['Count'],
-                            y=pattern_df['Pattern'],
-                            orientation='h',
-                            marker_color='#3498db',
-                            text=pattern_df['Count'],
-                            textposition='outside'
+                    if pattern_counts:
+                        pattern_df = pd.DataFrame(
+                            list(pattern_counts.items()),
+                            columns=['Pattern', 'Count']
+                        ).sort_values('Count', ascending=True).tail(15)
+                        
+                        fig_patterns = go.Figure([
+                            go.Bar(
+                                x=pattern_df['Count'],
+                                y=pattern_df['Pattern'],
+                                orientation='h',
+                                marker_color='#3498db',
+                                text=pattern_df['Count'],
+                                textposition='outside'
+                            )
+                        ])
+                        
+                        fig_patterns.update_layout(
+                            title="Pattern Frequency Analysis",
+                            xaxis_title="Number of Stocks",
+                            yaxis_title="Pattern",
+                            template='plotly_white',
+                            height=400,
+                            margin=dict(l=150)
                         )
-                    ])
+                        
+                        st.plotly_chart(fig_patterns, use_container_width=True)
+                    else:
+                        st.info("No patterns detected in current selection")
+                
+                st.markdown("---")
+                
+                st.markdown("#### 🏢 Sector Performance")
+                sector_overview_df_local = MarketIntelligence.detect_sector_rotation(filtered_df)
+                
+                if not sector_overview_df_local.empty:
+                    display_cols_overview = ['flow_score', 'avg_score', 'median_score', 'avg_momentum', 
+                                             'avg_volume', 'avg_rvol', 'avg_ret_30d', 'analyzed_stocks', 'total_stocks']
                     
-                    fig_patterns.update_layout(
-                        title="Pattern Frequency Analysis",
-                        xaxis_title="Number of Stocks",
-                        yaxis_title="Pattern",
-                        template='plotly_white',
-                        height=400,
-                        margin=dict(l=150)
+                    available_overview_cols = [col for col in display_cols_overview if col in sector_overview_df_local.columns]
+                    
+                    sector_overview_display = sector_overview_df_local[available_overview_cols].copy()
+                    
+                    sector_overview_display.columns = [
+                        'Flow Score', 'Avg Score', 'Median Score', 'Avg Momentum', 
+                        'Avg Volume', 'Avg RVOL', 'Avg 30D Ret', 'Analyzed Stocks', 'Total Stocks'
+                    ]
+                    
+                    sector_overview_display['Coverage %'] = (
+                        (sector_overview_display['Analyzed Stocks'] / sector_overview_display['Total Stocks'] * 100)
+                        .replace([np.inf, -np.inf], np.nan)
+                        .fillna(0)
+                        .round(1)
+                        .apply(lambda x: f"{x}%")
+                    )
+    
+                    st.dataframe(
+                        sector_overview_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
+                        use_container_width=True
+                    )
+                    st.info("📊 **Normalized Analysis**: Shows metrics for dynamically sampled stocks per sector (by Master Score) to ensure fair comparison across sectors of different sizes.")
+    
+                else:
+                    st.info("No sector data available in the filtered dataset for analysis. Please check your filters.")
+                
+                st.markdown("---")
+                
+                st.markdown("#### 🏭 Industry Performance")
+                industry_rotation = MarketIntelligence.detect_industry_rotation(filtered_df)
+                
+                if not industry_rotation.empty:
+                    industry_display = industry_rotation[['flow_score', 'avg_score', 'analyzed_stocks', 
+                                                         'total_stocks', 'sampling_pct', 'quality_flag']].head(15)
+                    
+                    rename_dict = {
+                        'flow_score': 'Flow Score',
+                        'avg_score': 'Avg Score',
+                        'analyzed_stocks': 'Analyzed',
+                        'total_stocks': 'Total',
+                        'sampling_pct': 'Sample %',
+                        'quality_flag': 'Quality'
+                    }
+                    
+                    industry_display = industry_display.rename(columns=rename_dict)
+                    
+                    st.dataframe(
+                        industry_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
+                        use_container_width=True
                     )
                     
-                    st.plotly_chart(fig_patterns, use_container_width=True)
+                    low_sample = industry_rotation[industry_rotation['quality_flag'] != '']
+                    if len(low_sample) > 0:
+                        st.warning(f"⚠️ {len(low_sample)} industries have low sampling quality. Interpret with caution.")
+                
                 else:
-                    st.info("No patterns detected in current selection")
-            
-            st.markdown("---")
-            
-            st.markdown("#### 🏢 Sector Performance")
-            sector_overview_df_local = MarketIntelligence.detect_sector_rotation(df)
-            
-            if not sector_overview_df_local.empty:
-                display_cols_overview = ['flow_score', 'avg_score', 'median_score', 'avg_momentum', 
-                                         'avg_volume', 'avg_rvol', 'avg_ret_30d', 'analyzed_stocks', 'total_stocks']
+                    st.info("No industry data available for analysis.")
                 
-                available_overview_cols = [col for col in display_cols_overview if col in sector_overview_df_local.columns]
+                st.markdown("---")
                 
-                sector_overview_display = sector_overview_df_local[available_overview_cols].copy()
-                
-                sector_overview_display.columns = [
-                    'Flow Score', 'Avg Score', 'Median Score', 'Avg Momentum', 
-                    'Avg Volume', 'Avg RVOL', 'Avg 30D Ret', 'Analyzed Stocks', 'Total Stocks'
-                ]
-                
-                sector_overview_display['Coverage %'] = (
-                    (sector_overview_display['Analyzed Stocks'] / sector_overview_display['Total Stocks'] * 100)
-                    .replace([np.inf, -np.inf], np.nan)
-                    .fillna(0)
-                    .round(1)
-                    .apply(lambda x: f"{x}%")
-                )
-
-                st.dataframe(
-                    sector_overview_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
-                    use_container_width=True
-                )
-                st.info("📊 **Normalized Analysis**: Shows metrics for dynamically sampled stocks per sector (by Master Score) to ensure fair comparison across sectors of different sizes.")
-
-            else:
-                st.info("No sector data available in the filtered dataset for analysis. Please check your filters.")
-            
-            st.markdown("---")
-            
-            st.markdown("#### 🏭 Industry Performance")
-            industry_rotation = MarketIntelligence.detect_industry_rotation(filtered_df)
-            
-            if not industry_rotation.empty:
-                industry_display = industry_rotation[['flow_score', 'avg_score', 'analyzed_stocks', 
-                                                     'total_stocks', 'sampling_pct', 'quality_flag']].head(15)
-                
-                rename_dict = {
-                    'flow_score': 'Flow Score',
-                    'avg_score': 'Avg Score',
-                    'analyzed_stocks': 'Analyzed',
-                    'total_stocks': 'Total',
-                    'sampling_pct': 'Sample %',
-                    'quality_flag': 'Quality'
-                }
-                
-                industry_display = industry_display.rename(columns=rename_dict)
-                
-                st.dataframe(
-                    industry_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
-                    use_container_width=True
-                )
-                
-                low_sample = industry_rotation[industry_rotation['quality_flag'] != '']
-                if len(low_sample) > 0:
-                    st.warning(f"⚠️ {len(low_sample)} industries have low sampling quality. Interpret with caution.")
-            
-            else:
-                st.info("No industry data available for analysis.")
-            
-            st.markdown("---")
-            
-            st.markdown("#### 📊 Category Performance")
-            if 'category' in filtered_df.columns:
-                category_df = filtered_df.groupby('category').agg({
-                    'master_score': ['mean', 'count'],
-                    'category_percentile': 'mean',
-                    'money_flow_mm': 'sum' if 'money_flow_mm' in filtered_df.columns else lambda x: 0
-                }).round(2)
-                
-                if 'money_flow_mm' in filtered_df.columns:
-                    category_df.columns = ['Avg Score', 'Count', 'Avg Cat %ile', 'Total Money Flow']
+                st.markdown("#### 📊 Category Performance")
+                if 'category' in filtered_df.columns:
+                    category_df = filtered_df.groupby('category').agg({
+                        'master_score': ['mean', 'count'],
+                        'category_percentile': 'mean',
+                        'money_flow_mm': 'sum' if 'money_flow_mm' in filtered_df.columns else lambda x: 0
+                    }).round(2)
+                    
+                    if 'money_flow_mm' in filtered_df.columns:
+                        category_df.columns = ['Avg Score', 'Count', 'Avg Cat %ile', 'Total Money Flow']
+                    else:
+                        category_df.columns = ['Avg Score', 'Count', 'Avg Cat %ile', 'Dummy Flow']
+                        category_df = category_df.drop('Dummy Flow', axis=1)
+                    
+                    category_df = category_df.sort_values('Avg Score', ascending=False)
+                    
+                    st.dataframe(
+                        category_df.style.background_gradient(subset=['Avg Score']),
+                        use_container_width=True
+                    )
                 else:
-                    category_df.columns = ['Avg Score', 'Count', 'Avg Cat %ile', 'Dummy Flow']
-                    category_df = category_df.drop('Dummy Flow', axis=1)
-                
-                category_df = category_df.sort_values('Avg Score', ascending=False)
-                
-                st.dataframe(
-                    category_df.style.background_gradient(subset=['Avg Score']),
-                    use_container_width=True
-                )
+                    st.info("Category column not available in data.")
+            
             else:
-                st.info("Category column not available in data.")
-        
-        else:
-            st.info("No data available for analysis.")
+                st.info("No data available for analysis.")
     
     @staticmethod
     def render_search_interface(df: pd.DataFrame):
@@ -5056,6 +5054,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
