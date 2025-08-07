@@ -2670,7 +2670,7 @@ def main():
         filter_checks = [
             ('category_filter', lambda x: x and len(x) > 0),
             ('sector_filter', lambda x: x and len(x) > 0),
-            ('industry_filter', lambda x: x and len(x) > 0), # Added industry filter check
+            ('industry_filter', lambda x: x and len(x) > 0),
             ('min_score', lambda x: x > 0),
             ('patterns', lambda x: x and len(x) > 0),
             ('trend_filter', lambda x: x != 'All Trends'),
@@ -2720,7 +2720,7 @@ def main():
                 else:
                     ranked_df, data_timestamp, metadata = load_and_process_data(
                         "sheet", 
-                        sheet_url=st.session_state.sheet_url, # Use persisted sheet_url
+                        sheet_url=st.session_state.sheet_url,
                         gid=CONFIG.DEFAULT_GID
                     )
                 
@@ -3595,9 +3595,9 @@ def main():
                 if 'ret_7d' in shift_display.columns:
                     shift_display['7D Return'] = shift_display['ret_7d'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else '-')
                 
-                if 'rvol' in shift_display.columns: # Ensure RVOL is formatted and then dropped
+                if 'rvol' in shift_display.columns:
                     shift_display['RVOL'] = shift_display['rvol'].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else '-')
-                    shift_display = shift_display.drop('rvol', axis=1) # Drop original RVOL
+                    shift_display = shift_display.drop('rvol', axis=1)
                     
                 shift_display = shift_display.rename(columns={
                     'ticker': 'Ticker', 'company_name': 'Company', 'master_score': 'Score',
@@ -4000,7 +4000,7 @@ def main():
         col1, col2 = st.columns([4, 1])
         
         with col1:
-            st.session_state.search_query = st.text_input(
+            st.text_input(
                 "Search stocks",
                 value=st.session_state.get('search_query', ""),
                 placeholder="Enter ticker or company name...",
@@ -4205,7 +4205,7 @@ def main():
         st.markdown("### 📥 Export Data")
         
         st.markdown("#### 📋 Export Templates")
-        st.session_state.export_template = st.radio(
+        st.radio(
             "Choose export template:",
             options=[
                 "Full Analysis (All Data)",
@@ -4546,3 +4546,4 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
