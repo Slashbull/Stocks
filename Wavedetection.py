@@ -4503,8 +4503,7 @@ with tabs[3]:
             else:
                 st.info("No data available for analysis.")
     
-       # Tab 4: Search
-        with tabs[4]:
+       with tabs[4]:
             st.markdown("### 🔍 Advanced Stock Search")
             
             # Search interface
@@ -4661,7 +4660,7 @@ with tabs[3]:
                                         st.text(f"EPS Current: ₹{stock['eps_current']:.2f}")
                                     else:
                                         st.text("EPS Current: N/A")
-    
+
                                     # EPS Change
                                     if 'eps_change_pct' in stock and pd.notna(stock['eps_change_pct']):
                                         eps_chg = stock['eps_change_pct']
@@ -4704,13 +4703,13 @@ with tabs[3]:
                                     st.text(f"52W High: ₹{stock.get('high_52w', 0):,.0f}")
                                 else:
                                     st.text("52W Range: N/A")
-    
+
                                 st.text(f"From High: {stock.get('from_high_pct', 0):.0f}%")
                                 st.text(f"From Low: {stock.get('from_low_pct', 0):.0f}%")
                                 
                                 st.markdown("**📊 Trading Position**")
                                 tp_col1, tp_col2, tp_col3 = st.columns(3)
-    
+
                                 current_price = stock.get('price', 0)
                                 
                                 sma_checks = [
@@ -4747,7 +4746,7 @@ with tabs[3]:
                                         st.markdown(f"⚠️ Weak/Downtrend ({tq:.0f})")
                                 else:
                                     st.markdown("Trend: N/A")
-    
+
                                 # NEW: Advanced Metrics - Reorganized into 4 columns
                                 st.markdown("---")
                                 st.markdown("#### 🎯 Advanced Metrics")
@@ -4776,9 +4775,9 @@ with tabs[3]:
                                         st.metric("Money Flow", f"₹{stock['money_flow_mm']:.1f}M")
                                     else:
                                         st.metric("Money Flow", "N/A")
-    
-                else:
-                    st.warning("No stocks found matching your search criteria.")    
+
+            else:
+                st.warning("No stocks found matching your search criteria.")
                     
         with tabs[5]:
             st.markdown("### 📥 Export Data")
@@ -5108,4 +5107,5 @@ with tabs[3]:
             if st.button("📧 Report Issue"):
                 st.info("Please take a screenshot and report this error.")
     
+
 
