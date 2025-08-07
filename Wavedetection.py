@@ -20,7 +20,6 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timezone, timedelta
-import requests
 import logging
 from typing import Dict, List, Tuple, Optional, Any, Union, Set
 from dataclasses import dataclass, field
@@ -29,22 +28,27 @@ import time
 from io import BytesIO
 import warnings
 import gc
-import re
-import hashlib
+import re # For dynamic URL parsing
+import hashlib # For intelligent cache versioning
+import requests # For robust data loading
+from requests.adapters import HTTPAdapter # For connection pooling
+from urllib3.util.retry import Retry # For retry logic
 
-# Suppress warnings for clean output
+# Suppress warnings for clean production output.
 warnings.filterwarnings('ignore')
 
-# Set random seed for reproducibility
+# Set NumPy to ignore floating point errors for robust calculations.
+np.seterr(all='ignore')
+
+# Set random seed for reproducibility of any random-based operations.
 np.random.seed(42)
 
 # ============================================
 # LOGGING CONFIGURATION
 # ============================================
 
-# Production logging with proper formatting
+# Configure production-ready logging with a clear format.
 log_level = logging.INFO
-
 logging.basicConfig(
     level=log_level,
     format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
@@ -4908,6 +4912,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
