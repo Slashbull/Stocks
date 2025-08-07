@@ -1486,28 +1486,26 @@ class PatternDetector:
             pd.DataFrame: The DataFrame with 'patterns' and 'pattern_confidence' columns.
         """
         if df.empty:
-            df['patterns'] = [''] * len(df)
-            df['pattern_confidence'] = [0.0] * len(df)
+            # Corrected initialization for an empty DataFrame
+            df['patterns'] = pd.Series([], index=[], dtype=object)
+            df['pattern_confidence'] = pd.Series([], index=[], dtype=float)
             return df
         
         patterns_with_masks = PatternDetector._get_all_pattern_definitions(df)
         
-        # Initialize the boolean matrix with a proper index and columns
         pattern_names = [name for name, _ in patterns_with_masks]
         pattern_matrix = pd.DataFrame(False, index=df.index, columns=pattern_names)
         
         for name, mask in patterns_with_masks:
             if mask is not None and not mask.empty:
-                # Ensure the mask is aligned with the main DataFrame's index
                 pattern_matrix[name] = mask.reindex(df.index, fill_value=False)
         
-        # Combine the boolean columns into a single 'patterns' string column.
-        # This is the corrected and robust part to prevent the 'str' object error.
+        # 🟢 OPTIMIZATION AND BUG FIX: Correctly create the 'patterns' column as a Series.
+        # This ensures the column is a Series of strings, one for each row, preventing the crash.
         df['patterns'] = pattern_matrix.apply(
             lambda row: ' | '.join(row.index[row].tolist()), axis=1
         ).fillna('')
         
-        # Calculate a confidence score for the detected patterns.
         df = PatternDetector._calculate_pattern_confidence(df)
         
         logger.info(f"Pattern detection completed for {len(df)} stocks.")
@@ -1517,6 +1515,7 @@ class PatternDetector:
     def _get_all_pattern_definitions(df: pd.DataFrame) -> List[Tuple[str, pd.Series]]:
         """
         Defines all 26 patterns using vectorized boolean masks.
+        This method is purely for defining the conditions, not for execution.
         """
         patterns = []
         
@@ -1648,16 +1647,19 @@ class PatternDetector:
         if 'momentum_harmony' in df.columns and 'master_score' in df.columns:
             mask = (get_col_safe('momentum_harmony', 0) == 4) & (get_col_safe('master_score', 0) > 80)
             patterns.append(('⛈️ PERFECT STORM', mask))
-
+            
         # 26. Extreme Opportunity
-        if all(col in df.columns for col in ['master_score', 'rvol', 'momentum_harmony', 'from_high_pct', 'momentum_accelerating']):
+        if all(col in df.columns for col in ['master_score', 'rvol', 'momentum_harmony', 'from_high_pct']):
             mask = (
                 (get_col_safe('master_score', 0) > CONFIG.PATTERN_THRESHOLDS['extreme_opp']) &
                 (get_col_safe('rvol', 0) > 3) &
                 (get_col_safe('momentum_harmony', 0) >= 3) &
-                (get_col_safe('from_high_pct', -100) > -10) &
-                get_col_safe('momentum_accelerating', False)
+                (get_col_safe('from_high_pct', -100) > -10)
             )
+            
+            if 'momentum_accelerating' in df.columns:
+                mask = mask & get_col_safe('momentum_accelerating', False)
+            
             patterns.append(('🏆 EXTREME OPP', mask))
 
         return patterns
@@ -5062,5 +5064,6 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
