@@ -4341,6 +4341,7 @@ def main():
     with tabs[4]:
         st.markdown("### 🔍 Advanced Stock Search")
         
+        # Search interface
         col1, col2 = st.columns([4, 1])
         
         with col1:
@@ -4355,6 +4356,7 @@ def main():
             st.markdown("<br>", unsafe_allow_html=True)
             search_clicked = st.button("🔎 Search", type="primary", use_container_width=True)
         
+        # Perform search
         if search_query or search_clicked:
             with st.spinner("Searching..."):
                 search_results = SearchEngine.search_stocks(filtered_df, search_query)
@@ -4362,12 +4364,14 @@ def main():
             if not search_results.empty:
                 st.success(f"Found {len(search_results)} matching stock(s)")
                 
+                # Display each result
                 for idx, stock in search_results.iterrows():
                     with st.expander(
                         f"📊 {stock['ticker']} - {stock['company_name']} "
                         f"(Rank #{int(stock['rank'])})",
                         expanded=True
                     ):
+                        # Header metrics
                         metric_cols = st.columns(6)
                         
                         with metric_cols[0]:
@@ -4412,10 +4416,54 @@ def main():
                                 stock['category']
                             )
                         
+                        # Score breakdown
+                        st.markdown("#### 📈 Score Components")
+                        score_cols = st.columns(6)
+                        
+                        components = [
+                            ("Position", stock['position_score'], CONFIG.POSITION_WEIGHT),
+                            ("Volume", stock['volume_score'], CONFIG.VOLUME_WEIGHT),
+                            ("Momentum", stock['momentum_score'], CONFIG.MOMENTUM_WEIGHT),
+                            ("Acceleration", stock['acceleration_score'], CONFIG.ACCELERATION_WEIGHT),
+                            ("Breakout", stock['breakout_score'], CONFIG.BREAKOUT_WEIGHT),
+                            ("RVOL", stock['rvol_score'], CONFIG.RVOL_WEIGHT)
+                        ]
+                        
+                        for i, (name, score, weight) in enumerate(components):
+                            with score_cols[i]:
+                                # Color coding
+                                if pd.isna(score):
+                                    color = "⚪"
+                                    display_score = "N/A"
+                                elif score >= 80:
+                                    color = "🟢"
+                                    display_score = f"{score:.0f}"
+                                elif score >= 60:
+                                    color = "🟡"
+                                    display_score = f"{score:.0f}"
+                                else:
+                                    color = "🔴"
+                                    display_score = f"{score:.0f}"
+                                
+                                st.markdown(
+                                    f"**{name}**<br>"
+                                    f"{color} {display_score}<br>"
+                                    f"<small>Weight: {weight:.0%}</small>",
+                                    unsafe_allow_html=True
+                                )
+                        
+                        # Patterns
                         if stock.get('patterns'):
                             st.markdown(f"**🎯 Patterns:** {stock['patterns']}")
                         
+                        # Additional details - Reorganized layout
+                        
                         st.markdown("---")
+                        # First row: Classification & Fundamentals (col1), Performance (col2)
+                        # Second row: Technicals + Trading Position (col3)
+                        # Third row: Advanced Metrics (col4)
+                        
+                        # Use a container for logical grouping and then columns within it
                         st.container()
                         detail_cols_top = st.columns([1, 1])
                         
@@ -4427,6 +4475,7 @@ def main():
                             if show_fundamentals:
                                 st.markdown("**💰 Fundamentals**")
                                 
+                                # PE Ratio
                                 if 'pe' in stock and pd.notna(stock['pe']):
                                     pe_val = stock['pe']
                                     if pe_val <= 0:
@@ -4440,11 +4489,13 @@ def main():
                                 else:
                                     st.text("PE Ratio: N/A")
                                 
+                                # EPS Current
                                 if 'eps_current' in stock and pd.notna(stock['eps_current']):
                                     st.text(f"EPS Current: ₹{stock['eps_current']:.2f}")
                                 else:
                                     st.text("EPS Current: N/A")
 
+                                # EPS Change
                                 if 'eps_change_pct' in stock and pd.notna(stock['eps_change_pct']):
                                     eps_chg = stock['eps_change_pct']
                                     if eps_chg >= 100:
@@ -4473,12 +4524,14 @@ def main():
                                 else:
                                     st.text(f"{period}: N/A")
                         
+                        # Technicals and Trading Position (next row)
                         st.markdown("---")
                         detail_cols_tech = st.columns([1,1])
                         
-                        with detail_cols_tech[0]:
+                        with detail_cols_tech[0]: # This will contain 52W info and Trading Position
                             st.markdown("**🔍 Technicals**")
                             
+                            # 52-week range details
                             if all(col in stock.index for col in ['low_52w', 'high_52w']):
                                 st.text(f"52W Low: ₹{stock.get('low_52w', 0):,.0f}")
                                 st.text(f"52W High: ₹{stock.get('high_52w', 0):,.0f}")
@@ -4513,7 +4566,7 @@ def main():
                                     else:
                                         st.markdown(f"**{sma_label}**: N/A")
                             
-                        with detail_cols_tech[1]:
+                        with detail_cols_tech[1]: # This will contain Trend Analysis and Advanced Metrics
                             st.markdown("**📈 Trend Analysis**")
                             if 'trend_quality' in stock.index:
                                 tq = stock['trend_quality']
@@ -4528,6 +4581,7 @@ def main():
                             else:
                                 st.markdown("Trend: N/A")
 
+                            # NEW: Advanced Metrics - Reorganized into 4 columns
                             st.markdown("---")
                             st.markdown("#### 🎯 Advanced Metrics")
                             adv_col1, adv_col2 = st.columns(2)
@@ -4894,3 +4948,4 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
