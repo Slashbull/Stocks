@@ -2482,21 +2482,27 @@ class UIComponents:
             st.write(strength_meter)
 
 # ============================================
-# SESSION STATE MANAGER - COMPLETELY FIXED
+# SESSION STATE MANAGER - ROBUST
 # ============================================
 
 class SessionStateManager:
-    """Manage session state properly"""
-    
+    """
+    A robust manager for Streamlit's session state.
+    This class ensures all state variables are properly initialized,
+    preventing runtime errors and managing filter states consistently.
+    """
+
     @staticmethod
     def initialize():
-        """Initialize all session state variables with explicit defaults."""
-        
+        """
+        Initializes all necessary session state variables with explicit defaults.
+        This prevents KeyErrors when accessing variables for the first time.
+        """
         defaults = {
+            # Core Application State
             'search_query': "",
             'last_refresh': datetime.now(timezone.utc),
             'data_source': "sheet",
-            'sheet_url': CONFIG.DEFAULT_SHEET_URL,
             'user_preferences': {
                 'default_top_n': CONFIG.DEFAULT_TOP_N,
                 'display_mode': 'Technical',
@@ -2508,9 +2514,8 @@ class SessionStateManager:
             'show_debug': False,
             'performance_metrics': {},
             'data_quality': {},
-            'last_cleanup': datetime.now(timezone.utc),
             
-            # Properly named defaults to avoid key errors
+            # Filter-related State
             'display_count': CONFIG.DEFAULT_TOP_N,
             'sort_by': 'Rank',
             'export_template': 'Full Analysis (All Data)',
@@ -2527,6 +2532,8 @@ class SessionStateManager:
             'min_pe': "",
             'max_pe': "",
             'require_fundamental_data': False,
+            
+            # Wave Radar specific filters
             'wave_states_filter': [],
             'wave_strength_range_slider': (0, 100),
             'show_sensitivity_details': False,
@@ -2538,140 +2545,96 @@ class SessionStateManager:
         for key, default_value in defaults.items():
             if key not in st.session_state:
                 st.session_state[key] = default_value
-    
+
     @staticmethod
     def build_filter_dict() -> Dict[str, Any]:
-        """Build filter dictionary from session state"""
+        """
+        Builds a comprehensive filter dictionary from the current session state.
+        This centralizes filter data for easy consumption by the FilterEngine.
+        
+        Returns:
+            Dict[str, Any]: A dictionary of all active filter settings.
+        """
         filters = {}
         
-        # Category filter
-        if 'category_filter' in st.session_state and st.session_state.category_filter:
-            filters['categories'] = st.session_state.category_filter
+        # Categorical filters
+        for key, filter_name in [('category_filter', 'categories'), ('sector_filter', 'sectors'), ('industry_filter', 'industries')]:
+            if st.session_state.get(key) and st.session_state[key]:
+                filters[filter_name] = st.session_state[key]
         
-        # Sector filter
-        if 'sector_filter' in st.session_state and st.session_state.sector_filter:
-            filters['sectors'] = st.session_state.sector_filter
+        # Numeric filters
+        if st.session_state.get('min_score', 0) > 0:
+            filters['min_score'] = st.session_state['min_score']
+        if st.session_state.get('min_eps_change'):
+            try: filters['min_eps_change'] = float(st.session_state['min_eps_change'])
+            except ValueError: pass
+        if st.session_state.get('min_pe'):
+            try: filters['min_pe'] = float(st.session_state['min_pe'])
+            except ValueError: pass
+        if st.session_state.get('max_pe'):
+            try: filters['max_pe'] = float(st.session_state['max_pe'])
+            except ValueError: pass
+
+        # Multi-select filters
+        if st.session_state.get('patterns') and st.session_state['patterns']:
+            filters['patterns'] = st.session_state['patterns']
         
-        # Industry filter
-        if 'industry_filter' in st.session_state and st.session_state.industry_filter:
-            filters['industries'] = st.session_state.industry_filter
-        
-        # Score filter
-        if 'min_score' in st.session_state and st.session_state.min_score > 0:
-            filters['min_score'] = st.session_state.min_score
-        
-        # Pattern filter
-        if 'patterns' in st.session_state and st.session_state.patterns:
-            filters['patterns'] = st.session_state.patterns
-        
-        # Trend filter
-        if 'trend_filter' in st.session_state and st.session_state.trend_filter != "All Trends":
+        # Range and selection filters
+        if st.session_state.get('trend_filter') != "All Trends":
             trend_options = {
-                "All Trends": (0, 100),
-                "🔥 Strong Uptrend (80+)": (80, 100),
-                "✅ Good Uptrend (60-79)": (60, 79),
-                "➡️ Neutral Trend (40-59)": (40, 59),
-                "⚠️ Weak/Downtrend (<40)": (0, 39)
+                "🔥 Strong Uptrend (80+)": (80, 100), "✅ Good Uptrend (60-79)": (60, 79),
+                "➡️ Neutral Trend (40-59)": (40, 59), "⚠️ Weak/Downtrend (<40)": (0, 39)
             }
-            filters['trend_range'] = trend_options.get(st.session_state.trend_filter, (0, 100))
+            filters['trend_range'] = trend_options.get(st.session_state['trend_filter'], (0, 100))
         
-        # Tier filters
-        for tier_type in ['eps_tiers', 'pe_tiers', 'price_tiers']:
-            tier_values = st.session_state.get(f'{tier_type.replace("s", "")}_filter', [])
-            if tier_values and len(tier_values) > 0:
-                filters[tier_type] = tier_values
+        if st.session_state.get('wave_strength_range_slider') != (0, 100):
+            filters['wave_strength_range'] = st.session_state['wave_strength_range_slider']
+        if st.session_state.get('wave_states_filter') and st.session_state['wave_states_filter']:
+            filters['wave_states'] = st.session_state['wave_states_filter']
         
-        # EPS change filter
-        if 'min_eps_change' in st.session_state and st.session_state.min_eps_change:
-            try:
-                filters['min_eps_change'] = float(st.session_state.min_eps_change)
-            except:
-                pass
-        
-        # PE filters
-        if 'min_pe' in st.session_state and st.session_state.min_pe:
-            try:
-                filters['min_pe'] = float(st.session_state.min_pe)
-            except:
-                pass
-        
-        if 'max_pe' in st.session_state and st.session_state.max_pe:
-            try:
-                filters['max_pe'] = float(st.session_state.max_pe)
-            except:
-                pass
-        
-        # Data completeness filter
-        if 'require_fundamental_data' in st.session_state and st.session_state.require_fundamental_data:
+        # Checkbox filters
+        if st.session_state.get('require_fundamental_data', False):
             filters['require_fundamental_data'] = True
-        
-        # Wave State filter
-        wave_states = st.session_state.get('wave_states_filter', [])
-        if wave_states and len(wave_states) > 0:
-            filters['wave_states'] = wave_states
-        
-        # Wave Strength filter
-        wave_strength_range = st.session_state.get('wave_strength_range_slider')
-        if wave_strength_range and wave_strength_range != (0, 100):
-            filters['wave_strength_range'] = wave_strength_range
-        
+            
         return filters
-    
+
     @staticmethod
     def clear_filters():
-        """Clear all filter states properly"""
-        
-        # List of filter keys to reset
+        """
+        Resets all filter-related session state keys to their default values.
+        This provides a clean slate for the user.
+        """
         filter_keys = [
-            'category_filter',
-            'sector_filter',
-            'industry_filter',
-            'eps_tier_filter',
-            'pe_tier_filter',
-            'price_tier_filter',
-            'patterns',
-            'min_score',
-            'trend_filter',
-            'min_eps_change',
-            'min_pe',
-            'max_pe',
-            'require_fundamental_data',
-            'quick_filter',
-            'quick_filter_applied',
-            'wave_states_filter',
-            'wave_strength_range_slider',
-            'show_sensitivity_details',
-            'show_market_regime',
-            'wave_timeframe_select',
-            'wave_sensitivity',
+            'category_filter', 'sector_filter', 'industry_filter', 'eps_tier_filter',
+            'pe_tier_filter', 'price_tier_filter', 'patterns', 'min_score', 'trend_filter',
+            'min_eps_change', 'min_pe', 'max_pe', 'require_fundamental_data',
+            'quick_filter', 'quick_filter_applied', 'wave_states_filter',
+            'wave_strength_range_slider', 'show_sensitivity_details', 'show_market_regime',
+            'wave_timeframe_select', 'wave_sensitivity'
         ]
         
-        # Reset each key
         for key in filter_keys:
             if key in st.session_state:
-                if key in ['category_filter', 'sector_filter', 'industry_filter', 'eps_tier_filter', 'pe_tier_filter', 'price_tier_filter', 'patterns', 'wave_states_filter']:
+                if isinstance(st.session_state[key], list):
                     st.session_state[key] = []
-                elif key in ['min_score']:
-                    st.session_state[key] = 0
-                elif key in ['trend_filter']:
-                    st.session_state[key] = "All Trends"
-                elif key in ['min_eps_change', 'min_pe', 'max_pe']:
-                    st.session_state[key] = ""
-                elif key in ['require_fundamental_data', 'show_sensitivity_details', 'quick_filter_applied']:
+                elif isinstance(st.session_state[key], bool):
                     st.session_state[key] = False
-                elif key in ['quick_filter']:
-                    st.session_state[key] = None
-                elif key in ['wave_strength_range_slider']:
+                elif isinstance(st.session_state[key], str):
+                    if key in ['trend_filter', 'wave_timeframe_select']:
+                        st.session_state[key] = "All Trends" if key == 'trend_filter' else "All Waves"
+                    elif key == 'wave_sensitivity':
+                        st.session_state[key] = "Balanced"
+                    else:
+                        st.session_state[key] = ""
+                elif isinstance(st.session_state[key], tuple):
                     st.session_state[key] = (0, 100)
-                elif key in ['wave_timeframe_select']:
-                    st.session_state[key] = "All Waves"
-                elif key in ['wave_sensitivity']:
-                    st.session_state[key] = "Balanced"
-                elif key in ['show_market_regime']:
-                    st.session_state[key] = True
+                elif isinstance(st.session_state[key], (int, float)):
+                    st.session_state[key] = 0
+                else:
+                    st.session_state[key] = None
         
         st.session_state.active_filter_count = 0
-        logger.info("All filters cleared successfully")
+        logger.info("All filters cleared successfully.")
 
 # ============================================
 # MAIN APPLICATION
@@ -4944,6 +4907,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
