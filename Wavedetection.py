@@ -1043,7 +1043,7 @@ class RankingEngine:
             CONFIG.ACCELERATION_WEIGHT, CONFIG.BREAKOUT_WEIGHT, CONFIG.RVOL_WEIGHT
         ])
 
-        df['master_score'] = np.dot(scores_matrix, weights).clip(0, 100)
+        df['master_score'] = pd.Series(np.dot(scores_matrix, weights), index=df.index).clip(0, 100)
 
         # Calculate ranks based on the master score.
         df['rank'] = df['master_score'].rank(method='first', ascending=False, na_option='bottom')
@@ -1073,7 +1073,6 @@ class RankingEngine:
             pd.Series: A new series with the calculated ranks.
         """
         if series is None or series.empty:
-            # Return an empty Series with a known index to avoid type errors
             return pd.Series(np.nan, dtype=float)
 
         series = series.replace([np.inf, -np.inf], np.nan)
@@ -1173,7 +1172,7 @@ class RankingEngine:
                 daily_ret_7d = np.where(df['ret_7d'].fillna(0) != 0, df['ret_7d'].fillna(0) / 7, np.nan)
                 daily_ret_30d = np.where(df['ret_30d'].fillna(0) != 0, df['ret_30d'].fillna(0) / 30, np.nan)
             
-            accelerating_mask = all_positive & (daily_ret_7d.fillna(-np.inf) > daily_ret_30d.fillna(-np.inf))
+            accelerating_mask = all_positive & (daily_ret_7d > daily_ret_30d)
             consistency_bonus[accelerating_mask] = 10
             
             combined_score = (momentum_score.fillna(50) + consistency_bonus)
@@ -5146,6 +5145,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
