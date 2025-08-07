@@ -672,36 +672,26 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
 # ============================================
 
 class DataProcessor:
-    """
-    Handles the entire data processing pipeline, from raw data ingestion to a clean,
-    ready-for-analysis DataFrame. This class is optimized for performance and robustness.
-    """
+    """Handle all data processing with validation and optimization"""
     
     @staticmethod
     @PerformanceMonitor.timer(target_time=1.0)
     def process_dataframe(df: pd.DataFrame, metadata: Dict[str, Any]) -> pd.DataFrame:
-        """
-        Main pipeline to validate, clean, and prepare the raw DataFrame.
-
-        Args:
-            df (pd.DataFrame): The raw DataFrame to be processed.
-            metadata (Dict[str, Any]): A dictionary to log warnings and changes.
-
-        Returns:
-            pd.DataFrame: A clean, processed DataFrame ready for scoring.
-        """
+        """Complete data processing pipeline"""
+        
+        # Create copy to avoid modifying original
         df = df.copy()
         initial_count = len(df)
         
-        # 1. Process numeric columns with intelligent cleaning
-        numeric_cols = [col for col in df.columns if col not in ['ticker', 'company_name', 'category', 'sector', 'industry', 'year', 'market_cap']]
+        # Process numeric columns with vectorization
+        numeric_cols = [col for col in df.columns if col not in ['ticker', 'company_name', 'category', 'sector', 'year', 'market_cap']]
         
         for col in numeric_cols:
             if col in df.columns:
+                # Determine if percentage column
                 is_pct = col in CONFIG.PERCENTAGE_COLUMNS
                 
-                # Dynamically determine bounds based on column name
-                bounds = None
+                # Determine bounds
                 if 'volume' in col.lower():
                     bounds = CONFIG.VALUE_BOUNDS['volume']
                 elif col == 'rvol':
@@ -713,114 +703,123 @@ class DataProcessor:
                 else:
                     bounds = CONFIG.VALUE_BOUNDS.get('price', None)
                 
-                # Apply vectorized cleaning
+                # Vectorized cleaning
                 df[col] = df[col].apply(lambda x: DataValidator.clean_numeric_value(x, is_pct, bounds))
         
-        # 2. Process categorical columns with robust sanitization
-        string_cols = ['ticker', 'company_name', 'category', 'sector', 'industry']
+        # Process categorical columns
+        string_cols = ['ticker', 'company_name', 'category', 'sector']
         for col in string_cols:
             if col in df.columns:
                 df[col] = df[col].apply(DataValidator.sanitize_string)
         
-        # 3. Handle volume ratios with safety
+        # Fix volume ratios (vectorized)
         for col in CONFIG.VOLUME_RATIO_COLUMNS:
             if col in df.columns:
+                # Convert percentage change to ratio: (100 + change%) / 100
                 df[col] = (100 + df[col]) / 100
-                df[col] = df[col].clip(0.01, 1000.0)
+                df[col] = df[col].clip(0.01, 1000.0)  # Reasonable bounds, allow high
                 df[col] = df[col].fillna(1.0)
         
-        # 4. Critical data validation and removal of duplicates
+        # Validate critical data
         df = df.dropna(subset=['ticker', 'price'], how='any')
-        df = df[df['price'] > 0.01]
+        df = df[df['price'] > 0.01]  # Minimum valid price
         
+        # Remove duplicates (keep first)
         before_dedup = len(df)
         df = df.drop_duplicates(subset=['ticker'], keep='first')
         if before_dedup > len(df):
             metadata['warnings'].append(f"Removed {before_dedup - len(df)} duplicate tickers")
         
-        # 5. Fill missing values and add tier classifications
+        # Fill missing values with sensible defaults
         df = DataProcessor._fill_missing_values(df)
+        
+        # Add tier classifications
         df = DataProcessor._add_tier_classifications(df)
         
-        # 6. Log final data quality metrics
-        removed_count = initial_count - len(df)
-        if removed_count > 0:
-            metadata['warnings'].append(f"Removed {removed_count} invalid rows during processing.")
+        # Data quality check
+        removed = initial_count - len(df)
+        if removed > 0:
+            metadata['warnings'].append(f"Removed {removed} invalid rows during processing")
         
-        logger.info(f"Processed {len(df)} valid stocks from {initial_count} initial rows.")
+        logger.info(f"Processed {len(df)} valid stocks from {initial_count} initial rows")
         
         return df
-
+    
     @staticmethod
     def _fill_missing_values(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Fills missing values in key columns with sensible defaults.
-        This is a final defensive step to ensure downstream calculations don't fail due to NaNs.
-        """
-        # Default for position metrics
+        """Fill missing values with sensible defaults"""
+        
+        # Position data defaults
         if 'from_low_pct' in df.columns:
             df['from_low_pct'] = df['from_low_pct'].fillna(50)
+        else:
+            df['from_low_pct'] = 50
         
         if 'from_high_pct' in df.columns:
             df['from_high_pct'] = df['from_high_pct'].fillna(-50)
+        else:
+            df['from_high_pct'] = -50
         
-        # Default for Relative Volume (RVOL)
+        # RVOL default
         if 'rvol' in df.columns:
             df['rvol'] = df['rvol'].fillna(1.0)
+        else:
+            df['rvol'] = 1.0
         
-        # Defaults for price returns
+        # Return defaults (0 for missing returns)
         return_cols = [col for col in df.columns if col.startswith('ret_')]
         for col in return_cols:
-            if col in df.columns:
-                df[col] = df[col].fillna(0)
+            df[col] = df[col].fillna(0)
         
-        # Defaults for volume columns
+        # Volume defaults
         volume_cols = [col for col in df.columns if col.startswith('volume_')]
         for col in volume_cols:
-            if col in df.columns:
-                df[col] = df[col].fillna(0)
-        
-        # Defaults for categorical columns
-        for col in ['category', 'sector', 'industry']:
-            if col not in df.columns:
-                df[col] = 'Unknown'
-            else:
-                df[col] = df[col].fillna('Unknown')
+            df[col] = df[col].fillna(0)
         
         return df
     
     @staticmethod
     def _add_tier_classifications(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Applies a classification tier to numerical data (e.g., price, PE)
-        based on predefined ranges in the `Config` class.
-        This is a bug-fixed and robust version of the logic from earlier files.
-        """
+        """Add tier classifications with proper boundary handling"""
+        
         def classify_tier(value: float, tier_dict: Dict[str, Tuple[float, float]]) -> str:
-            """Helper function to map a value to its tier."""
+            """Classify value into tier with fixed boundary logic"""
             if pd.isna(value):
                 return "Unknown"
             
             for tier_name, (min_val, max_val) in tier_dict.items():
+                # Use < for upper bound, <= for lower bound to avoid gaps
                 if min_val < value <= max_val:
                     return tier_name
+                # Handle edge cases for first tier (includes min_val)
                 if min_val == -float('inf') and value <= max_val:
                     return tier_name
+                # Handle edge cases for last tier (includes max_val)
                 if max_val == float('inf') and value > min_val:
                     return tier_name
+                # Special case for zero boundaries
+                if min_val == 0 and max_val > 0 and value == 0:
+                    # Zero belongs to the tier that starts at 0
+                    continue  # Let the next tier catch it
             
             return "Unknown"
         
+        # Add tier columns
         if 'eps_current' in df.columns:
-            df['eps_tier'] = df['eps_current'].apply(lambda x: classify_tier(x, CONFIG.TIERS['eps']))
+            df['eps_tier'] = df['eps_current'].apply(
+                lambda x: classify_tier(x, CONFIG.TIERS['eps'])
+            )
         
         if 'pe' in df.columns:
             df['pe_tier'] = df['pe'].apply(
-                lambda x: "Negative/NA" if pd.isna(x) or x <= 0 else classify_tier(x, CONFIG.TIERS['pe'])
+                lambda x: "Negative/NA" if pd.isna(x) or x <= 0 
+                else classify_tier(x, CONFIG.TIERS['pe'])
             )
         
         if 'price' in df.columns:
-            df['price_tier'] = df['price'].apply(lambda x: classify_tier(x, CONFIG.TIERS['price']))
+            df['price_tier'] = df['price'].apply(
+                lambda x: classify_tier(x, CONFIG.TIERS['price'])
+            )
         
         return df
         
@@ -5094,4 +5093,5 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
