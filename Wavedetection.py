@@ -14,6 +14,7 @@ Status: PRODUCTION READY - All Issues Fixed
 # IMPORTS AND SETUP
 # ============================================
 
+# Standard library imports
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -33,6 +34,7 @@ import hashlib # For intelligent cache versioning
 import requests # For robust data loading
 from requests.adapters import HTTPAdapter # For connection pooling
 from urllib3.util.retry import Retry # For retry logic
+from collections import defaultdict # For performance metric tracking
 
 # Suppress warnings for clean production output.
 warnings.filterwarnings('ignore')
@@ -4941,6 +4943,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
