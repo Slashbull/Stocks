@@ -662,71 +662,89 @@ class DataProcessor:
 # ============================================
 
 class AdvancedMetrics:
-    """Calculate advanced metrics and indicators with safe math"""
+    """
+    Calculates advanced metrics and indicators using a combination of price,
+    volume, and algorithmically derived scores. Ensures robust calculation
+    by handling potential missing data (NaNs) gracefully.
+    """
     
     @staticmethod
+    @PerformanceMonitor.timer(target_time=0.5)
     def calculate_all_metrics(df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate all advanced metrics with proper error handling"""
+        """
+        Calculates a comprehensive set of advanced metrics for the DataFrame.
+        All calculations are designed to be vectorized and handle missing data
+        without raising errors.
+
+        Args:
+            df (pd.DataFrame): The DataFrame with raw data and core scores.
+
+        Returns:
+            pd.DataFrame: The DataFrame with all calculated advanced metrics added.
+        """
+        if df.empty:
+            return df
         
-        # Money Flow (in millions) with safe calculation
+        # Money Flow (in millions)
+        # Calculates institutional money flow by combining price, volume, and volume activity (RVOL).
         if all(col in df.columns for col in ['price', 'volume_1d', 'rvol']):
-            with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
-                df['money_flow'] = df['price'].fillna(0) * df['volume_1d'].fillna(0) * df['rvol'].fillna(1)
-                df['money_flow_mm'] = df['money_flow'] / 1_000_000
-                df['money_flow_mm'] = df['money_flow_mm'].replace([np.inf, -np.inf], 0).fillna(0)
+            # Use .fillna() to prevent NaN propagation from a single missing value.
+            df['money_flow'] = df['price'].fillna(0) * df['volume_1d'].fillna(0) * df['rvol'].fillna(1.0)
+            df['money_flow_mm'] = df['money_flow'] / 1_000_000
         else:
-            df['money_flow_mm'] = 0.0
+            df['money_flow_mm'] = np.nan
         
-        # Volume Momentum Index (VMI) with safe calculation
+        # Volume Momentum Index (VMI)
+        # A weighted average of various volume ratios to quantify sustained volume interest.
         if all(col in df.columns for col in ['vol_ratio_1d_90d', 'vol_ratio_7d_90d', 'vol_ratio_30d_90d', 'vol_ratio_90d_180d']):
+            # Fill NaNs with 1.0 (indicating no volume change) for robust calculation.
             df['vmi'] = (
-                df['vol_ratio_1d_90d'].fillna(1) * 4 +
-                df['vol_ratio_7d_90d'].fillna(1) * 3 +
-                df['vol_ratio_30d_90d'].fillna(1) * 2 +
-                df['vol_ratio_90d_180d'].fillna(1) * 1
+                df['vol_ratio_1d_90d'].fillna(1.0) * 4 +
+                df['vol_ratio_7d_90d'].fillna(1.0) * 3 +
+                df['vol_ratio_30d_90d'].fillna(1.0) * 2 +
+                df['vol_ratio_90d_180d'].fillna(1.0) * 1
             ) / 10
-            df['vmi'] = df['vmi'].replace([np.inf, -np.inf], 1.0).fillna(1.0)
         else:
-            df['vmi'] = 1.0
+            df['vmi'] = np.nan
         
         # Position Tension
+        # Measures a stock's readiness for a significant move based on its position
+        # within its 52-week high and low range.
         if all(col in df.columns for col in ['from_low_pct', 'from_high_pct']):
             df['position_tension'] = df['from_low_pct'].fillna(50) + abs(df['from_high_pct'].fillna(-50))
         else:
-            df['position_tension'] = 100.0
+            df['position_tension'] = np.nan
         
-        # Momentum Harmony with safe division
+        # Momentum Harmony
+        # A score from 0-4 indicating the consistency of momentum across different timeframes.
         df['momentum_harmony'] = 0
         
         if 'ret_1d' in df.columns:
-            df['momentum_harmony'] += (df['ret_1d'] > 0).astype(int)
+            df['momentum_harmony'] += (df['ret_1d'].fillna(0) > 0).astype(int)
         
         if all(col in df.columns for col in ['ret_7d', 'ret_30d']):
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_ret_7d = df['ret_7d'] / 7
-                daily_ret_30d = df['ret_30d'] / 30
-                daily_ret_7d = daily_ret_7d.replace([np.inf, -np.inf], 0).fillna(0)
-                daily_ret_30d = daily_ret_30d.replace([np.inf, -np.inf], 0).fillna(0)
-                comparison = daily_ret_7d > daily_ret_30d
-                df['momentum_harmony'] += comparison.fillna(False).astype(int)
+                daily_ret_7d = np.where(df['ret_7d'].fillna(0) != 0, df['ret_7d'].fillna(0) / 7, np.nan)
+                daily_ret_30d = np.where(df['ret_30d'].fillna(0) != 0, df['ret_30d'].fillna(0) / 30, np.nan)
+            df['momentum_harmony'] += ((daily_ret_7d.fillna(-np.inf) > daily_ret_30d.fillna(-np.inf))).astype(int)
         
         if all(col in df.columns for col in ['ret_30d', 'ret_3m']):
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_ret_30d_comp = df['ret_30d'] / 30
-                daily_ret_3m_comp = df['ret_3m'] / 90
-                daily_ret_30d_comp = daily_ret_30d_comp.replace([np.inf, -np.inf], 0).fillna(0)
-                daily_ret_3m_comp = daily_ret_3m_comp.replace([np.inf, -np.inf], 0).fillna(0)
-                comparison = daily_ret_30d_comp > daily_ret_3m_comp
-                df['momentum_harmony'] += comparison.fillna(False).astype(int)
+                daily_ret_30d_comp = np.where(df['ret_30d'].fillna(0) != 0, df['ret_30d'].fillna(0) / 30, np.nan)
+                daily_ret_3m_comp = np.where(df['ret_3m'].fillna(0) != 0, df['ret_3m'].fillna(0) / 90, np.nan)
+            df['momentum_harmony'] += ((daily_ret_30d_comp.fillna(-np.inf) > daily_ret_3m_comp.fillna(-np.inf))).astype(int)
         
         if 'ret_3m' in df.columns:
-            df['momentum_harmony'] += (df['ret_3m'] > 0).astype(int)
+            df['momentum_harmony'] += (df['ret_3m'].fillna(0) > 0).astype(int)
         
         # Wave State
+        # A categorical indicator of a stock's momentum phase (e.g., FORMING, BUILDING, CRESTING).
         df['wave_state'] = df.apply(AdvancedMetrics._get_wave_state, axis=1)
 
         # Overall Wave Strength
-        if all(col in df.columns for col in ['momentum_score', 'acceleration_score', 'rvol_score', 'breakout_score']):
+        # A composite score combining core momentum-related scores for a single, high-level indicator.
+        score_cols = ['momentum_score', 'acceleration_score', 'rvol_score', 'breakout_score']
+        if all(col in df.columns for col in score_cols):
             df['overall_wave_strength'] = (
                 df['momentum_score'].fillna(50) * 0.3 +
                 df['acceleration_score'].fillna(50) * 0.3 +
@@ -734,22 +752,25 @@ class AdvancedMetrics:
                 df['breakout_score'].fillna(50) * 0.2
             )
         else:
-            df['overall_wave_strength'] = 50.0
+            df['overall_wave_strength'] = np.nan
         
         return df
     
     @staticmethod
     def _get_wave_state(row: pd.Series) -> str:
-        """Determine wave state for a stock"""
+        """
+        Determines the `wave_state` for a single stock based on a set of thresholds.
+        This method is designed for row-wise application.
+        """
         signals = 0
         
-        if 'momentum_score' in row and pd.notna(row['momentum_score']) and row['momentum_score'] > 70:
+        if row.get('momentum_score', 0) > 70:
             signals += 1
-        if 'volume_score' in row and pd.notna(row['volume_score']) and row['volume_score'] > 70:
+        if row.get('volume_score', 0) > 70:
             signals += 1
-        if 'acceleration_score' in row and pd.notna(row['acceleration_score']) and row['acceleration_score'] > 70:
+        if row.get('acceleration_score', 0) > 70:
             signals += 1
-        if 'rvol' in row and pd.notna(row['rvol']) and row['rvol'] > 2:
+        if row.get('rvol', 0) > 2:
             signals += 1
         
         if signals >= 4:
@@ -760,7 +781,7 @@ class AdvancedMetrics:
             return "🌊 FORMING"
         else:
             return "💥 BREAKING"
-
+            
 # ============================================
 # RANKING ENGINE - OPTIMIZED
 # ============================================
@@ -4923,5 +4944,6 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
