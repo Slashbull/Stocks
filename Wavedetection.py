@@ -4502,8 +4502,8 @@ with tabs[3]:
             
             else:
                 st.info("No data available for analysis.")
-    
-       with tabs[4]:
+
+with tabs[4]:
             st.markdown("### 🔍 Advanced Stock Search")
             
             # Search interface
@@ -5107,5 +5107,6 @@ with tabs[3]:
             if st.button("📧 Report Issue"):
                 st.info("Please take a screenshot and report this error.")
     
+
 
 
