@@ -882,7 +882,6 @@ class RankingEngine:
         momentum_score = pd.Series(50, index=df.index, dtype=float)
         
         if 'ret_30d' not in df.columns or df['ret_30d'].notna().sum() == 0:
-            # Fallback to 7-day returns
             if 'ret_7d' in df.columns and df['ret_7d'].notna().any():
                 ret_7d = df['ret_7d'].fillna(0)
                 momentum_score = RankingEngine._safe_rank(ret_7d, pct=True, ascending=True)
@@ -892,19 +891,15 @@ class RankingEngine:
             
             return momentum_score.clip(0, 100)
         
-        # Primary: 30-day returns
         ret_30d = df['ret_30d'].fillna(0)
         momentum_score = RankingEngine._safe_rank(ret_30d, pct=True, ascending=True)
         
-        # Add consistency bonus
         if all(col in df.columns for col in ['ret_7d', 'ret_30d']):
             consistency_bonus = pd.Series(0, index=df.index, dtype=float)
             
-            # Both positive
             all_positive = (df['ret_7d'] > 0) & (df['ret_30d'] > 0)
             consistency_bonus[all_positive] = 5
             
-            # Accelerating returns
             with np.errstate(divide='ignore', invalid='ignore'):
                 daily_ret_7d = np.where(df['ret_7d'] != 0, df['ret_7d'] / 7, 0)
                 daily_ret_30d = np.where(df['ret_30d'] != 0, df['ret_30d'] / 30, 0)
@@ -928,31 +923,25 @@ class RankingEngine:
             logger.warning("Insufficient return data for acceleration calculation")
             return acceleration_score
         
-        # Get return data with defaults
         ret_1d = df['ret_1d'].fillna(0) if 'ret_1d' in df.columns else pd.Series(0, index=df.index)
         ret_7d = df['ret_7d'].fillna(0) if 'ret_7d' in df.columns else pd.Series(0, index=df.index)
         ret_30d = df['ret_30d'].fillna(0) if 'ret_30d' in df.columns else pd.Series(0, index=df.index)
         
-        # Calculate daily averages with safe division
         with np.errstate(divide='ignore', invalid='ignore'):
-            avg_daily_1d = ret_1d  # Already daily
+            avg_daily_1d = ret_1d
             avg_daily_7d = np.where(ret_7d != 0, ret_7d / 7, 0)
             avg_daily_30d = np.where(ret_30d != 0, ret_30d / 30, 0)
         
         if all(col in df.columns for col in req_cols):
-            # Perfect acceleration
             perfect = (avg_daily_1d > avg_daily_7d) & (avg_daily_7d > avg_daily_30d) & (ret_1d > 0)
             acceleration_score[perfect] = 100
             
-            # Good acceleration
             good = (~perfect) & (avg_daily_1d > avg_daily_7d) & (ret_1d > 0)
             acceleration_score[good] = 80
             
-            # Moderate
             moderate = (~perfect) & (~good) & (ret_1d > 0)
             acceleration_score[moderate] = 60
             
-            # Deceleration
             slight_decel = (ret_1d <= 0) & (ret_7d > 0)
             acceleration_score[slight_decel] = 40
             
@@ -966,21 +955,17 @@ class RankingEngine:
         """Calculate breakout probability"""
         breakout_score = pd.Series(50, index=df.index, dtype=float)
         
-        # Factor 1: Distance from high (40% weight)
         if 'from_high_pct' in df.columns:
-            # from_high_pct is negative, closer to 0 = closer to high
             distance_from_high = -df['from_high_pct'].fillna(-50)
             distance_factor = (100 - distance_from_high).clip(0, 100)
         else:
             distance_factor = pd.Series(50, index=df.index)
         
-        # Factor 2: Volume surge (40% weight)
         volume_factor = pd.Series(50, index=df.index)
         if 'vol_ratio_7d_90d' in df.columns:
             vol_ratio = df['vol_ratio_7d_90d'].fillna(1.0)
             volume_factor = ((vol_ratio - 1) * 100).clip(0, 100)
         
-        # Factor 3: Trend support (20% weight)
         trend_factor = pd.Series(0, index=df.index, dtype=float)
         
         if 'price' in df.columns:
@@ -998,7 +983,6 @@ class RankingEngine:
         
         trend_factor = trend_factor.clip(0, 100)
         
-        # Combine factors
         breakout_score = (
             distance_factor * 0.4 +
             volume_factor * 0.4 +
@@ -1016,7 +1000,6 @@ class RankingEngine:
         rvol = df['rvol'].fillna(1.0)
         rvol_score = pd.Series(50, index=df.index, dtype=float)
         
-        # Score based on RVOL ranges
         rvol_score[rvol > 10] = 95
         rvol_score[(rvol > 5) & (rvol <= 10)] = 90
         rvol_score[(rvol > 3) & (rvol <= 5)] = 85
@@ -1418,10 +1401,8 @@ class MarketIntelligence:
         if df.empty:
             return "😴 NO DATA", {}
         
-        # Calculate key metrics
         metrics = {}
         
-        # Category performance
         if 'category' in df.columns and 'master_score' in df.columns:
             category_scores = df.groupby('category')['master_score'].mean()
             
@@ -1436,7 +1417,6 @@ class MarketIntelligence:
             metrics['large_mega_avg'] = 50
             metrics['category_spread'] = 0
         
-        # Market breadth
         if 'ret_30d' in df.columns:
             breadth = len(df[df['ret_30d'] > 0]) / len(df) if len(df) > 0 else 0.5
             metrics['breadth'] = breadth
@@ -1444,7 +1424,6 @@ class MarketIntelligence:
             breadth = 0.5
             metrics['breadth'] = breadth
         
-        # Average RVOL
         if 'rvol' in df.columns:
             avg_rvol = df['rvol'].median()
             metrics['avg_rvol'] = avg_rvol if pd.notna(avg_rvol) else 1.0
@@ -1456,7 +1435,7 @@ class MarketIntelligence:
             regime = "🔥 RISK-ON BULL"
         elif metrics['large_mega_avg'] > metrics['micro_small_avg'] + 10 and breadth < 0.4:
             regime = "🛡️ RISK-OFF DEFENSIVE"
-        elif metrics['avg_rvol'] > 1.5 and breadth > 0.5:
+        elif avg_rvol > 1.5 and breadth > 0.5:
             regime = "⚡ VOLATILE OPPORTUNITY"
         else:
             regime = "😴 RANGE-BOUND"
@@ -2293,6 +2272,7 @@ class UIComponents:
             )
         
         with col2:
+            # Momentum Health
             if 'momentum_score' in df.columns:
                 high_momentum = len(df[df['momentum_score'] >= 70])
                 momentum_pct = (high_momentum / len(df) * 100) if len(df) > 0 else 0
@@ -2307,6 +2287,7 @@ class UIComponents:
                 UIComponents.render_metric_card("Momentum Health", "N/A")
         
         with col3:
+            # Volume State
             avg_rvol = df['rvol'].median() if 'rvol' in df.columns else 1.0
             high_vol_count = len(df[df['rvol'] > 2]) if 'rvol' in df.columns else 0
             
@@ -2325,6 +2306,7 @@ class UIComponents:
             )
         
         with col4:
+            # Risk Level
             risk_factors = 0
             
             if 'from_high_pct' in df.columns and 'momentum_score' in df.columns:
@@ -2358,6 +2340,7 @@ class UIComponents:
         opp_col1, opp_col2, opp_col3 = st.columns(3)
         
         with opp_col1:
+            # Ready to Run
             ready_to_run = df[
                 (df['momentum_score'] >= 70) & 
                 (df['acceleration_score'] >= 70) &
@@ -2374,6 +2357,7 @@ class UIComponents:
                 st.info("No momentum leaders found")
         
         with opp_col2:
+            # Hidden Gems
             hidden_gems = df[df['patterns'].str.contains('HIDDEN GEM', na=False)].nlargest(5, 'master_score') if 'patterns' in df.columns else pd.DataFrame()
             
             st.markdown("**💎 Hidden Gems**")
@@ -2386,6 +2370,7 @@ class UIComponents:
                 st.info("No hidden gems today")
         
         with opp_col3:
+            # Volume Alerts
             volume_alerts = df[df['rvol'] > 3].nlargest(5, 'master_score') if 'rvol' in df.columns else pd.DataFrame()
             
             st.markdown("**⚡ Volume Alerts**")
@@ -2432,7 +2417,7 @@ class UIComponents:
                 ))
                 
                 fig.update_layout(
-                    title="Sector Rotation Map - Smart Money Flow",
+                    title="Sector Rotation Map - Smart Money Flow (Dynamically Sampled)",
                     xaxis_title="Sector",
                     yaxis_title="Flow Score",
                     height=400,
@@ -2442,7 +2427,7 @@ class UIComponents:
                 
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                st.info("No sector rotation data available.")
+                st.info("No sector rotation data available for visualization.")
         
         with intel_col2:
             regime, regime_metrics = MarketIntelligence.detect_market_regime(df)
@@ -2506,16 +2491,15 @@ class UIComponents:
             col1, col2 = st.columns(2)
             
             with col1:
-                # Score distribution chart
                 fig_dist = Visualizer.create_score_distribution(filtered_df)
                 st.plotly_chart(fig_dist, use_container_width=True)
             
             with col2:
                 # Pattern analysis
                 pattern_counts = {}
-                for patterns_str in filtered_df['patterns'].dropna():
-                    if patterns_str:
-                        for p in patterns_str.split(' | '):
+                for patterns in filtered_df['patterns'].dropna():
+                    if patterns:
+                        for p in patterns.split(' | '):
                             pattern_counts[p] = pattern_counts.get(p, 0) + 1
                 
                 if pattern_counts:
@@ -2550,7 +2534,7 @@ class UIComponents:
             
             st.markdown("---")
             
-            # Sector performance (moved from dedicated tab, now simple table here)
+            # Sector performance
             st.markdown("#### 🏢 Sector Performance")
             sector_overview_df_local = MarketIntelligence.detect_sector_rotation(filtered_df)
             
@@ -2572,13 +2556,12 @@ class UIComponents:
                     use_container_width=True
                 )
                 st.info("📊 **Normalized Analysis**: Shows metrics for dynamically sampled stocks per sector (by Master Score) to ensure fair comparison across sectors of different sizes.")
-
             else:
                 st.info("No sector data available in the filtered dataset for analysis. Please check your filters.")
             
-            st.markdown("---") # Separator for Industry Performance
+            st.markdown("---")
             
-            # Industry Performance (NEW ADDITION TO ANALYSIS TAB)
+            # Industry Performance
             st.markdown("#### 🏭 Industry Performance")
             industry_rotation = MarketIntelligence.detect_industry_rotation(filtered_df)
             
@@ -2599,7 +2582,7 @@ class UIComponents:
                 
                 st.dataframe(
                     industry_display.style.background_gradient(subset=['Flow Score', 'Avg Score']),
-                    use_container_container_width=True
+                    use_container_width=True
                 )
                 
                 low_sample = industry_rotation[industry_rotation['quality_flag'] != '']
@@ -2609,7 +2592,7 @@ class UIComponents:
             else:
                 st.info("No industry data available for analysis.")
             
-            st.markdown("---") # Separator for Category Performance
+            st.markdown("---")
             
             # Category performance
             st.markdown("#### 📊 Category Performance")
@@ -2641,7 +2624,6 @@ class UIComponents:
     with tabs[4]:
         st.markdown("### 🔍 Advanced Stock Search")
         
-        # Search interface
         col1, col2 = st.columns([4, 1])
         
         with col1:
@@ -2656,7 +2638,6 @@ class UIComponents:
             st.markdown("<br>", unsafe_allow_html=True)
             search_clicked = st.button("🔎 Search", type="primary", use_container_width=True)
         
-        # Perform search
         if search_query or search_clicked:
             with st.spinner("Searching..."):
                 search_results = SearchEngine.search_stocks(filtered_df, search_query)
@@ -2664,14 +2645,12 @@ class UIComponents:
             if not search_results.empty:
                 st.success(f"Found {len(search_results)} matching stock(s)")
                 
-                # Display each result
                 for idx, stock in search_results.iterrows():
                     with st.expander(
                         f"📊 {stock['ticker']} - {stock['company_name']} "
                         f"(Rank #{int(stock['rank'])})",
                         expanded=True
                     ):
-                        # Header metrics
                         metric_cols = st.columns(6)
                         
                         with metric_cols[0]:
@@ -2716,7 +2695,6 @@ class UIComponents:
                                 stock['category']
                             )
                         
-                        # Score breakdown
                         st.markdown("#### 📈 Score Components")
                         score_cols = st.columns(6)
                         
@@ -2731,18 +2709,12 @@ class UIComponents:
                         
                         for i, (name, score, weight) in enumerate(components):
                             with score_cols[i]:
-                                # Color coding
-                                if pd.isna(score):
-                                    color = "⚪"
-                                    display_score = "N/A"
-                                elif score >= 80:
-                                    color = "🟢"
-                                    display_score = f"{score:.0f}"
-                                elif score >= 60:
-                                    color = "🟡"
-                                    display_score = f"{score:.0f}"
-                                else:
-                                    color = "🔴"
+                                color = "⚪"
+                                display_score = "N/A"
+                                if pd.notna(score):
+                                    if score >= 80: color = "🟢"
+                                    elif score >= 60: color = "🟡"
+                                    else: color = "🔴"
                                     display_score = f"{score:.0f}"
                                 
                                 st.markdown(
@@ -2752,7 +2724,6 @@ class UIComponents:
                                     unsafe_allow_html=True
                                 )
                         
-                        # Patterns
                         if stock.get('patterns'):
                             st.markdown(f"**🎯 Patterns:** {stock['patterns']}")
                         
@@ -3194,11 +3165,14 @@ class UIComponents:
 
 if __name__ == "__main__":
     try:
+        # Run the application
         main()
     except Exception as e:
+        # Global error handler
         st.error(f"Critical Application Error: {str(e)}")
         logger.error(f"Application crashed: {str(e)}", exc_info=True)
         
+        # Show recovery options
         if st.button("🔄 Restart Application"):
             st.cache_data.clear()
             st.rerun()
