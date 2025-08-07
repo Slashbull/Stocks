@@ -1487,9 +1487,10 @@ class PatternDetector:
         """
         patterns = []
         
-        def get_col_safe(col_name, default_value=np.nan):
+        # Helper function to safely get column data as a Series, filling NaNs with a default.
+        def get_col_safe(col_name: str, default_value: Any = np.nan) -> pd.Series:
             if col_name in df.columns:
-                return df[col_name]
+                return df[col_name].copy()
             return pd.Series(default_value, index=df.index)
 
         # 1. Category Leader
@@ -1583,14 +1584,14 @@ class PatternDetector:
             with np.errstate(divide='ignore', invalid='ignore'):
                 daily_7d_pace = np.where(df['ret_7d'].fillna(0) != 0, df['ret_7d'].fillna(0) / 7, np.nan)
                 daily_30d_pace = np.where(df['ret_30d'].fillna(0) != 0, df['ret_30d'].fillna(0) / 30, np.nan)
-            mask = daily_7d_pace.notna() & daily_30d_pace.notna() & (daily_7d_pace > daily_30d_pace * 1.5) & (get_col_safe('acceleration_score', 0) >= 85) & (get_col_safe('rvol', 0) > 2)
+            mask = pd.Series(daily_7d_pace > daily_30d_pace * 1.5, index=df.index).fillna(False) & (get_col_safe('acceleration_score', 0) >= 85) & (get_col_safe('rvol', 0) > 2)
             patterns.append(('🔀 MOMENTUM DIVERGE', mask))
         
         # 22. Range Compression
         if all(col in df.columns for col in ['high_52w', 'low_52w', 'from_low_pct']):
             high, low, from_low_pct = get_col_safe('high_52w'), get_col_safe('low_52w'), get_col_safe('from_low_pct')
             with np.errstate(divide='ignore', invalid='ignore'):
-                range_pct = np.where(low > 0, ((high - low) / low) * 100, 100)
+                range_pct = pd.Series(np.where(low > 0, ((high - low) / low) * 100, 100), index=df.index).fillna(100)
             mask = range_pct.notna() & (range_pct < 50) & (from_low_pct > 30)
             patterns.append(('🎯 RANGE COMPRESS', mask))
         
@@ -1598,16 +1599,16 @@ class PatternDetector:
         if all(col in df.columns for col in ['vol_ratio_90d_180d', 'vol_ratio_30d_90d', 'from_low_pct', 'ret_7d', 'ret_30d']):
             ret_7d, ret_30d = get_col_safe('ret_7d'), get_col_safe('ret_30d')
             with np.errstate(divide='ignore', invalid='ignore'):
-                ret_ratio = np.where(ret_30d != 0, ret_7d / (ret_30d / 4), np.nan)
-            mask = get_col_safe('vol_ratio_90d_180d', 1) > 1.1 & get_col_safe('vol_ratio_30d_90d', 1).between(0.9, 1.1) & get_col_safe('from_low_pct', 0) > 40 & ret_ratio.notna() & (ret_ratio > 1)
+                ret_ratio = pd.Series(np.where(ret_30d != 0, ret_7d / (ret_30d / 4), np.nan), index=df.index).fillna(0)
+            mask = (get_col_safe('vol_ratio_90d_180d', 1) > 1.1) & (get_col_safe('vol_ratio_30d_90d', 1).between(0.9, 1.1)) & (get_col_safe('from_low_pct', 0) > 40) & (ret_ratio > 1)
             patterns.append(('🤫 STEALTH', mask))
 
         # 24. Momentum Vampire
         if all(col in df.columns for col in ['ret_1d', 'ret_7d', 'rvol', 'from_high_pct', 'category']):
             ret_1d, ret_7d, rvol, from_high_pct = get_col_safe('ret_1d'), get_col_safe('ret_7d'), get_col_safe('rvol'), get_col_safe('from_high_pct')
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_pace_ratio = np.where(ret_7d != 0, ret_1d / (ret_7d / 7), np.nan)
-            mask = daily_pace_ratio.notna() & (daily_pace_ratio > 2) & (rvol > 3) & (from_high_pct > -15) & (df['category'].isin(['Small Cap', 'Micro Cap']))
+                daily_pace_ratio = pd.Series(np.where(ret_7d != 0, ret_1d / (ret_7d / 7), np.nan), index=df.index).fillna(0)
+            mask = (daily_pace_ratio > 2) & (rvol > 3) & (from_high_pct > -15) & (df['category'].isin(['Small Cap', 'Micro Cap']))
             patterns.append(('🧛 VAMPIRE', mask))
         
         # 25. Perfect Storm
@@ -5145,6 +5146,7 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
 
 
