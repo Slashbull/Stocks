@@ -132,7 +132,8 @@ class Config:
         "range_compress": 75,
         "stealth": 70,
         "vampire": 85,
-        "perfect_storm": 80
+        "perfect_storm": 80,
+        "extreme_opp": 85 
     })
     
     # Value bounds for data validation
@@ -1034,6 +1035,26 @@ class RankingEngine:
         ])
 
         df['master_score'] = pd.Series(np.dot(scores_matrix, weights), index=df.index).clip(0, 100)
+
+# ===== V3.5 ENHANCEMENT 2: SMART SCORE BONUS - FIX APPLIED HERE =====
+        # Apply bonus for perfect setups
+        perfect_setup = (
+            (df.get('momentum_harmony', 0) == 4) & 
+            (df.get('rvol', 1) > 3) & 
+            (df.get('wave_state', '').str.contains('CRESTING', na=False))
+        )
+        df.loc[perfect_setup, 'master_score'] = (df.loc[perfect_setup, 'master_score'] * 1.05).clip(0, 100)
+
+        # Apply bonus for pattern perfection - THIS SECTION IS FIXED
+        # The previous version could crash if the 'patterns' column unexpectedly became a single string.
+        # This check ensures the operation is only attempted on a pandas Series.
+        if 'patterns' in df.columns and isinstance(df['patterns'], pd.Series):
+            has_perfect_storm = df['patterns'].str.contains('PERFECT STORM', na=False)
+            df.loc[has_perfect_storm, 'master_score'] = (df.loc[has_perfect_storm, 'master_score'] * 1.03).clip(0, 100)
+            
+            # Additional bonus for extreme opportunity pattern (V3.5)
+            has_extreme_opp = df['patterns'].str.contains('EXTREME OPP', na=False)
+            df.loc[has_extreme_opp, 'master_score'] = (df.loc[has_extreme_opp, 'master_score'] * 1.02).clip(0, 100)
 
         # Calculate ranks based on the master score.
         df['rank'] = df['master_score'].rank(method='first', ascending=False, na_option='bottom')
@@ -5163,4 +5184,5 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
