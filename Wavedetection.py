@@ -2466,17 +2466,13 @@ class ExportEngine:
 # ============================================
 
 class UIComponents:
-    """
-    Manages all reusable UI components, ensuring a consistent and
-    professional user experience across the application.
-    """
-
+    """Reusable UI components with proper tooltips"""
+    
     @staticmethod
-    def render_metric_card(label: str, value: Any, delta: Optional[str] = None,
+    def render_metric_card(label: str, value: Any, delta: Optional[str] = None, 
                           help_text: Optional[str] = None) -> None:
-        """
-        Renders a styled metric card with dynamic tooltips.
-        """
+        """Render a styled metric card with tooltips"""
+        # Add tooltip from CONFIG if available
         metric_key = label.lower().replace(' ', '_')
         if not help_text and metric_key in CONFIG.METRIC_TOOLTIPS:
             help_text = CONFIG.METRIC_TOOLTIPS[metric_key]
@@ -2485,52 +2481,109 @@ class UIComponents:
             st.metric(label, value, delta, help=help_text)
         else:
             st.metric(label, value, delta)
-
+    
     @staticmethod
     def render_summary_section(df: pd.DataFrame) -> None:
-        """
-        Renders an enhanced summary dashboard, providing a high-level market overview.
-        """
+        """Render enhanced summary dashboard"""
+        
         if df.empty:
-            st.warning("No data available for summary. Please check data source and filters.")
+            st.warning("No data available for summary")
             return
-
-        # --- 1. Market Pulse ---
+        
+        # 1. MARKET PULSE
         st.markdown("### 📊 Market Pulse")
+        
         col1, col2, col3, col4 = st.columns(4)
-
+        
         with col1:
             ad_metrics = MarketIntelligence.calculate_advance_decline_ratio(df)
             ad_ratio = ad_metrics.get('ad_ratio', 1.0)
-            ad_display = "∞" if ad_ratio == float('inf') else f"{ad_ratio:.2f}"
-            ad_emoji = "🔥🔥" if ad_ratio > 2 else "📈" if ad_ratio > 1 else "📉"
-            UIComponents.render_metric_card("A/D Ratio", f"{ad_emoji} {ad_display}",
-                                            f"{ad_metrics.get('advancing', 0)}/{ad_metrics.get('declining', 0)}",
-                                            help_text="Advance/Decline Ratio - Higher is bullish")
-
+            
+            if ad_ratio == float('inf'):
+                ad_emoji = "🔥🔥"
+                ad_display = "∞"
+            elif ad_ratio > 2:
+                ad_emoji = "🔥"
+                ad_display = f"{ad_ratio:.2f}"
+            elif ad_ratio > 1:
+                ad_emoji = "📈"
+                ad_display = f"{ad_ratio:.2f}"
+            else:
+                ad_emoji = "📉"
+                ad_display = f"{ad_ratio:.2f}"
+            
+            UIComponents.render_metric_card(
+                "A/D Ratio",
+                f"{ad_emoji} {ad_display}",
+                f"{ad_metrics.get('advancing', 0)}/{ad_metrics.get('declining', 0)}",
+                "Advance/Decline Ratio - Higher is bullish"
+            )
+        
         with col2:
-            high_momentum = (df['momentum_score'] >= 70).sum() if 'momentum_score' in df.columns else 0
-            momentum_pct = (high_momentum / len(df) * 100) if len(df) > 0 else 0
-            UIComponents.render_metric_card("Momentum Health", f"{momentum_pct:.0f}%", f"{high_momentum} strong stocks",
-                                            help_text="Percentage of stocks with a momentum score ≥ 70.")
-
+            if 'momentum_score' in df.columns:
+                high_momentum = len(df[df['momentum_score'] >= 70])
+                momentum_pct = (high_momentum / len(df) * 100) if len(df) > 0 else 0
+                
+                UIComponents.render_metric_card(
+                    "Momentum Health",
+                    f"{momentum_pct:.0f}%",
+                    f"{high_momentum} strong stocks",
+                    "Percentage of stocks with momentum score ≥ 70"
+                )
+            else:
+                UIComponents.render_metric_card("Momentum Health", "N/A")
+        
         with col3:
             avg_rvol = df['rvol'].median() if 'rvol' in df.columns else 1.0
-            high_vol_count = (df['rvol'] > 2).sum() if 'rvol' in df.columns else 0
-            vol_emoji = "🌊" if avg_rvol > 1.5 else "💧" if avg_rvol > 1.2 else "🏜️"
-            UIComponents.render_metric_card("Volume State", f"{vol_emoji} {avg_rvol:.1f}x", f"{high_vol_count} surges",
-                                            help_text="Median relative volume (RVOL) to indicate market activity.")
-
+            high_vol_count = len(df[df['rvol'] > 2]) if 'rvol' in df.columns else 0
+            
+            if avg_rvol > 1.5:
+                vol_emoji = "🌊"
+            elif avg_rvol > 1.2:
+                vol_emoji = "💧"
+            else:
+                vol_emoji = "🏜️"
+            
+            UIComponents.render_metric_card(
+                "Volume State",
+                f"{vol_emoji} {avg_rvol:.1f}x",
+                f"{high_vol_count} surges",
+                "Median relative volume (RVOL)"
+            )
+        
         with col4:
-            regime, regime_metrics = MarketIntelligence.detect_market_regime(df)
-            UIComponents.render_metric_card("Market Regime", regime,
-                                            f"{regime_metrics.get('category_spread', 0):.0f} spread",
-                                            help_text="Overall market health and risk appetite.")
-
-        # --- 2. Today's Best Opportunities ---
+            risk_factors = 0
+            
+            if 'from_high_pct' in df.columns and 'momentum_score' in df.columns:
+                overextended = len(df[(df['from_high_pct'] >= 0) & (df['momentum_score'] < 50)])
+                if overextended > 20:
+                    risk_factors += 1
+            
+            if 'rvol' in df.columns:
+                pump_risk = len(df[(df['rvol'] > 10) & (df['master_score'] < 50)])
+                if pump_risk > 10:
+                    risk_factors += 1
+            
+            if 'trend_quality' in df.columns:
+                downtrends = len(df[df['trend_quality'] < 40])
+                if downtrends > len(df) * 0.3:
+                    risk_factors += 1
+            
+            risk_levels = ["🟢 LOW", "🟡 MODERATE", "🟠 HIGH", "🔴 EXTREME"]
+            risk_level = risk_levels[min(risk_factors, 3)]
+            
+            UIComponents.render_metric_card(
+                "Risk Level",
+                risk_level,
+                f"{risk_factors} factors",
+                "Market risk assessment based on multiple factors"
+            )
+        
+        # 2. TODAY'S OPPORTUNITIES
         st.markdown("### 🎯 Today's Best Opportunities")
+        
         opp_col1, opp_col2, opp_col3 = st.columns(3)
-
+        
         with opp_col1:
             ready_to_run = df[
                 (df['momentum_score'] >= 70) & 
@@ -2546,7 +2599,7 @@ class UIComponents:
                     st.caption(f"Score: {stock['master_score']:.1f} | RVOL: {stock['rvol']:.1f}x")
             else:
                 st.info("No momentum leaders found")
-
+        
         with opp_col2:
             hidden_gems = df[df['patterns'].str.contains('HIDDEN GEM', na=False)].nlargest(5, 'master_score') if 'patterns' in df.columns else pd.DataFrame()
             
@@ -2558,7 +2611,7 @@ class UIComponents:
                     st.caption(f"Cat %ile: {stock.get('category_percentile', 0):.0f} | Score: {stock['master_score']:.1f}")
             else:
                 st.info("No hidden gems today")
-
+        
         with opp_col3:
             volume_alerts = df[df['rvol'] > 3].nlargest(5, 'master_score') if 'rvol' in df.columns else pd.DataFrame()
             
@@ -2570,8 +2623,8 @@ class UIComponents:
                     st.caption(f"RVOL: {stock['rvol']:.1f}x | {stock.get('wave_state', 'N/A')}")
             else:
                 st.info("No extreme volume detected")
-
-        # --- 3. Market Intelligence ---
+        
+        # 3. MARKET INTELLIGENCE
         st.markdown("### 🧠 Market Intelligence")
         
         intel_col1, intel_col2 = st.columns([2, 1])
@@ -5052,3 +5105,4 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
