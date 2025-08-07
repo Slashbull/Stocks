@@ -608,21 +608,8 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
                          data_version: str = "1.0") -> Tuple[pd.DataFrame, datetime, Dict[str, Any]]:
     """
     Loads and processes data from a Google Sheet or CSV file with caching and versioning.
-
-    Args:
-        source_type (str): Specifies the data source, either "sheet" or "upload".
-        file_data (Optional): The uploaded CSV file object if `source_type` is "upload".
-        sheet_id (str): The Google Spreadsheet ID.
-        gid (str): The Google Sheet tab ID.
-        data_version (str): A unique key to bust the cache (e.g., hash of date + sheet ID).
-
-    Returns:
-        Tuple[pd.DataFrame, datetime, Dict[str, Any]]: A tuple containing the processed DataFrame,
-        the processing timestamp, and metadata about the process.
     
-    Raises:
-        ValueError: If a valid Google Sheets ID is not provided.
-        Exception: If data loading or processing fails.
+    This optimized version corrects the data processing pipeline order to prevent a crash.
     """
     
     start_time = time.perf_counter()
@@ -671,7 +658,6 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
                 logger.error(f"Failed to load from Google Sheets: {str(e)}")
                 metadata['errors'].append(f"Sheet load error: {str(e)}")
                 
-                # Try to use cached data as fallback
                 if 'last_good_data' in st.session_state:
                     logger.info("Using cached data as fallback")
                     df, timestamp, old_metadata = st.session_state.last_good_data
@@ -680,40 +666,34 @@ def load_and_process_data(source_type: str = "sheet", file_data=None,
                     return df, timestamp, metadata
                 raise
         
-        # Validate loaded data
         is_valid, validation_msg = DataValidator.validate_dataframe(df, CONFIG.CRITICAL_COLUMNS, "Initial load")
         if not is_valid:
             raise ValueError(validation_msg)
         
-        # Process the data
         df = DataProcessor.process_dataframe(df, metadata)
         
-        # Calculate all scores and rankings
-        df = RankingEngine.calculate_all_scores(df)
-        
-        # Detect all patterns (including new EXTREME OPP)
+        # 🟢 OPTIMIZATION: Call PatternDetector FIRST to ensure the 'patterns' column exists.
         df = PatternDetector.detect_all_patterns_optimized(df)
         
-        # Add advanced metrics (including momentum decay)
+        # 🟢 OPTIMIZATION: Then, calculate all scores and ranks, which now safely includes pattern bonuses.
+        df = RankingEngine.calculate_all_scores(df)
+        
+        # Add advanced metrics
         df = AdvancedMetrics.calculate_all_metrics(df)
         
-        # Final validation
         is_valid, validation_msg = DataValidator.validate_dataframe(df, ['master_score', 'rank'], "Final processed")
         if not is_valid:
             raise ValueError(validation_msg)
         
-        # Store as last good data
         timestamp = datetime.now(timezone.utc)
         st.session_state.last_good_data = (df.copy(), timestamp, metadata)
         
-        # Record processing time
         processing_time = time.perf_counter() - start_time
         metadata['processing_time'] = processing_time
         metadata['processing_end'] = datetime.now(timezone.utc)
         
         logger.info(f"Data processing complete: {len(df)} stocks in {processing_time:.2f}s")
         
-        # Periodic cleanup
         if 'last_cleanup' not in st.session_state:
             st.session_state.last_cleanup = datetime.now(timezone.utc)
         
@@ -5082,4 +5062,5 @@ if __name__ == "__main__":
         
         if st.button("📧 Report Issue"):
             st.info("Please take a screenshot and report this error.")
+
 
