@@ -5330,7 +5330,7 @@ def main():
                             'Category',
                             help="Market cap category",
                             width="medium"
-                        ),
+                        )
                     }
                 )
                 
@@ -5680,17 +5680,6 @@ def main():
                                 help="Market cap category",
                                 width="medium"
                             )
-                            'Pattern Confidence': st.column_config.ProgressColumn(
-                                'Pattern Confidence',
-                                help="Pattern strength score",
-                                format="%.1f%%", min_value=0, max_value=100, width="small"
-                            )
-                            'Patterns': st.column_config.TextColumn(
-                                'Patterns',
-                                help="Detected trading patterns",
-                                width="large", max_chars=100
-                            )
-                                
                         }
                     )
                 
@@ -5852,7 +5841,8 @@ def main():
         
         else:
             st.info("No data available for analysis.")
-            
+    
+    # Tab 4: Search
     # Tab 4: Search
     with tabs[4]:
         st.markdown("### 🔍 Advanced Stock Search")
@@ -5978,7 +5968,17 @@ def main():
                             'Category',
                             help="Market cap category",
                             width="medium"
-                        )
+                        ),
+                        'Pattern Confidence': st.column_config.ProgressColumn(
+                            'Pattern Confidence',
+                            help="Pattern strength score",
+                            format="%.1f%%", min_value=0, max_value=100, width="small"
+                        ),
+                        'Patterns': st.column_config.TextColumn(
+                            'Patterns',
+                            help="Detected trading patterns",
+                            width="large", max_chars=100
+                        )                                   
                     }
                 )
                 
