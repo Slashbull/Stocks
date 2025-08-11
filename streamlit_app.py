@@ -5330,7 +5330,7 @@ def main():
                             'Category',
                             help="Market cap category",
                             width="medium"
-                        )
+                        ),
                     }
                 )
                 
