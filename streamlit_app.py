@@ -5680,6 +5680,17 @@ def main():
                                 help="Market cap category",
                                 width="medium"
                             )
+                            'Pattern Confidence': st.column_config.ProgressColumn(
+                                'Pattern Confidence',
+                                help="Pattern strength score",
+                                format="%.1f%%", min_value=0, max_value=100, width="small"
+                            )
+                            'Patterns': st.column_config.TextColumn(
+                                'Patterns',
+                                help="Detected trading patterns",
+                                width="large", max_chars=100
+                            )
+                                
                         }
                     )
                 
@@ -5841,8 +5852,7 @@ def main():
         
         else:
             st.info("No data available for analysis.")
-    
-    # Tab 4: Search
+            
     # Tab 4: Search
     with tabs[4]:
         st.markdown("### 🔍 Advanced Stock Search")
@@ -5872,7 +5882,7 @@ def main():
                 
                 # Create summary dataframe for search results
                 summary_columns = ['ticker', 'company_name', 'rank', 'master_score', 'price', 
-                                  'ret_30d', 'rvol', 'wave_state', 'category']
+                                  'ret_30d', 'rvol', 'wave_state', 'category','pattern_confidence','patterns']
                 
                 available_summary_cols = [col for col in summary_columns if col in search_results.columns]
                 search_summary = search_results[available_summary_cols].copy()
@@ -5906,7 +5916,9 @@ def main():
                     'ret_30d_display': '30D Return',
                     'rvol_display': 'RVOL',
                     'wave_state': 'Wave State',
-                    'category': 'Category'
+                    'category': 'Category',
+                    'pattern_confidence': 'Pattern Confidence',
+                    'patterns': 'Patterns'
                 }
                 
                 search_summary = search_summary.rename(columns=column_rename)
