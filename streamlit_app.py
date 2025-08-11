@@ -136,6 +136,17 @@ class Config:
         "stealth": 70,
         "vampire": 85,
         "perfect_storm": 80
+        "bull_trap": 90,           # High confidence for shorting
+        "capitulation": 95,        # Extreme events only
+        "runaway_gap": 85,         # Strong continuation
+        "rotation_leader": 80,     # Sector relative strength
+        "distribution_top": 85,    # High confidence tops
+        "velocity_squeeze": 85,
+        "volume_divergence": 90,
+        "golden_cross": 80,
+        "exhaustion": 90,
+        "pyramid": 75,
+        "vacuum": 85,
     })
     
     # Value bounds for data validation
@@ -1336,7 +1347,18 @@ class PatternDetector:
         '🎯 RANGE COMPRESS': {'importance_weight': 5},
         '🤫 STEALTH': {'importance_weight': 10},
         '🧛 VAMPIRE': {'importance_weight': 10},
-        '⛈️ PERFECT STORM': {'importance_weight': 20}
+        '⛈️ PERFECT STORM': {'importance_weight': 20},
+        '🪤 BULL TRAP': {'importance_weight': 15},      # High value for shorts
+        '💣 CAPITULATION': {'importance_weight': 20},   # Best risk/reward
+        '🏃 RUNAWAY GAP': {'importance_weight': 12},    # Strong continuation
+        '🔄 ROTATION LEADER': {'importance_weight': 10}, # Sector strength
+        '⚠️ DISTRIBUTION': {'importance_weight': 15},   # Exit signal
+        '🎯 VELOCITY SQUEEZE': {'importance_weight': 15},    # High value - coiled spring
+        '⚠️ VOLUME DIVERGENCE': {'importance_weight': -10},  # Negative - warning signal
+        '⚡ GOLDEN CROSS': {'importance_weight': 12},        # Strong bullish
+        '📉 EXHAUSTION': {'importance_weight': -15},         # Strong bearish
+        '🔺 PYRAMID': {'importance_weight': 10},             # Accumulation
+        '🌪️ VACUUM': {'importance_weight': 18},             # High potential bounce
     }
 
     @staticmethod
@@ -1511,6 +1533,148 @@ class PatternDetector:
         if 'momentum_harmony' in df.columns and 'master_score' in df.columns:
             mask = (get_col_safe('momentum_harmony', 0) == 4) & (get_col_safe('master_score', 0) > 80)
             patterns.append(('⛈️ PERFECT STORM', mask))
+
+         # 26. BULL TRAP - Failed breakout/shorting opportunity
+        if all(col in df.columns for col in ['from_high_pct', 'ret_7d', 'volume_7d', 'volume_30d']):
+            mask = (
+                (get_col_safe('from_high_pct', -100) > -5) &     # Was near 52W high
+                (get_col_safe('ret_7d', 0) < -10) &              # Now falling hard
+                (get_col_safe('volume_7d', 0) > get_col_safe('volume_30d', 1))  # High volume selling
+            )
+            patterns.append(('🪤 BULL TRAP', mask))
+        
+        # 27. CAPITULATION BOTTOM - Panic selling exhaustion
+        if all(col in df.columns for col in ['ret_1d', 'from_low_pct', 'rvol', 'volume_1d', 'volume_90d']):
+            mask = (
+                (get_col_safe('ret_1d', 0) < -7) &               # Huge down day
+                (get_col_safe('from_low_pct', 100) < 20) &       # Near 52W low
+                (get_col_safe('rvol', 0) > 5) &                  # Extreme volume
+                (get_col_safe('volume_1d', 0) > get_col_safe('volume_90d', 1) * 3)  # Panic volume
+            )
+            patterns.append(('💣 CAPITULATION', mask))
+        
+        # 28. RUNAWAY GAP - Continuation pattern
+        if all(col in df.columns for col in ['price', 'prev_close', 'ret_30d', 'rvol', 'from_high_pct']):
+            price = get_col_safe('price', 0)
+            prev_close = get_col_safe('prev_close', 1)
+            
+            # Calculate gap percentage safely
+            with np.errstate(divide='ignore', invalid='ignore'):
+                gap = np.where(prev_close > 0, 
+                              ((price - prev_close) / prev_close) * 100,
+                              0)
+            gap_series = pd.Series(gap, index=df.index)
+            
+            mask = (
+                (gap_series > 5) &                               # Big gap up
+                (get_col_safe('ret_30d', 0) > 20) &             # Already trending
+                (get_col_safe('rvol', 0) > 3) &                 # Institutional volume
+                (get_col_safe('from_high_pct', -100) > -3)      # Making new highs
+            )
+            patterns.append(('🏃 RUNAWAY GAP', mask))
+        
+        # 29. ROTATION LEADER - First mover in sector rotation
+        if all(col in df.columns for col in ['ret_7d', 'sector', 'rvol']):
+            ret_7d = get_col_safe('ret_7d', 0)
+            
+            # Calculate sector average return safely
+            if 'sector' in df.columns:
+                sector_avg = df.groupby('sector')['ret_7d'].transform('mean').fillna(0)
+            else:
+                sector_avg = pd.Series(0, index=df.index)
+            
+            mask = (
+                (ret_7d > sector_avg + 5) &                      # Beating sector by 5%
+                (ret_7d > 0) &                                   # Positive absolute return
+                (sector_avg < 0) &                               # Sector still negative
+                (get_col_safe('rvol', 0) > 2)                   # Volume confirmation
+            )
+            patterns.append(('🔄 ROTATION LEADER', mask))
+        
+        # 30. DISTRIBUTION TOP - Smart money selling
+        if all(col in df.columns for col in ['from_high_pct', 'rvol', 'ret_1d', 'ret_30d', 'volume_7d', 'volume_30d']):
+            mask = (
+                (get_col_safe('from_high_pct', -100) > -10) &    # Near highs
+                (get_col_safe('rvol', 0) > 2) &                  # High volume
+                (get_col_safe('ret_1d', 0) < 2) &                # Price not moving up
+                (get_col_safe('ret_30d', 0) > 50) &              # After big rally
+                (get_col_safe('volume_7d', 0) > get_col_safe('volume_30d', 1) * 1.5)  # Volume spike
+            )
+            patterns.append(('⚠️ DISTRIBUTION', mask))
+
+        # 31. VELOCITY SQUEEZE
+        if all(col in df.columns for col in ['ret_7d', 'ret_30d', 'from_high_pct', 'from_low_pct', 'high_52w', 'low_52w']):
+            with np.errstate(divide='ignore', invalid='ignore'):
+                daily_7d = np.where(df['ret_7d'] != 0, df['ret_7d'] / 7, 0)
+                daily_30d = np.where(df['ret_30d'] != 0, df['ret_30d'] / 30, 0)
+                range_pct = np.where(df['low_52w'] > 0, 
+                                   (df['high_52w'] - df['low_52w']) / df['low_52w'], 
+                                   np.inf)
+            
+            mask = (
+                (daily_7d > daily_30d) &  # Velocity increasing
+                (abs(df['from_high_pct']) + df['from_low_pct'] < 30) &  # Middle of range
+                (range_pct < 0.5)  # Tight range
+            )
+            patterns.append(('🎯 VELOCITY SQUEEZE', mask))
+        
+        # 32. VOLUME DIVERGENCE TRAP
+        if all(col in df.columns for col in ['ret_30d', 'vol_ratio_30d_180d', 'vol_ratio_90d_180d', 'from_high_pct']):
+            mask = (
+                (df['ret_30d'] > 20) &
+                (df['vol_ratio_30d_180d'] < 0.7) &
+                (df['vol_ratio_90d_180d'] < 0.9) &
+                (df['from_high_pct'] > -5)
+            )
+            patterns.append(('⚠️ VOLUME DIVERGENCE', mask))
+        
+        # 33. GOLDEN CROSS MOMENTUM
+        if all(col in df.columns for col in ['sma_20d', 'sma_50d', 'sma_200d', 'rvol', 'ret_7d', 'ret_30d']):
+            mask = (
+                (df['sma_20d'] > df['sma_50d']) &
+                (df['sma_50d'] > df['sma_200d']) &
+                ((df['sma_20d'] - df['sma_50d']) / df['sma_50d'] > 0.02) &
+                (df['rvol'] > 1.5) &
+                (df['ret_7d'] > df['ret_30d'] / 4)
+            )
+            patterns.append(('⚡ GOLDEN CROSS', mask))
+        
+        # 34. MOMENTUM EXHAUSTION
+        if all(col in df.columns for col in ['ret_7d', 'ret_1d', 'rvol', 'from_low_pct', 'price', 'sma_20d']):
+            with np.errstate(divide='ignore', invalid='ignore'):
+                sma_deviation = np.where(df['sma_20d'] > 0,
+                                        (df['price'] - df['sma_20d']) / df['sma_20d'],
+                                        0)
+            mask = (
+                (df['ret_7d'] > 25) &
+                (df['ret_1d'] < 0) &
+                (df['rvol'] < df['rvol'].shift(1)) &
+                (df['from_low_pct'] > 80) &
+                (sma_deviation > 0.15)
+            )
+            patterns.append(('📉 EXHAUSTION', mask))
+        
+        # 35. PYRAMID ACCUMULATION
+        if all(col in df.columns for col in ['vol_ratio_7d_90d', 'vol_ratio_30d_90d', 'vol_ratio_90d_180d', 'ret_30d', 'from_low_pct']):
+            mask = (
+                (df['vol_ratio_7d_90d'] > 1.1) &
+                (df['vol_ratio_30d_90d'] > 1.05) &
+                (df['vol_ratio_90d_180d'] > 1.02) &
+                (df['ret_30d'].between(5, 15)) &
+                (df['from_low_pct'] < 50)
+            )
+            patterns.append(('🔺 PYRAMID', mask))
+        
+        # 36. MOMENTUM VACUUM
+        if all(col in df.columns for col in ['ret_30d', 'ret_7d', 'ret_1d', 'rvol', 'from_low_pct']):
+            mask = (
+                (df['ret_30d'] < -20) &
+                (df['ret_7d'] > 0) &
+                (df['ret_1d'] > 2) &
+                (df['rvol'] > 3) &
+                (df['from_low_pct'] < 10)
+            )
+            patterns.append(('🌪️ VACUUM', mask))
 
         return patterns
 
@@ -6502,10 +6666,12 @@ def main():
             - **Wave State** - Real-time momentum classification
             - **Overall Wave Strength** - Composite score for wave filter
             
-            **25 Pattern Detection** - Complete set:
+            **30+ Pattern Detection** - Complete set:
             - 11 Technical patterns
             - 5 Fundamental patterns (Hybrid mode)
             - 6 Price range patterns
+            - 3 NEW intelligence patterns (Stealth, Vampire, Perfect Storm)
+            - 5 NEW Quant reversal patterns
             - 3 NEW intelligence patterns (Stealth, Vampire, Perfect Storm)
             
             #### 💡 How to Use
@@ -6589,6 +6755,13 @@ def main():
             - 🏆 QUALITY LEADER
             - ⚡ TURNAROUND
             - ⚠️ HIGH PE
+
+            **Quant Reversal**
+            - 🪤 BULL TRAP
+            - 💣 CAPITULATION
+            - 🏃 RUNAWAY GAP
+            - 🔄 ROTATION LEADER
+            - ⚠️ DISTRIBUTION
             
             #### ⚡ Performance
             
