@@ -1392,7 +1392,8 @@ class PatternDetector:
         df['patterns'] = df['patterns'].fillna('')
         
         # Calculate a confidence score for the detected patterns.
-        df = PatternDetector._calculate_pattern_confidence(df)
+        if 'patterns' in df.columns:
+            df = PatternDetector._calculate_pattern_confidence(df)
         
         logger.info(f"Pattern detection completed for {len(df)} stocks.")
         return df
