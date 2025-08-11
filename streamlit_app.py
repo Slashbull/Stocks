@@ -135,7 +135,7 @@ class Config:
         "range_compress": 75,
         "stealth": 70,
         "vampire": 85,
-        "perfect_storm": 80
+        "perfect_storm": 80,
         "bull_trap": 90,           # High confidence for shorting
         "capitulation": 95,        # Extreme events only
         "runaway_gap": 85,         # Strong continuation
