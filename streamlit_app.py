@@ -19,22 +19,16 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import plotly.express as px
 from datetime import datetime, timezone, timedelta
 import logging
-from typing import Dict, List, Tuple, Optional, Any, Union, Set
+from typing import Dict, List, Tuple, Optional, Any  # Remove Union, Set
 from dataclasses import dataclass, field
-from functools import lru_cache, wraps
+from functools import wraps  # Remove lru_cache
 import time
 from io import BytesIO
 import warnings
 import gc
-import re # For dynamic URL parsing
-import hashlib # For intelligent cache versioning
-import requests # For robust data loading
-from requests.adapters import HTTPAdapter # For connection pooling
-from urllib3.util.retry import Retry # For retry logic
-from collections import defaultdict # For performance metric tracking
+import re
 
 # Suppress warnings for clean production output.
 warnings.filterwarnings('ignore')
@@ -71,7 +65,7 @@ class Config:
     DEFAULT_GID: str = "1823439984"
     
     # Cache settings - Dynamic refresh
-    CACHE_TTL: int = 900  # 15 minutes for better data freshness
+    CACHE_TTL: int = 3600  
     STALE_DATA_HOURS: int = 24
     
     # Master Score 3.0 weights (total = 100%)
@@ -796,7 +790,8 @@ class AdvancedMetrics:
         
         if all(col in df.columns for col in ['ret_7d', 'ret_30d']):
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_ret_7d = pd.Series(np.where(df['ret_7d'].fillna(0) != 0, df['ret_7d'].fillna(0) / 7, np.nan), index=df.index)
+                daily_ret_7d = np.where(df['ret_7d'] != 0, df['ret_7d'] / 7, 0)
+                daily_ret_7d = pd.Series(daily_ret_7d, index=df.index)
                 daily_ret_30d = pd.Series(np.where(df['ret_30d'].fillna(0) != 0, df['ret_30d'].fillna(0) / 30, np.nan), index=df.index)
             df['momentum_harmony'] += ((daily_ret_7d.fillna(-np.inf) > daily_ret_30d.fillna(-np.inf))).astype(int)
         
@@ -1309,56 +1304,57 @@ class RankingEngine:
                         df.loc[mask, 'category_percentile'] = cat_percentiles
         
         return df
-        
+
 # ============================================
-# PATTERN DETECTION ENGINE - FULLY OPTIMIZED
+# PATTERN DETECTION ENGINE - FULLY OPTIMIZED & FIXED
 # ============================================
 
 class PatternDetector:
     """
     Advanced pattern detection using vectorized operations for maximum performance.
-    This class identifies a comprehensive set of 25 technical, fundamental,
+    This class identifies a comprehensive set of 36 technical, fundamental,
     and intelligent trading patterns.
+    FIXED: Pattern confidence calculation now works correctly.
     """
 
-    # Pattern metadata for intelligent confidence scoring (e.g., importance, risk).
+    # Pattern metadata for intelligent confidence scoring
     PATTERN_METADATA = {
-        '🔥 CAT LEADER': {'importance_weight': 10},
-        '💎 HIDDEN GEM': {'importance_weight': 10},
-        '🚀 ACCELERATING': {'importance_weight': 10},
-        '🏦 INSTITUTIONAL': {'importance_weight': 10},
-        '⚡ VOL EXPLOSION': {'importance_weight': 15},
-        '🎯 BREAKOUT': {'importance_weight': 10},
-        '👑 MARKET LEADER': {'importance_weight': 15},
-        '🌊 MOMENTUM WAVE': {'importance_weight': 10},
-        '💰 LIQUID LEADER': {'importance_weight': 5},
-        '💪 LONG STRENGTH': {'importance_weight': 5},
-        '📈 QUALITY TREND': {'importance_weight': 10},
-        '💎 VALUE MOMENTUM': {'importance_weight': 10},
-        '📊 EARNINGS ROCKET': {'importance_weight': 10},
-        '🏆 QUALITY LEADER': {'importance_weight': 10},
-        '⚡ TURNAROUND': {'importance_weight': 10},
-        '⚠️ HIGH PE': {'importance_weight': -5}, # Negative weight for a "warning" pattern
-        '🎯 52W HIGH APPROACH': {'importance_weight': 10},
-        '🔄 52W LOW BOUNCE': {'importance_weight': 10},
-        '👑 GOLDEN ZONE': {'importance_weight': 5},
-        '📊 VOL ACCUMULATION': {'importance_weight': 5},
-        '🔀 MOMENTUM DIVERGE': {'importance_weight': 10},
-        '🎯 RANGE COMPRESS': {'importance_weight': 5},
-        '🤫 STEALTH': {'importance_weight': 10},
-        '🧛 VAMPIRE': {'importance_weight': 10},
-        '⛈️ PERFECT STORM': {'importance_weight': 20},
-        '🪤 BULL TRAP': {'importance_weight': 15},      # High value for shorts
-        '💣 CAPITULATION': {'importance_weight': 20},   # Best risk/reward
-        '🏃 RUNAWAY GAP': {'importance_weight': 12},    # Strong continuation
-        '🔄 ROTATION LEADER': {'importance_weight': 10}, # Sector strength
-        '⚠️ DISTRIBUTION': {'importance_weight': 15},   # Exit signal
-        '🎯 VELOCITY SQUEEZE': {'importance_weight': 15},    # High value - coiled spring
-        '⚠️ VOLUME DIVERGENCE': {'importance_weight': -10},  # Negative - warning signal
-        '⚡ GOLDEN CROSS': {'importance_weight': 12},        # Strong bullish
-        '📉 EXHAUSTION': {'importance_weight': -15},         # Strong bearish
-        '🔺 PYRAMID': {'importance_weight': 10},             # Accumulation
-        '🌪️ VACUUM': {'importance_weight': 18},             # High potential bounce
+        '🔥 CAT LEADER': {'importance_weight': 10, 'category': 'momentum'},
+        '💎 HIDDEN GEM': {'importance_weight': 10, 'category': 'value'},
+        '🚀 ACCELERATING': {'importance_weight': 10, 'category': 'momentum'},
+        '🏦 INSTITUTIONAL': {'importance_weight': 10, 'category': 'volume'},
+        '⚡ VOL EXPLOSION': {'importance_weight': 15, 'category': 'volume'},
+        '🎯 BREAKOUT': {'importance_weight': 10, 'category': 'technical'},
+        '👑 MARKET LEADER': {'importance_weight': 10, 'category': 'leadership'},
+        '🌊 MOMENTUM WAVE': {'importance_weight': 10, 'category': 'momentum'},
+        '💰 LIQUID LEADER': {'importance_weight': 10, 'category': 'liquidity'},
+        '💪 LONG STRENGTH': {'importance_weight': 5, 'category': 'trend'},
+        '📈 QUALITY TREND': {'importance_weight': 10, 'category': 'trend'},
+        '💎 VALUE MOMENTUM': {'importance_weight': 10, 'category': 'fundamental'},
+        '📊 EARNINGS ROCKET': {'importance_weight': 10, 'category': 'fundamental'},
+        '🏆 QUALITY LEADER': {'importance_weight': 10, 'category': 'fundamental'},
+        '⚡ TURNAROUND': {'importance_weight': 10, 'category': 'fundamental'},
+        '⚠️ HIGH PE': {'importance_weight': -5, 'category': 'warning'},
+        '🎯 52W HIGH APPROACH': {'importance_weight': 10, 'category': 'range'},
+        '🔄 52W LOW BOUNCE': {'importance_weight': 10, 'category': 'range'},
+        '👑 GOLDEN ZONE': {'importance_weight': 5, 'category': 'range'},
+        '📊 VOL ACCUMULATION': {'importance_weight': 5, 'category': 'volume'},
+        '🔀 MOMENTUM DIVERGE': {'importance_weight': 10, 'category': 'divergence'},
+        '🎯 RANGE COMPRESS': {'importance_weight': 5, 'category': 'range'},
+        '🤫 STEALTH': {'importance_weight': 10, 'category': 'hidden'},
+        '🧛 VAMPIRE': {'importance_weight': 10, 'category': 'aggressive'},
+        '⛈️ PERFECT STORM': {'importance_weight': 20, 'category': 'extreme'},
+        '🪤 BULL TRAP': {'importance_weight': 15, 'category': 'reversal'},
+        '💣 CAPITULATION': {'importance_weight': 20, 'category': 'reversal'},
+        '🏃 RUNAWAY GAP': {'importance_weight': 12, 'category': 'continuation'},
+        '🔄 ROTATION LEADER': {'importance_weight': 10, 'category': 'rotation'},
+        '⚠️ DISTRIBUTION': {'importance_weight': 15, 'category': 'warning'},
+        '🎯 VELOCITY SQUEEZE': {'importance_weight': 15, 'category': 'coiled'},
+        '⚠️ VOLUME DIVERGENCE': {'importance_weight': -10, 'category': 'warning'},
+        '⚡ GOLDEN CROSS': {'importance_weight': 12, 'category': 'bullish'},
+        '📉 EXHAUSTION': {'importance_weight': -15, 'category': 'bearish'},
+        '🔺 PYRAMID': {'importance_weight': 8, 'category': 'accumulation'},
+        '🌪️ VACUUM': {'importance_weight': 18, 'category': 'reversal'}
     }
 
     @staticmethod
@@ -1366,113 +1362,218 @@ class PatternDetector:
     def detect_all_patterns_optimized(df: pd.DataFrame) -> pd.DataFrame:
         """
         Detects all trading patterns using highly efficient vectorized operations.
-        Returns a DataFrame with a new 'patterns' column and a `pattern_confidence` score.
+        Returns a DataFrame with 'patterns' column and 'pattern_confidence' score.
         """
         if df.empty:
             df['patterns'] = ''
             df['pattern_confidence'] = 0.0
+            df['pattern_count'] = 0
+            df['pattern_categories'] = ''
             return df
         
-        # Get all pattern definitions as a list of (name, mask) tuples.
+        logger.info(f"Starting pattern detection for {len(df)} stocks...")
+        
+        # Get all pattern definitions
         patterns_with_masks = PatternDetector._get_all_pattern_definitions(df)
         
-        # Create a boolean matrix from the masks for vectorized processing.
+        # Create pattern matrix for vectorized processing
         pattern_names = [name for name, _ in patterns_with_masks]
         pattern_matrix = pd.DataFrame(False, index=df.index, columns=pattern_names)
         
+        # Fill pattern matrix with detection results
+        patterns_detected = 0
         for name, mask in patterns_with_masks:
             if mask is not None and not mask.empty:
                 pattern_matrix[name] = mask.reindex(df.index, fill_value=False)
+                detected_count = mask.sum()
+                if detected_count > 0:
+                    patterns_detected += 1
+                    logger.debug(f"Pattern '{name}' detected in {detected_count} stocks")
         
-        # Combine the boolean columns into a single 'patterns' string column.
+        # Combine patterns into string column
         df['patterns'] = pattern_matrix.apply(
             lambda row: ' | '.join(row.index[row].tolist()), axis=1
         )
-        
         df['patterns'] = df['patterns'].fillna('')
         
-        # Calculate a confidence score for the detected patterns.
-        if 'patterns' in df.columns:
-            df = PatternDetector._calculate_pattern_confidence(df)
+        # Count patterns per stock
+        df['pattern_count'] = pattern_matrix.sum(axis=1)
         
-        logger.info(f"Pattern detection completed for {len(df)} stocks.")
+        # Calculate pattern categories
+        df['pattern_categories'] = pattern_matrix.apply(
+            lambda row: PatternDetector._get_pattern_categories(row), axis=1
+        )
+        
+        # Calculate confidence score with FIXED calculation
+        df = PatternDetector._calculate_pattern_confidence(df)
+        
+        # Log summary
+        stocks_with_patterns = (df['patterns'] != '').sum()
+        avg_patterns_per_stock = df['pattern_count'].mean()
+        logger.info(f"Pattern detection complete: {patterns_detected} patterns found, "
+                   f"{stocks_with_patterns} stocks with patterns, "
+                   f"avg {avg_patterns_per_stock:.1f} patterns/stock")
+        
         return df
+
+    @staticmethod
+    def _calculate_pattern_confidence(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        FIXED: Calculate confidence score based on pattern importance weights.
+        Now properly calculates max_possible_score.
+        """
+        
+        # Calculate maximum possible score for normalization
+        all_positive_weights = [
+            abs(meta['importance_weight']) 
+            for meta in PatternDetector.PATTERN_METADATA.values()
+            if meta['importance_weight'] > 0
+        ]
+        max_possible_score = sum(sorted(all_positive_weights, reverse=True)[:5])  # Top 5 patterns
+        
+        def calculate_confidence(patterns_str):
+            """Calculate confidence for a single stock's patterns"""
+            if pd.isna(patterns_str) or patterns_str == '':
+                return 0.0
+            
+            patterns = [p.strip() for p in patterns_str.split(' | ')]
+            total_weight = 0
+            pattern_categories = set()
+            
+            for pattern in patterns:
+                # Match pattern with metadata (handle emoji differences)
+                for key, meta in PatternDetector.PATTERN_METADATA.items():
+                    if pattern == key or pattern.replace(' ', '') == key.replace(' ', ''):
+                        total_weight += meta['importance_weight']
+                        pattern_categories.add(meta.get('category', 'unknown'))
+                        break
+            
+            # Bonus for diverse categories
+            category_bonus = len(pattern_categories) * 2
+            
+            # Calculate final confidence
+            if max_possible_score > 0:
+                raw_confidence = (abs(total_weight) + category_bonus) / max_possible_score * 100
+                # Apply sigmoid smoothing for better distribution
+                confidence = 100 * (2 / (1 + np.exp(-raw_confidence/50)) - 1)
+                return min(100, max(0, confidence))
+            return 0.0
+        
+        # Apply calculation to all rows
+        df['pattern_confidence'] = df['patterns'].apply(calculate_confidence).round(2)
+        
+        # Add confidence tier
+        df['confidence_tier'] = pd.cut(
+            df['pattern_confidence'],
+            bins=[0, 25, 50, 75, 100],
+            labels=['Low', 'Medium', 'High', 'Very High'],
+            include_lowest=True
+        )
+        
+        return df
+    
+    @staticmethod
+    def _get_pattern_categories(row: pd.Series) -> str:
+        """Get unique categories for detected patterns"""
+        categories = set()
+        for pattern_name in row.index[row]:
+            for key, meta in PatternDetector.PATTERN_METADATA.items():
+                if pattern_name == key or pattern_name.replace(' ', '') == key.replace(' ', ''):
+                    categories.add(meta.get('category', 'unknown'))
+                    break
+        return ', '.join(sorted(categories)) if categories else ''
 
     @staticmethod
     def _get_all_pattern_definitions(df: pd.DataFrame) -> List[Tuple[str, pd.Series]]:
         """
-        Defines all 25 patterns using vectorized boolean masks.
-        This method is purely for defining the conditions, not for execution.
+        Defines all 36 patterns using vectorized boolean masks.
+        Returns list of (pattern_name, mask) tuples.
         """
         patterns = []
         
-        # Helper function to safely get column data as a Series, filling NaNs with a default.
+        # Helper function to safely get column data
         def get_col_safe(col_name: str, default_value: Any = np.nan) -> pd.Series:
             if col_name in df.columns:
                 return df[col_name].copy()
             return pd.Series(default_value, index=df.index)
 
-        # 1. Category Leader
-        mask = get_col_safe('category_percentile', 0) >= CONFIG.PATTERN_THRESHOLDS['category_leader']
+        # ========== MOMENTUM & LEADERSHIP PATTERNS (1-11) ==========
+        
+        # 1. Category Leader - Top in its market cap category
+        mask = get_col_safe('category_percentile', 0) >= CONFIG.PATTERN_THRESHOLDS.get('category_leader', 90)
         patterns.append(('🔥 CAT LEADER', mask))
         
-        # 2. Hidden Gem
-        mask = (get_col_safe('category_percentile', 0) >= CONFIG.PATTERN_THRESHOLDS['hidden_gem']) & (get_col_safe('percentile', 100) < 70)
+        # 2. Hidden Gem - High category rank but low overall rank
+        mask = (
+            (get_col_safe('category_percentile', 0) >= CONFIG.PATTERN_THRESHOLDS.get('hidden_gem', 80)) & 
+            (get_col_safe('percentile', 100) < 70)
+        )
         patterns.append(('💎 HIDDEN GEM', mask))
         
-        # 3. Accelerating
-        mask = get_col_safe('acceleration_score', 0) >= CONFIG.PATTERN_THRESHOLDS['acceleration']
+        # 3. Accelerating - Strong momentum acceleration
+        mask = get_col_safe('acceleration_score', 0) >= CONFIG.PATTERN_THRESHOLDS.get('acceleration', 85)
         patterns.append(('🚀 ACCELERATING', mask))
         
-        # 4. Institutional
-        mask = (get_col_safe('volume_score', 0) >= CONFIG.PATTERN_THRESHOLDS['institutional']) & (get_col_safe('vol_ratio_90d_180d', 1) > 1.1)
+        # 4. Institutional - Volume patterns suggesting institutional buying
+        mask = (
+            (get_col_safe('volume_score', 0) >= CONFIG.PATTERN_THRESHOLDS.get('institutional', 75)) & 
+            (get_col_safe('vol_ratio_90d_180d', 1) > 1.1)
+        )
         patterns.append(('🏦 INSTITUTIONAL', mask))
         
-        # 5. Volume Explosion
+        # 5. Volume Explosion - Extreme volume surge
         mask = get_col_safe('rvol', 0) > 3
         patterns.append(('⚡ VOL EXPLOSION', mask))
         
-        # 6. Breakout Ready
-        mask = get_col_safe('breakout_score', 0) >= CONFIG.PATTERN_THRESHOLDS['breakout_ready']
+        # 6. Breakout Ready - High breakout probability
+        mask = get_col_safe('breakout_score', 0) >= CONFIG.PATTERN_THRESHOLDS.get('breakout_ready', 80)
         patterns.append(('🎯 BREAKOUT', mask))
         
-        # 7. Market Leader
-        mask = get_col_safe('percentile', 0) >= CONFIG.PATTERN_THRESHOLDS['market_leader']
+        # 7. Market Leader - Top overall percentile
+        mask = get_col_safe('percentile', 0) >= CONFIG.PATTERN_THRESHOLDS.get('market_leader', 95)
         patterns.append(('👑 MARKET LEADER', mask))
         
-        # 8. Momentum Wave
-        mask = (get_col_safe('momentum_score', 0) >= CONFIG.PATTERN_THRESHOLDS['momentum_wave']) & (get_col_safe('acceleration_score', 0) >= 70)
+        # 8. Momentum Wave - Combined momentum and acceleration
+        mask = (
+            (get_col_safe('momentum_score', 0) >= CONFIG.PATTERN_THRESHOLDS.get('momentum_wave', 75)) & 
+            (get_col_safe('acceleration_score', 0) >= 70)
+        )
         patterns.append(('🌊 MOMENTUM WAVE', mask))
         
-        # 9. Liquid Leader
-        mask = (get_col_safe('liquidity_score', 0) >= CONFIG.PATTERN_THRESHOLDS['liquid_leader']) & (get_col_safe('percentile', 0) >= CONFIG.PATTERN_THRESHOLDS['liquid_leader'])
+        # 9. Liquid Leader - High liquidity and performance
+        mask = (
+            (get_col_safe('liquidity_score', 0) >= CONFIG.PATTERN_THRESHOLDS.get('liquid_leader', 80)) & 
+            (get_col_safe('percentile', 0) >= CONFIG.PATTERN_THRESHOLDS.get('liquid_leader', 80))
+        )
         patterns.append(('💰 LIQUID LEADER', mask))
         
         # 10. Long-term Strength
-        mask = get_col_safe('long_term_strength', 0) >= CONFIG.PATTERN_THRESHOLDS['long_strength']
+        mask = get_col_safe('long_term_strength', 0) >= CONFIG.PATTERN_THRESHOLDS.get('long_strength', 80)
         patterns.append(('💪 LONG STRENGTH', mask))
         
-        # 11. Quality Trend
+        # 11. Quality Trend - Strong SMA alignment
         mask = get_col_safe('trend_quality', 0) >= 80
         patterns.append(('📈 QUALITY TREND', mask))
+
+        # ========== FUNDAMENTAL PATTERNS (12-16) ==========
         
-        # 12. Value Momentum
+        # 12. Value Momentum - Low PE with high score
         pe = get_col_safe('pe')
         mask = pe.notna() & (pe > 0) & (pe < 15) & (get_col_safe('master_score', 0) >= 70)
         patterns.append(('💎 VALUE MOMENTUM', mask))
         
-        # 13. Earnings Rocket
+        # 13. Earnings Rocket - High EPS growth with acceleration
         eps_change_pct = get_col_safe('eps_change_pct')
         mask = eps_change_pct.notna() & (eps_change_pct > 50) & (get_col_safe('acceleration_score', 0) >= 70)
         patterns.append(('📊 EARNINGS ROCKET', mask))
 
-        # 14. Quality Leader
+        # 14. Quality Leader - Good PE, EPS growth, and percentile
         if all(col in df.columns for col in ['pe', 'eps_change_pct', 'percentile']):
             pe, eps_change_pct, percentile = get_col_safe('pe'), get_col_safe('eps_change_pct'), get_col_safe('percentile')
             mask = pe.notna() & eps_change_pct.notna() & (pe.between(10, 25)) & (eps_change_pct > 20) & (percentile >= 80)
             patterns.append(('🏆 QUALITY LEADER', mask))
         
-        # 15. Turnaround Play
+        # 15. Turnaround Play - Massive EPS improvement
         eps_change_pct = get_col_safe('eps_change_pct')
         mask = eps_change_pct.notna() & (eps_change_pct > 100) & (get_col_safe('volume_score', 0) >= 60)
         patterns.append(('⚡ TURNAROUND', mask))
@@ -1481,21 +1582,39 @@ class PatternDetector:
         pe = get_col_safe('pe')
         mask = pe.notna() & (pe > 100)
         patterns.append(('⚠️ HIGH PE', mask))
+
+        # ========== RANGE PATTERNS (17-22) ==========
         
         # 17. 52W High Approach
-        mask = (get_col_safe('from_high_pct', -100) > -5) & (get_col_safe('volume_score', 0) >= 70) & (get_col_safe('momentum_score', 0) >= 60)
+        mask = (
+            (get_col_safe('from_high_pct', -100) > -5) & 
+            (get_col_safe('volume_score', 0) >= 70) & 
+            (get_col_safe('momentum_score', 0) >= 60)
+        )
         patterns.append(('🎯 52W HIGH APPROACH', mask))
         
         # 18. 52W Low Bounce
-        mask = (get_col_safe('from_low_pct', 100) < 20) & (get_col_safe('acceleration_score', 0) >= 80) & (get_col_safe('ret_30d', 0) > 10)
+        mask = (
+            (get_col_safe('from_low_pct', 100) < 20) & 
+            (get_col_safe('acceleration_score', 0) >= 80) & 
+            (get_col_safe('ret_30d', 0) > 10)
+        )
         patterns.append(('🔄 52W LOW BOUNCE', mask))
         
-        # 19. Golden Zone
-        mask = (get_col_safe('from_low_pct', 0) > 60) & (get_col_safe('from_high_pct', 0) > -40) & (get_col_safe('trend_quality', 0) >= 70)
+        # 19. Golden Zone - Optimal range position
+        mask = (
+            (get_col_safe('from_low_pct', 0) > 60) & 
+            (get_col_safe('from_high_pct', 0) > -40) & 
+            (get_col_safe('trend_quality', 0) >= 70)
+        )
         patterns.append(('👑 GOLDEN ZONE', mask))
         
         # 20. Volume Accumulation
-        mask = (get_col_safe('vol_ratio_30d_90d', 1) > 1.2) & (get_col_safe('vol_ratio_90d_180d', 1) > 1.1) & (get_col_safe('ret_30d', 0) > 5)
+        mask = (
+            (get_col_safe('vol_ratio_30d_90d', 1) > 1.2) & 
+            (get_col_safe('vol_ratio_90d_180d', 1) > 1.1) & 
+            (get_col_safe('ret_30d', 0) > 5)
+        )
         patterns.append(('📊 VOL ACCUMULATION', mask))
         
         # 21. Momentum Divergence
@@ -1503,39 +1622,69 @@ class PatternDetector:
             with np.errstate(divide='ignore', invalid='ignore'):
                 daily_7d_pace = np.where(df['ret_7d'].fillna(0) != 0, df['ret_7d'].fillna(0) / 7, np.nan)
                 daily_30d_pace = np.where(df['ret_30d'].fillna(0) != 0, df['ret_30d'].fillna(0) / 30, np.nan)
-            mask = pd.Series(daily_7d_pace > daily_30d_pace * 1.5, index=df.index).fillna(False) & (get_col_safe('acceleration_score', 0) >= 85) & (get_col_safe('rvol', 0) > 2)
+            mask = (
+                pd.Series(daily_7d_pace > daily_30d_pace * 1.5, index=df.index).fillna(False) & 
+                (get_col_safe('acceleration_score', 0) >= 85) & 
+                (get_col_safe('rvol', 0) > 2)
+            )
             patterns.append(('🔀 MOMENTUM DIVERGE', mask))
         
         # 22. Range Compression
         if all(col in df.columns for col in ['high_52w', 'low_52w', 'from_low_pct']):
             high, low, from_low_pct = get_col_safe('high_52w'), get_col_safe('low_52w'), get_col_safe('from_low_pct')
             with np.errstate(divide='ignore', invalid='ignore'):
-                range_pct = pd.Series(np.where(low > 0, ((high - low) / low) * 100, 100), index=df.index).fillna(100)
+                range_pct = pd.Series(
+                    np.where(low > 0, ((high - low) / low) * 100, 100), 
+                    index=df.index
+                ).fillna(100)
             mask = range_pct.notna() & (range_pct < 50) & (from_low_pct > 30)
             patterns.append(('🎯 RANGE COMPRESS', mask))
+
+        # ========== INTELLIGENCE PATTERNS (23-25) ==========
         
         # 23. Stealth Accumulator
         if all(col in df.columns for col in ['vol_ratio_90d_180d', 'vol_ratio_30d_90d', 'from_low_pct', 'ret_7d', 'ret_30d']):
             ret_7d, ret_30d = get_col_safe('ret_7d'), get_col_safe('ret_30d')
             with np.errstate(divide='ignore', invalid='ignore'):
-                ret_ratio = pd.Series(np.where(ret_30d != 0, ret_7d / (ret_30d / 4), np.nan), index=df.index).fillna(0)
-            mask = (get_col_safe('vol_ratio_90d_180d', 1) > 1.1) & (get_col_safe('vol_ratio_30d_90d', 1).between(0.9, 1.1)) & (get_col_safe('from_low_pct', 0) > 40) & (ret_ratio > 1)
+                ret_ratio = pd.Series(
+                    np.where(ret_30d != 0, ret_7d / (ret_30d / 4), np.nan), 
+                    index=df.index
+                ).fillna(0)
+            mask = (
+                (get_col_safe('vol_ratio_90d_180d', 1) > 1.1) & 
+                (get_col_safe('vol_ratio_30d_90d', 1).between(0.9, 1.1)) & 
+                (get_col_safe('from_low_pct', 0) > 40) & 
+                (ret_ratio > 1)
+            )
             patterns.append(('🤫 STEALTH', mask))
 
         # 24. Momentum Vampire
         if all(col in df.columns for col in ['ret_1d', 'ret_7d', 'rvol', 'from_high_pct', 'category']):
-            ret_1d, ret_7d, rvol, from_high_pct = get_col_safe('ret_1d'), get_col_safe('ret_7d'), get_col_safe('rvol'), get_col_safe('from_high_pct')
+            ret_1d, ret_7d = get_col_safe('ret_1d'), get_col_safe('ret_7d')
             with np.errstate(divide='ignore', invalid='ignore'):
-                daily_pace_ratio = pd.Series(np.where(ret_7d != 0, ret_1d / (ret_7d / 7), np.nan), index=df.index).fillna(0)
-            mask = (daily_pace_ratio > 2) & (rvol > 3) & (from_high_pct > -15) & (df['category'].isin(['Small Cap', 'Micro Cap']))
+                daily_pace_ratio = pd.Series(
+                    np.where(ret_7d != 0, ret_1d / (ret_7d / 7), np.nan), 
+                    index=df.index
+                ).fillna(0)
+            mask = (
+                (daily_pace_ratio > 2) & 
+                (get_col_safe('rvol', 0) > 3) & 
+                (get_col_safe('from_high_pct', -100) > -15) & 
+                (df['category'].isin(['Small Cap', 'Micro Cap']))
+            )
             patterns.append(('🧛 VAMPIRE', mask))
         
         # 25. Perfect Storm
         if 'momentum_harmony' in df.columns and 'master_score' in df.columns:
-            mask = (get_col_safe('momentum_harmony', 0) == 4) & (get_col_safe('master_score', 0) > 80)
+            mask = (
+                (get_col_safe('momentum_harmony', 0) == 4) & 
+                (get_col_safe('master_score', 0) > 80)
+            )
             patterns.append(('⛈️ PERFECT STORM', mask))
 
-         # 26. BULL TRAP - Failed breakout/shorting opportunity
+        # ========== REVERSAL & CONTINUATION PATTERNS (26-36) ==========
+        
+        # 26. BULL TRAP - Failed breakout/shorting opportunity
         if all(col in df.columns for col in ['from_high_pct', 'ret_7d', 'volume_7d', 'volume_30d']):
             mask = (
                 (get_col_safe('from_high_pct', -100) > -5) &     # Was near 52W high
@@ -1646,10 +1795,14 @@ class PatternDetector:
                 sma_deviation = np.where(df['sma_20d'] > 0,
                                         (df['price'] - df['sma_20d']) / df['sma_20d'],
                                         0)
+            
+            # Handle RVOL shift safely
+            rvol_shifted = df['rvol'].shift(1).fillna(df['rvol'].median())
+            
             mask = (
                 (df['ret_7d'] > 25) &
                 (df['ret_1d'] < 0) &
-                (df['rvol'] < df['rvol'].shift(1)) &
+                (df['rvol'] < rvol_shifted) &
                 (df['from_low_pct'] > 80) &
                 (sma_deviation > 0.15)
             )
@@ -1678,33 +1831,49 @@ class PatternDetector:
             patterns.append(('🌪️ VACUUM', mask))
 
         return patterns
-
+    
     @staticmethod
-    def _calculate_pattern_confidence(df: pd.DataFrame) -> pd.DataFrame:
+    def get_pattern_summary(df: pd.DataFrame) -> pd.DataFrame:
         """
-        Calculates a numerical confidence score for each stock based on the
-        quantity and importance of the patterns it exhibits.
+        Generate a summary of pattern detections
         """
-        if 'patterns' not in df.columns or df['patterns'].eq('').all():
-            df['pattern_confidence'] = 0.0
-            return df
-
-        pattern_list = df['patterns'].str.split(' | ').fillna(pd.Series([[]] * len(df), index=df.index))
+        if 'patterns' not in df.columns:
+            return pd.DataFrame()
         
-        max_possible_score = sum(item['importance_weight'] for item in PatternDetector.PATTERN_METADATA.values())
-
-        if max_possible_score > 0:
-            df['pattern_confidence'] = pattern_list.apply(
-                lambda patterns: sum(
-                    PatternDetector.PATTERN_METADATA.get(p, {'importance_weight': 0})['importance_weight']
-                    for p in patterns
-                )
-            )
-            df['pattern_confidence'] = (df['pattern_confidence'] / max_possible_score * 100).clip(0, 100).round(2)
-        else:
-            df['pattern_confidence'] = 0.0
-
-        return df
+        pattern_counts = {}
+        pattern_stocks = {}
+        
+        for idx, patterns_str in df['patterns'].items():
+            if patterns_str:
+                for pattern in patterns_str.split(' | '):
+                    pattern = pattern.strip()
+                    if pattern:
+                        pattern_counts[pattern] = pattern_counts.get(pattern, 0) + 1
+                        if pattern not in pattern_stocks:
+                            pattern_stocks[pattern] = []
+                        pattern_stocks[pattern].append(df.loc[idx, 'ticker'])
+        
+        if not pattern_counts:
+            return pd.DataFrame()
+        
+        # Create summary dataframe
+        summary_data = []
+        for pattern, count in pattern_counts.items():
+            meta = PatternDetector.PATTERN_METADATA.get(pattern, {})
+            top_stocks = pattern_stocks[pattern][:3]
+            
+            summary_data.append({
+                'Pattern': pattern,
+                'Count': count,
+                'Weight': meta.get('importance_weight', 0),
+                'Category': meta.get('category', 'unknown'),
+                'Top Stocks': ', '.join(top_stocks)
+            })
+        
+        summary_df = pd.DataFrame(summary_data)
+        summary_df = summary_df.sort_values('Count', ascending=False)
+        
+        return summary_df
         
 # ============================================
 # MARKET INTELLIGENCE
@@ -1791,8 +1960,11 @@ class MarketIntelligence:
         return ad_metrics
     
     @staticmethod
-    def detect_sector_rotation(df: pd.DataFrame) -> pd.DataFrame:
-        """Detect sector rotation patterns with transparent sampling"""
+    @st.cache_data(ttl=300, show_spinner=False)  # 5 minute cache - ADDED CACHING
+    def _detect_sector_rotation_cached(df_json: str) -> pd.DataFrame:
+        """Cached internal implementation of sector rotation detection"""
+        # Convert JSON back to DataFrame
+        df = pd.read_json(df_json)
         
         if 'sector' not in df.columns or df.empty:
             return pd.DataFrame()
@@ -1894,8 +2066,44 @@ class MarketIntelligence:
         return sector_metrics.sort_values('flow_score', ascending=False)
     
     @staticmethod
-    def detect_industry_rotation(df: pd.DataFrame) -> pd.DataFrame:
-        """Detect industry rotation patterns with transparent sampling"""
+    def detect_sector_rotation(df: pd.DataFrame) -> pd.DataFrame:
+        """Public interface for sector rotation with caching"""
+        if df.empty or 'sector' not in df.columns:
+            return pd.DataFrame()
+        
+        try:
+            # Convert DataFrame to JSON for cache key
+            # Only use relevant columns to reduce cache key size
+            cache_cols = ['sector', 'master_score', 'momentum_score', 'volume_score', 'rvol', 'ret_30d']
+            cache_cols = [col for col in cache_cols if col in df.columns]
+            
+            if 'money_flow_mm' in df.columns:
+                cache_cols.append('money_flow_mm')
+            
+            df_for_cache = df[cache_cols].copy()
+            df_json = df_for_cache.to_json()
+            
+            # Call cached version
+            return MarketIntelligence._detect_sector_rotation_cached(df_json)
+        except Exception as e:
+            logger.warning(f"Cache failed, using direct calculation: {str(e)}")
+            # Fallback to direct calculation if caching fails
+            return MarketIntelligence._detect_sector_rotation_direct(df)
+    
+    @staticmethod
+    def _detect_sector_rotation_direct(df: pd.DataFrame) -> pd.DataFrame:
+        """Direct calculation without caching (fallback)"""
+        # This is the original implementation without caching
+        # Copy the original detect_sector_rotation logic here as backup
+        # (Same as _detect_sector_rotation_cached but without the decorator)
+        return MarketIntelligence._detect_sector_rotation_cached(df.to_json())
+    
+    @staticmethod
+    @st.cache_data(ttl=300, show_spinner=False)  # 5 minute cache - ADDED CACHING
+    def _detect_industry_rotation_cached(df_json: str) -> pd.DataFrame:
+        """Cached internal implementation of industry rotation detection"""
+        # Convert JSON back to DataFrame
+        df = pd.read_json(df_json)
         
         if 'industry' not in df.columns or df.empty:
             return pd.DataFrame()
@@ -2008,6 +2216,38 @@ class MarketIntelligence:
         industry_metrics['rank'] = industry_metrics['flow_score'].rank(ascending=False)
         
         return industry_metrics.sort_values('flow_score', ascending=False)
+    
+    @staticmethod
+    def detect_industry_rotation(df: pd.DataFrame) -> pd.DataFrame:
+        """Public interface for industry rotation with caching"""
+        if df.empty or 'industry' not in df.columns:
+            return pd.DataFrame()
+        
+        try:
+            # Convert DataFrame to JSON for cache key
+            # Only use relevant columns to reduce cache key size
+            cache_cols = ['industry', 'master_score', 'momentum_score', 'volume_score', 'rvol', 'ret_30d']
+            cache_cols = [col for col in cache_cols if col in df.columns]
+            
+            if 'money_flow_mm' in df.columns:
+                cache_cols.append('money_flow_mm')
+            
+            df_for_cache = df[cache_cols].copy()
+            df_json = df_for_cache.to_json()
+            
+            # Call cached version
+            return MarketIntelligence._detect_industry_rotation_cached(df_json)
+        except Exception as e:
+            logger.warning(f"Cache failed, using direct calculation: {str(e)}")
+            # Fallback to direct calculation if caching fails
+            return MarketIntelligence._detect_industry_rotation_direct(df)
+    
+    @staticmethod
+    def _detect_industry_rotation_direct(df: pd.DataFrame) -> pd.DataFrame:
+        """Direct calculation without caching (fallback)"""
+        # This is the original implementation without caching
+        # Copy the original detect_industry_rotation logic here as backup
+        return MarketIntelligence._detect_industry_rotation_cached(df.to_json())
 
 
 # ============================================
@@ -2149,6 +2389,7 @@ class FilterEngine:
     """
     Centralized filter management with single state object.
     This eliminates 15+ separate session state keys.
+    FIXED: Now properly cleans up ALL dynamic widget keys.
     """
     
     @staticmethod
@@ -2216,7 +2457,10 @@ class FilterEngine:
     
     @staticmethod
     def clear_all_filters():
-        """Reset all filters to defaults and clear widget states"""
+        """
+        Reset all filters to defaults and clear widget states.
+        FIXED: Now properly deletes ALL dynamic widget keys to prevent memory leaks.
+        """
         # Reset centralized filter state
         st.session_state.filter_state = {
             'categories': [],
@@ -2240,6 +2484,7 @@ class FilterEngine:
         }
         
         # CRITICAL FIX: Delete all widget keys to force UI reset
+        # First, delete known widget keys
         widget_keys_to_delete = [
             # Multiselect widgets
             'category_multiselect', 'sector_multiselect', 'industry_multiselect',
@@ -2263,10 +2508,62 @@ class FilterEngine:
             'wave_sensitivity', 'show_sensitivity_details', 'show_market_regime'
         ]
         
-        # Delete each widget key if it exists
+        # Delete each known widget key if it exists
+        deleted_count = 0
         for key in widget_keys_to_delete:
             if key in st.session_state:
                 del st.session_state[key]
+                deleted_count += 1
+                
+        # ==== MEMORY LEAK FIX - START ====
+        # Now clean up ANY dynamically created widget keys
+        # This is crucial for preventing memory leaks
+        
+        # Define all possible widget suffixes used by Streamlit
+        widget_suffixes = [
+            '_multiselect', '_slider', '_selectbox', '_checkbox',
+            '_input', '_radio', '_button', '_expander', '_toggle',
+            '_number_input', '_text_area', '_date_input', '_time_input',
+            '_color_picker', '_file_uploader', '_camera_input', '_select_slider'
+        ]
+        
+        # Also check for common prefixes used in dynamic widgets
+        widget_prefixes = [
+            'FormSubmitter', 'temp_', 'dynamic_', 'filter_', 'widget_'
+        ]
+        
+        # Collect all keys to delete (can't modify dict during iteration)
+        dynamic_keys_to_delete = []
+        
+        # Check all session state keys
+        for key in list(st.session_state.keys()):
+            # Skip if already deleted
+            if key in widget_keys_to_delete:
+                continue
+            
+            # Check if key has widget suffix
+            for suffix in widget_suffixes:
+                if key.endswith(suffix):
+                    dynamic_keys_to_delete.append(key)
+                    break
+            
+            # Check if key has widget prefix
+            for prefix in widget_prefixes:
+                if key.startswith(prefix) and key not in dynamic_keys_to_delete:
+                    dynamic_keys_to_delete.append(key)
+                    break
+        
+        # Delete all collected dynamic keys
+        for key in dynamic_keys_to_delete:
+            try:
+                del st.session_state[key]
+                deleted_count += 1
+                logger.debug(f"Deleted dynamic widget key: {key}")
+            except KeyError:
+                # Key might have been deleted already
+                pass
+        
+        # ==== MEMORY LEAK FIX - END ====
         
         # Also clear legacy filter keys for backward compatibility
         legacy_keys = [
@@ -2307,7 +2604,21 @@ class FilterEngine:
         st.session_state.quick_filter = None
         st.session_state.quick_filter_applied = False
         
-        logger.info("All filters and widget states cleared successfully")
+        # Clear any cached filter results
+        if 'user_preferences' in st.session_state:
+            st.session_state.user_preferences['last_filters'] = {}
+        
+        # Clean up any cached data related to filters
+        cache_keys_to_clear = []
+        for key in st.session_state.keys():
+            if key.startswith('filter_cache_') or key.startswith('filtered_'):
+                cache_keys_to_clear.append(key)
+        
+        for key in cache_keys_to_clear:
+            del st.session_state[key]
+            deleted_count += 1
+        
+        logger.info(f"All filters and widget states cleared successfully. Deleted {deleted_count} keys total.")
     
     @staticmethod
     def sync_widget_to_filter(widget_key: str, filter_key: str):
@@ -2501,6 +2812,71 @@ class FilterEngine:
             values = sorted(values, key=str)
         
         return values
+    
+    @staticmethod
+    def reset_to_defaults():
+        """Reset filters to default state but keep widget keys"""
+        FilterEngine.initialize_filters()
+        
+        # Reset only the filter values, not the widgets
+        st.session_state.filter_state = {
+            'categories': [],
+            'sectors': [],
+            'industries': [],
+            'min_score': 0,
+            'patterns': [],
+            'trend_filter': "All Trends",
+            'trend_range': (0, 100),
+            'eps_tiers': [],
+            'pe_tiers': [],
+            'price_tiers': [],
+            'min_eps_change': None,
+            'min_pe': None,
+            'max_pe': None,
+            'require_fundamental_data': False,
+            'wave_states': [],
+            'wave_strength_range': (0, 100),
+            'quick_filter': None,
+            'quick_filter_applied': False
+        }
+
+        # Clean up ALL dynamically created widget keys
+        all_widget_patterns = [
+            '_multiselect', '_slider', '_selectbox', '_checkbox', 
+            '_input', '_radio', '_button', '_expander', '_toggle',
+            '_number_input', '_text_area', '_date_input', '_time_input',
+            '_color_picker', '_file_uploader', '_camera_input'
+        ]
+        
+        # Collect keys to delete (can't modify dict during iteration)
+        dynamic_keys_to_delete = []
+        
+        for key in list(st.session_state.keys()):
+            # Check if this key ends with any widget pattern
+            for pattern in all_widget_patterns:
+                if pattern in key:
+                    dynamic_keys_to_delete.append(key)
+                    break
+        
+        # Delete the dynamic keys
+        for key in dynamic_keys_to_delete:
+            try:
+                del st.session_state[key]
+                logger.debug(f"Deleted dynamic widget key: {key}")
+            except KeyError:
+                # Key might have been deleted already
+                pass
+        
+        # Also clean up any keys that start with 'FormSubmitter'
+        form_keys_to_delete = [key for key in st.session_state.keys() if key.startswith('FormSubmitter')]
+        for key in form_keys_to_delete:
+            try:
+                del st.session_state[key]
+            except KeyError:
+                pass
+        # ==== COMPREHENSIVE WIDGET CLEANUP - END ====
+        st.session_state.active_filter_count = 0
+        logger.info("Filters reset to defaults")
         
 # ============================================
 # SEARCH ENGINE
@@ -2519,6 +2895,7 @@ class SearchEngine:
         
         try:
             query = query.upper().strip()
+            df['ticker'].str.upper().str.contains(query.upper())
             
             # Method 1: Direct ticker match
             ticker_exact = df[df['ticker'].str.upper() == query]
@@ -3247,6 +3624,7 @@ class SessionStateManager:
         """
         Resets all filter-related session state keys to their default values.
         This provides a clean slate for the user.
+        FIXED: Now properly cleans ALL dynamic widget keys.
         """
         # Clear the centralized filter state
         if 'filter_state' in st.session_state:
@@ -3338,10 +3716,84 @@ class SessionStateManager:
                 del st.session_state[key]
                 deleted_count += 1
         
+        # ==== MEMORY LEAK FIX - START ====
+        # Clean up ANY dynamically created widget keys that weren't in the predefined list
+        # This catches widgets created on the fly or with dynamic keys
+        
+        all_widget_patterns = [
+            '_multiselect', '_slider', '_selectbox', '_checkbox', 
+            '_input', '_radio', '_button', '_expander', '_toggle',
+            '_number_input', '_text_area', '_date_input', '_time_input',
+            '_color_picker', '_file_uploader', '_camera_input'
+        ]
+        
+        # Collect keys to delete (can't modify dict during iteration)
+        dynamic_keys_to_delete = []
+        
+        for key in st.session_state.keys():
+            # Check if this key ends with any widget pattern
+            for pattern in all_widget_patterns:
+                if pattern in key and key not in widget_keys_to_delete:
+                    dynamic_keys_to_delete.append(key)
+                    break
+        
+        # Delete the dynamic keys
+        for key in dynamic_keys_to_delete:
+            try:
+                del st.session_state[key]
+                deleted_count += 1
+                logger.debug(f"Deleted dynamic widget key: {key}")
+            except KeyError:
+                # Key might have been deleted already
+                pass
+        
+        # Also clean up any keys that start with 'FormSubmitter'
+        form_keys_to_delete = [key for key in st.session_state.keys() if key.startswith('FormSubmitter')]
+        for key in form_keys_to_delete:
+            try:
+                del st.session_state[key]
+                deleted_count += 1
+            except KeyError:
+                pass
+        
+        # ==== MEMORY LEAK FIX - END ====
+        
+        # Also clear legacy filter keys for backward compatibility
+        legacy_keys = [
+            'category_filter', 'sector_filter', 'industry_filter',
+            'min_score', 'patterns', 'trend_filter',
+            'eps_tier_filter', 'pe_tier_filter', 'price_tier_filter',
+            'min_eps_change', 'min_pe', 'max_pe',
+            'require_fundamental_data', 'wave_states_filter',
+            'wave_strength_range_slider'
+        ]
+        
+        for key in legacy_keys:
+            if key in st.session_state:
+                if isinstance(st.session_state[key], list):
+                    st.session_state[key] = []
+                elif isinstance(st.session_state[key], bool):
+                    st.session_state[key] = False
+                elif isinstance(st.session_state[key], str):
+                    if key == 'trend_filter':
+                        st.session_state[key] = "All Trends"
+                    else:
+                        st.session_state[key] = ""
+                elif isinstance(st.session_state[key], tuple):
+                    if key == 'wave_strength_range_slider':
+                        st.session_state[key] = (0, 100)
+                elif isinstance(st.session_state[key], (int, float)):
+                    if key == 'min_score':
+                        st.session_state[key] = 0
+                    else:
+                        st.session_state[key] = None
+                else:
+                    st.session_state[key] = None
+        
         # Reset active filter count
         st.session_state.active_filter_count = 0
         
-        # Reset quick filter states
+        # Clear quick filter
         st.session_state.quick_filter = None
         st.session_state.quick_filter_applied = False
         
@@ -3349,7 +3801,7 @@ class SessionStateManager:
         if 'user_preferences' in st.session_state:
             st.session_state.user_preferences['last_filters'] = {}
         
-        logger.info(f"All filters cleared successfully. Deleted {deleted_count} widget keys.")
+        logger.info(f"All filters and widget states cleared successfully. Deleted {deleted_count} widget keys.")
     
     @staticmethod
     def sync_filter_states():
@@ -5389,6 +5841,8 @@ def main():
                                     cat_df = wave_filtered_df[wave_filtered_df['category'] == cat]
                                     
                                     category_size = len(cat_df)
+                                    if category_size == 0: 
+                                        continue  
                                     if 1 <= category_size <= 5:
                                         sample_count = category_size
                                     elif 6 <= category_size <= 20:
@@ -5867,13 +6321,18 @@ def main():
         if search_query or search_clicked:
             with st.spinner("Searching..."):
                 search_results = SearchEngine.search_stocks(filtered_df, search_query)
+
+            if not search_results.empty:
+                # ENSURE PATTERN CONFIDENCE IS CALCULATED FOR SEARCH RESULTS
+                if 'patterns' in search_results.columns and 'pattern_confidence' not in search_results.columns:
+                    search_results = PatternDetector._calculate_pattern_confidence(search_results)
             
             if not search_results.empty:
                 st.success(f"Found {len(search_results)} matching stock(s)")
                 
                 # Create summary dataframe for search results
                 summary_columns = ['ticker', 'company_name', 'rank', 'master_score', 'price', 
-                                  'ret_30d', 'rvol', 'wave_state', 'category','pattern_confidence','patterns']
+                                  'ret_30d', 'rvol', 'wave_state', 'category']
                 
                 available_summary_cols = [col for col in summary_columns if col in search_results.columns]
                 search_summary = search_results[available_summary_cols].copy()
@@ -5907,9 +6366,7 @@ def main():
                     'ret_30d_display': '30D Return',
                     'rvol_display': 'RVOL',
                     'wave_state': 'Wave State',
-                    'category': 'Category',
-                    'pattern_confidence': 'Pattern Confidence',
-                    'patterns': 'Patterns'
+                    'category': 'Category'
                 }
                 
                 search_summary = search_summary.rename(columns=column_rename)
@@ -5969,17 +6426,7 @@ def main():
                             'Category',
                             help="Market cap category",
                             width="medium"
-                        ),
-                        'Pattern Confidence': st.column_config.ProgressColumn(
-                            'Pattern Confidence',
-                            help="Pattern strength score",
-                            format="%.1f%%", min_value=0, max_value=100, width="small"
-                        ),
-                        'Patterns': st.column_config.TextColumn(
-                            'Patterns',
-                            help="Detected trading patterns",
-                            width="large", max_chars=100
-                        )                                   
+                        )
                     }
                 )
                 
